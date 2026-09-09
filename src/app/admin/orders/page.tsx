@@ -33,10 +33,10 @@ type BoardItem = {
 
 /** คำอธิบายสถานะภาษาไทย มีข้อความกำกับเสมอ ไม่สื่อความหมายด้วยสีอย่างเดียว */
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  PENDING: { label: 'รอครัวรับ', className: 'text-slip-dim' },
-  PREPARING: { label: 'กำลังทำ', className: 'text-waiting' },
-  SERVED: { label: 'เสิร์ฟแล้ว', className: 'text-served' },
-  CANCELLED: { label: 'ยกเลิกแล้ว', className: 'text-void' },
+  PENDING: { label: 'รอครัวรับ', className: 'bg-char text-slip-dim' },
+  PREPARING: { label: 'กำลังทำ', className: 'bg-waiting/10 text-waiting' },
+  SERVED: { label: 'เสิร์ฟแล้ว', className: 'bg-served/10 text-served' },
+  CANCELLED: { label: 'ยกเลิกแล้ว', className: 'bg-void/10 text-void' },
 };
 
 /** ตัวเลือกกรองสถานะบนหัวกระดาน */
@@ -197,7 +197,7 @@ export default function OrdersBoardPage() {
         <p className="text-slip-dim">อัปเดตอัตโนมัติทุก 10 วินาที ใบสั่งใหม่ขึ้นบนสุด</p>
       </div>
 
-      <div className="flex flex-wrap gap-3 border border-rule bg-griddle px-3 py-3">
+      <div className="flex flex-wrap gap-3 rounded-lg bg-griddle px-3 py-3 shadow-sm">
         <div className="min-w-[12rem] flex-1">
           <SelectField
             id="order-status-filter"
@@ -217,7 +217,7 @@ export default function OrdersBoardPage() {
               type="date"
               value={dateFilter}
               onChange={(event) => setDateFilter(event.target.value)}
-              className="min-h-[44px] w-full rounded-sm border border-rule bg-char px-3 text-slip"
+              className="min-h-[44px] w-full rounded-lg bg-char px-3 text-slip"
             />
           </div>
         </div>
@@ -237,7 +237,7 @@ export default function OrdersBoardPage() {
           action={
             <Link
               href="/admin/tables"
-              className="flex min-h-[44px] items-center rounded-sm border border-rule px-4 text-slip"
+              className="flex min-h-[44px] items-center rounded-lg bg-griddle px-4 text-slip shadow-sm"
             >
               ไปหน้าโต๊ะและ QR
             </Link>
@@ -253,13 +253,15 @@ export default function OrdersBoardPage() {
           const closed = order.session_status === 'CLOSED';
 
           return (
-            <article key={order.id} className="border border-rule">
-              <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-rule bg-griddle px-3 py-2">
+            <article key={order.id} className="overflow-hidden rounded-lg bg-griddle shadow-sm">
+              <header className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-char px-3 py-2">
                 <span className="num text-2xl font-semibold text-slip">{order.table_no}</span>
                 <span className="num text-slip-dim">{formatThaiTime(order.created_at)}</span>
                 <span className="num text-sm text-slip-dim">{order.order_code}</span>
-                <span className={`ml-auto ${status.className}`}>{status.label}</span>
-                <span className="num w-24 text-right text-slip">
+                <span className={`ml-auto rounded-full px-2 py-0.5 text-sm ${status.className}`}>
+                  {status.label}
+                </span>
+                <span className="num w-24 text-right font-medium text-slip">
                   {formatBaht(order.total_amount)}
                 </span>
               </header>
@@ -274,14 +276,16 @@ export default function OrdersBoardPage() {
                     >
                       <span className="num text-slip-dim">×{item.quantity}</span>
                       <span className="min-w-0 flex-1 text-slip">{item.item_name}</span>
-                      <span className={itemStatus.className}>{itemStatus.label}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-sm ${itemStatus.className}`}>
+                        {itemStatus.label}
+                      </span>
                       {!closed && item.status !== 'CANCELLED' && (
                         <div className="flex gap-2">
                           {item.status !== 'SERVED' && (
                             <button
                               type="button"
                               onClick={() => changeItemStatus(item, 'SERVED')}
-                              className="min-h-[44px] rounded-sm border border-rule px-3 text-slip"
+                              className="min-h-[44px] rounded-lg bg-char px-3 text-slip"
                             >
                               เสิร์ฟจานนี้
                             </button>
@@ -289,7 +293,7 @@ export default function OrdersBoardPage() {
                           <button
                             type="button"
                             onClick={() => changeItemStatus(item, 'CANCELLED')}
-                            className="min-h-[44px] rounded-sm border border-rule px-3 text-void"
+                            className="min-h-[44px] rounded-lg bg-void/10 px-3 text-void"
                           >
                             ยกเลิกจานนี้
                           </button>
@@ -312,7 +316,7 @@ export default function OrdersBoardPage() {
                       <button
                         type="button"
                         onClick={() => changeOrderStatus(order, 'PREPARING')}
-                        className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+                        className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
                       >
                         ครัวรับแล้ว เริ่มทำ
                       </button>
@@ -321,7 +325,7 @@ export default function OrdersBoardPage() {
                       <button
                         type="button"
                         onClick={() => changeOrderStatus(order, 'SERVED')}
-                        className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+                        className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
                       >
                         เสิร์ฟครบทั้งใบแล้ว
                       </button>
@@ -330,7 +334,7 @@ export default function OrdersBoardPage() {
                       <button
                         type="button"
                         onClick={() => changeOrderStatus(order, 'CANCELLED')}
-                        className="min-h-[44px] rounded-sm border border-rule px-4 text-void"
+                        className="min-h-[44px] rounded-lg bg-void/10 px-4 text-void"
                       >
                         ยกเลิกทั้งใบ
                       </button>
@@ -341,7 +345,7 @@ export default function OrdersBoardPage() {
                         setCheckoutOrder(order);
                         setPayMethod('CASH');
                       }}
-                      className="min-h-[44px] rounded-sm border border-rule px-4 text-slip"
+                      className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
                     >
                       ปิดบิลโต๊ะ {order.table_no}
                     </button>
@@ -374,7 +378,7 @@ export default function OrdersBoardPage() {
               <button
                 type="button"
                 onClick={() => setCheckoutOrder(null)}
-                className="min-h-[44px] rounded-sm border border-rule px-4 text-slip"
+                className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
               >
                 ยกเลิก
               </button>
@@ -382,7 +386,7 @@ export default function OrdersBoardPage() {
                 type="button"
                 onClick={handleCheckout}
                 disabled={checkingOut}
-                className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char disabled:opacity-60"
+                className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
               >
                 {checkingOut ? 'กำลังปิดบิล…' : 'ยืนยันปิดบิล'}
               </button>

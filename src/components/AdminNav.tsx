@@ -39,7 +39,7 @@ export default function AdminNav({ user }: { user: SessionUser }) {
   }
 
   return (
-    <nav className="flex shrink-0 flex-col border-b border-rule bg-griddle md:h-screen md:w-56 md:border-r md:border-b-0">
+    <nav className="flex shrink-0 flex-col border-b border-rule bg-griddle shadow-sm md:h-screen md:w-56 md:border-r md:border-b-0">
       <div className="border-rule px-4 py-3 md:border-b">
         <p className="font-medium text-slip">{user.fullName}</p>
         <p className="text-sm text-slip-dim">
@@ -55,10 +55,10 @@ export default function AdminNav({ user }: { user: SessionUser }) {
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex min-h-[44px] items-center rounded-sm px-3 whitespace-nowrap ${
+                className={`flex min-h-[44px] items-center rounded-lg px-3 font-medium whitespace-nowrap ${
                   active
-                    ? 'border-l-2 border-slip bg-char text-slip'
-                    : 'text-slip-dim hover:text-slip'
+                    ? 'bg-flame/10 text-flame'
+                    : 'text-slip-dim hover:bg-char hover:text-slip'
                 }`}
               >
                 {item.label}
@@ -72,7 +72,7 @@ export default function AdminNav({ user }: { user: SessionUser }) {
         <button
           type="button"
           onClick={handleLogout}
-          className="flex min-h-[44px] w-full items-center rounded-sm px-3 text-slip-dim hover:text-slip"
+          className="flex min-h-[44px] w-full items-center rounded-lg px-3 text-slip-dim hover:bg-char hover:text-slip"
         >
           ออกจากระบบ
         </button>

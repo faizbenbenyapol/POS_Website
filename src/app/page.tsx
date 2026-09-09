@@ -9,18 +9,20 @@ import Link from 'next/link';
 export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slip">ระบบสั่งอาหารด้วย QR Code</h1>
-        <p className="mt-2 text-slip-dim">
-          ลูกค้าสแกน QR ที่โต๊ะเพื่อสั่งอาหาร ส่วนพนักงานเข้าใช้งานหลังบ้านผ่านหน้าล็อกอิน
-        </p>
+      <div className="flex flex-col gap-6 rounded-xl bg-griddle p-8 shadow-sm">
+        <div>
+          <h1 className="text-2xl font-semibold text-slip">ระบบสั่งอาหารด้วย QR Code</h1>
+          <p className="mt-2 text-slip-dim">
+            ลูกค้าสแกน QR ที่โต๊ะเพื่อสั่งอาหาร ส่วนพนักงานเข้าใช้งานหลังบ้านผ่านหน้าล็อกอิน
+          </p>
+        </div>
+        <Link
+          href="/login"
+          className="flex min-h-[44px] items-center justify-center rounded-lg bg-flame px-6 font-medium text-char transition-colors duration-200 hover:bg-flame/90"
+        >
+          เข้าสู่ระบบสำหรับพนักงาน
+        </Link>
       </div>
-      <Link
-        href="/login"
-        className="flex min-h-[44px] items-center justify-center rounded-sm bg-flame px-6 font-medium text-char transition-colors duration-200 hover:bg-flame/90"
-      >
-        เข้าสู่ระบบสำหรับพนักงาน
-      </Link>
     </main>
   );
 }

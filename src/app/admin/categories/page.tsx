@@ -146,7 +146,7 @@ export default function CategoriesPage() {
         <button
           type="button"
           onClick={() => openForm()}
-          className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
         >
           เพิ่มหมวดหมู่
         </button>
@@ -167,7 +167,7 @@ export default function CategoriesPage() {
             <button
               type="button"
               onClick={() => openForm()}
-              className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+              className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
             >
               เพิ่มหมวดหมู่แรก
             </button>
@@ -176,10 +176,10 @@ export default function CategoriesPage() {
       )}
 
       {!loadError && items !== null && items.length > 0 && (
-        <div className="overflow-x-auto border border-rule">
+        <div className="overflow-x-auto rounded-lg bg-griddle shadow-sm">
           <table className="w-full min-w-[36rem] border-collapse">
             <thead>
-              <tr className="border-b border-rule bg-griddle text-left text-slip-dim">
+              <tr className="bg-char text-left text-slip-dim">
                 <th className="px-3 py-2 font-medium">ชื่อหมวดหมู่</th>
                 <th className="px-3 py-2 text-right font-medium">ลำดับ</th>
                 <th className="px-3 py-2 text-right font-medium">จำนวนเมนู</th>
@@ -194,7 +194,11 @@ export default function CategoriesPage() {
                   <td className="num px-3 py-2 text-right text-slip">{category.sort_order}</td>
                   <td className="num px-3 py-2 text-right text-slip">{category.menu_item_count}</td>
                   <td className="px-3 py-2">
-                    <span className={category.is_active === 1 ? 'text-served' : 'text-slip-dim'}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-sm ${
+                        category.is_active === 1 ? 'bg-served/10 text-served' : 'bg-char text-slip-dim'
+                      }`}
+                    >
                       {category.is_active === 1 ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
                     </span>
                   </td>

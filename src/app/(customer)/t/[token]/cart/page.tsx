@@ -102,7 +102,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
   }
 
   if (!ready) {
-    return <div className="h-40 animate-pulse rounded-sm bg-griddle" aria-label="กำลังเปิดตะกร้า" />;
+    return <div className="h-40 animate-pulse rounded-lg bg-griddle" aria-label="กำลังเปิดตะกร้า" />;
   }
 
   if (items.length === 0) {
@@ -112,7 +112,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
         action={
           <Link
             href={`/t/${token}`}
-            className="flex min-h-[44px] items-center rounded-sm bg-flame px-4 font-medium text-char"
+            className="flex min-h-[44px] items-center rounded-lg bg-flame px-4 font-medium text-char"
           >
             เลือกอาหาร
           </Link>
@@ -125,12 +125,14 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
     <div className="flex flex-col gap-4 pb-32">
       <h1 className="text-xl font-semibold text-slip">ตะกร้าของโต๊ะนี้</h1>
 
-      <ul className="flex flex-col">
+      <ul className="flex flex-col gap-3">
         {items.map((item) => (
-          <li key={item.menuItemId} className="border-b border-rule py-3 last:border-b-0">
+          <li key={item.menuItemId} className="rounded-lg bg-griddle p-3 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <p className="min-w-0 flex-1 text-slip">{item.name}</p>
-              <p className="num shrink-0 text-slip">{formatBaht(item.price * item.quantity)}</p>
+              <p className="num shrink-0 font-medium text-slip">
+                {formatBaht(item.price * item.quantity)}
+              </p>
             </div>
 
             <div className="mt-2 flex items-center gap-3">
@@ -138,7 +140,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
                 type="button"
                 onClick={() => changeQuantity(item.menuItemId, -1)}
                 aria-label={`ลดจำนวน ${item.name}`}
-                className="h-11 w-11 rounded-sm border border-rule text-slip"
+                className="h-11 w-11 rounded-lg bg-char text-slip"
               >
                 −
               </button>
@@ -147,7 +149,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
                 type="button"
                 onClick={() => changeQuantity(item.menuItemId, 1)}
                 aria-label={`เพิ่มจำนวน ${item.name}`}
-                className="h-11 w-11 rounded-sm border border-rule text-slip"
+                className="h-11 w-11 rounded-lg bg-char text-slip"
               >
                 +
               </button>
@@ -161,29 +163,31 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
               onChange={(event) => changeNote(item.menuItemId, event.target.value)}
               placeholder="หมายเหตุ เช่น ไม่ใส่ผัก เผ็ดน้อย"
               aria-label={`หมายเหตุสำหรับ ${item.name}`}
-              className="mt-2 min-h-[44px] w-full rounded-sm border border-rule bg-griddle px-3 text-slip placeholder:text-slip-dim"
+              className="mt-2 min-h-[44px] w-full rounded-lg bg-char px-3 text-slip placeholder:text-slip-dim"
             />
           </li>
         ))}
       </ul>
 
       {errorMessage && (
-        <p role="alert" className="border-l-2 border-void bg-griddle px-3 py-2 text-slip">
+        <p role="alert" className="rounded-lg border-l-4 border-void bg-griddle px-3 py-2 text-slip shadow-sm">
           {errorMessage}
         </p>
       )}
 
-      <div className="fixed inset-x-0 bottom-14 z-10 border-t border-rule bg-char px-4 py-3">
-        <div className="mx-auto flex max-w-md flex-col gap-2">
+      <div className="fixed inset-x-0 bottom-16 z-10 px-4">
+        <div className="mx-auto flex max-w-md flex-col gap-2 rounded-xl bg-griddle p-3 shadow-lg">
           <div className="flex items-baseline justify-between">
             <span className="text-slip-dim">ยอดรวม</span>
-            <span className="num text-lg text-slip">{formatBahtWithSign(cartTotal(items))}</span>
+            <span className="num text-lg font-medium text-slip">
+              {formatBahtWithSign(cartTotal(items))}
+            </span>
           </div>
           <button
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="min-h-[52px] rounded-sm bg-flame px-4 font-medium text-char disabled:opacity-60"
+            className="min-h-[52px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
           >
             {submitting
               ? 'กำลังส่งไปที่ครัว…'

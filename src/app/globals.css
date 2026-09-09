@@ -1,35 +1,36 @@
 @import 'tailwindcss';
 
 /* =============================================================
-   Design token ตามหัวข้อ 14 ของ plan.md — Dark Mode Minimalist
-   ที่มาของสีคือของจริงในร้าน: ถ่านในเตา เหล็กกระทะ กระดาษสลิป ไฟเตา
-   ห้ามใช้ palette ดิบของ Tailwind ในโค้ด ให้เรียกผ่านตัวแปรเหล่านี้เท่านั้น
+   Design token — Modern Flat & Modular
+   พื้นหลังเรียบ สีล้วน (ไม่มีไล่เฉด) จัดกลุ่มเนื้อหาเป็นการ์ด/โมดูลแยกกันชัดเจน
+   ตัวแปรชื่อเดิมยังใช้อยู่ (char/griddle/rule/slip/slip-dim/flame/served/waiting/void)
+   แต่เปลี่ยนความหมายเป็นชุดสีโทนสว่าง เพื่อไม่ต้องแก้ class ทั้งโปรเจกต์
    ============================================================= */
 @theme static {
-  --color-char: #121110;      /* พื้นหลังหลัก — สีถ่านในเตา */
-  --color-griddle: #1a1917;   /* พื้นแผง/แถบข้าง — เหล็กกระทะ */
-  --color-rule: #2c2a27;      /* เส้นคั่น ขอบ — รอยพับกระดาษ */
-  --color-slip: #ede7dc;      /* ตัวอักษรหลัก — กระดาษสลิป */
-  --color-slip-dim: #968f86;  /* ตัวอักษรรอง — หมึกจาง */
-  --color-flame: #f0662b;     /* accent เดียวของระบบ — ไฟเตา */
-  --color-served: #6fa07a;    /* สถานะเสิร์ฟแล้ว */
-  --color-waiting: #d8a23c;   /* สถานะกำลังทำ */
-  --color-void: #c4503f;      /* ยกเลิก/ผิดพลาด */
+  --color-char: #faf9f7;      /* พื้นหลังหน้า, พื้น input, และตัวอักษรบนปุ่ม accent (สว่างพอสำหรับทั้งสองที่) */
+  --color-griddle: #ffffff;   /* พื้นผิวการ์ด/โมดูล — modal, แถบนำทาง, แถบกรอง, ตาราง, แจ้งเตือน */
+  --color-rule: #e6e3dc;      /* เส้นคั่น ขอบบาง */
+  --color-slip: #201d1a;      /* ตัวอักษรหลัก */
+  --color-slip-dim: #7a746a;  /* ตัวอักษรรอง */
+  --color-flame: #f0662b;     /* accent เดียวของระบบ */
+  --color-served: #1f9d55;    /* สถานะเสิร์ฟแล้ว */
+  --color-waiting: #d68a1a;   /* สถานะกำลังทำ */
+  --color-void: #d64545;      /* ยกเลิก/ผิดพลาด */
 
   /* ฟอนต์: IBM Plex Sans Thai ทุกข้อความ, IBM Plex Mono เฉพาะตัวเลขเงิน/เวลา/รหัส */
   --font-sans: var(--font-plex-thai), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 
-  /* มุมโค้ง 4px เท่านั้น — ของในร้านเป็นกระดาษกับเหล็ก ไม่ใช่แคปซูล */
-  --radius-sm: 4px;
-  --radius-md: 4px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
+  /* มุมโค้งแบบโมดูล — ใหญ่กว่าเดิมชัดเจนเพื่อให้การ์ด/ปุ่ม/ช่องกรอกดูนุ่มและเป็นโมดูล */
+  --radius-sm: 10px;  /* ปุ่ม ช่องกรอก ชิป */
+  --radius-md: 14px;  /* การ์ดมาตรฐาน */
+  --radius-lg: 18px;  /* การ์ดใหญ่ กล่องเมนู */
+  --radius-xl: 22px;  /* โมดูลเด่น เช่น การ์ดล็อกอิน แถบตะกร้าลอย */
 }
 
 /* พื้นฐานทั้งเอกสาร: สระไทยต้องไม่ชนกัน จึงตรึง line-height 1.7 และห้าม letter-spacing ติดลบ */
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {

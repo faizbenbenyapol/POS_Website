@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { TableSkeleton, EmptyState, ErrorState } from '@/components/DataState';
+import QuickTicketButton from '@/components/QuickTicketButton';
 import { apiFetch } from '@/lib/client';
 import { formatBaht, formatBahtWithSign, formatThaiTime } from '@/lib/format';
 
@@ -27,14 +28,14 @@ type OrderItem = {
 };
 
 /**
- * คำอธิบายสถานะเป็นภาษาไทย พร้อมสีกำกับ
+ * คำอธิบายสถานะเป็นภาษาไทย พร้อมสีกำกับแบบชิปพื้นสี
  * ต้องมีข้อความเสมอ ห้ามสื่อความหมายด้วยสีอย่างเดียว ตามข้อกำหนดการเข้าถึงได้
  */
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
-  PENDING: { label: 'รอครัวรับ', className: 'text-slip-dim' },
-  PREPARING: { label: 'กำลังทำ', className: 'text-waiting' },
-  SERVED: { label: 'เสิร์ฟแล้ว', className: 'text-served' },
-  CANCELLED: { label: 'ยกเลิกแล้ว', className: 'text-void' },
+  PENDING: { label: 'รอครัวรับ', className: 'bg-char text-slip-dim' },
+  PREPARING: { label: 'กำลังทำ', className: 'bg-waiting/10 text-waiting' },
+  SERVED: { label: 'เสิร์ฟแล้ว', className: 'bg-served/10 text-served' },
+  CANCELLED: { label: 'ยกเลิกแล้ว', className: 'bg-void/10 text-void' },
 };
 
 /** ระยะเวลาระหว่างการดึงสถานะใหม่ (มิลลิวินาที) ตามข้อกำหนดหัวข้อ 10 ให้ใช้ poll ธรรมดา */
@@ -103,7 +104,7 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
         action={
           <Link
             href={`/t/${token}`}
-            className="flex min-h-[44px] items-center rounded-sm bg-flame px-4 font-medium text-char"
+            className="flex min-h-[44px] items-center rounded-lg bg-flame px-4 font-medium text-char"
           >
             ไปหน้าเมนู
           </Link>
@@ -113,12 +114,12 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-24">
+    <div className="flex flex-col gap-4 pb-40">
       <h1 className="text-xl font-semibold text-slip">สถานะอาหารของโต๊ะนี้</h1>
 
       {orders.map((order, index) => (
-        <section key={order.id} className="border border-rule">
-          <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule bg-griddle px-3 py-2">
+        <section key={order.id} className="overflow-hidden rounded-lg bg-griddle shadow-sm">
+          <header className="flex flex-wrap items-baseline justify-between gap-2 bg-char px-3 py-2">
             <p className="text-slip">ใบสั่งที่ {index + 1}</p>
             <p className="num text-sm text-slip-dim">
               {order.order_code} · {formatThaiTime(order.created_at)}
@@ -137,7 +138,9 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
                   >
                     <span className="num text-slip-dim">×{item.quantity}</span>
                     <span className="min-w-0 flex-1 text-slip">{item.item_name}</span>
-                    <span className={status.className}>{status.label}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-sm ${status.className}`}>
+                      {status.label}
+                    </span>
                     <span className="num w-20 text-right text-slip">
                       {formatBaht(Number(item.unit_price) * item.quantity)}
                     </span>
@@ -151,10 +154,21 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
         </section>
       ))}
 
-      <div className="fixed inset-x-0 bottom-14 z-10 border-t border-rule bg-char px-4 py-3">
-        <div className="mx-auto flex max-w-md items-baseline justify-between">
-          <span className="text-slip-dim">ยอดสะสมของโต๊ะ (ไม่รวมรายการที่ยกเลิก)</span>
-          <span className="num text-lg text-slip">{formatBahtWithSign(total)}</span>
+      <div className="fixed inset-x-0 bottom-16 z-10 px-4">
+        <div className="mx-auto flex max-w-md flex-col gap-2 rounded-xl bg-griddle p-3 shadow-lg">
+          <div className="flex items-baseline justify-between">
+            <span className="text-slip-dim">ยอดสะสมของโต๊ะ (ไม่รวมรายการที่ยกเลิก)</span>
+            <span className="num text-lg font-medium text-slip">{formatBahtWithSign(total)}</span>
+          </div>
+          <QuickTicketButton
+            token={token}
+            category="PAYMENT"
+            subject="ขอเช็คบิล/ชำระเงิน"
+            detail={`ลูกค้าขอปิดบิลและชำระเงิน ยอดสะสม ${formatBahtWithSign(total)}`}
+            idleLabel="ขอเช็คบิล / ชำระเงิน"
+            sentLabel="✓ แจ้งพนักงานแล้ว กำลังนำบิลมาให้"
+            className="min-h-[48px] w-full rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
+          />
         </div>
       </div>
     </div>

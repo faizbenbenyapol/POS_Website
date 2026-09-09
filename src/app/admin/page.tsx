@@ -119,7 +119,7 @@ export default function DashboardPage() {
       <h1 className="text-xl font-semibold text-slip">ภาพรวมร้าน</h1>
 
       {data.urgentOpenTicketCount > 0 && (
-        <div role="alert" className="border-l-2 border-void bg-griddle px-4 py-3">
+        <div role="alert" className="rounded-lg border-l-4 border-void bg-griddle px-4 py-3 shadow-sm">
           <p className="text-slip">
             มีเรื่องแจ้งปัญหาเร่งด่วนที่ยังไม่มีใครรับ{' '}
             <span className="num">{data.urgentOpenTicketCount}</span> เรื่อง
@@ -131,7 +131,7 @@ export default function DashboardPage() {
       )}
 
       {data.staleOrders.length > 0 && (
-        <div role="alert" className="border-l-2 border-waiting bg-griddle px-4 py-3">
+        <div role="alert" className="rounded-lg border-l-4 border-waiting bg-griddle px-4 py-3 shadow-sm">
           <p className="text-slip">
             มีออเดอร์ค้างสถานะรอครัวรับเกิน{' '}
             <span className="num">{data.stalePendingMinutes}</span> นาที{' '}
@@ -153,68 +153,74 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <section>
-        <p className="text-slip-dim">ยอดขายวันนี้ (เก็บเงินแล้ว)</p>
-        <p className="num text-5xl leading-tight font-semibold text-slip">
-          {formatBahtWithSign(data.todayRevenue)}
-        </p>
-        <p className="mt-1 text-slip-dim">
-          {compareWithYesterday(data.todayRevenue, data.yesterdayRevenue)}
-        </p>
-        <p className="text-slip-dim">
-          ปิดบิลไปแล้ว <span className="num text-slip">{data.todayBillCount}</span> บิล
-        </p>
-      </section>
+      <div className="grid gap-4 md:grid-cols-2">
+        <section className="rounded-lg bg-griddle p-6 shadow-sm md:col-span-2">
+          <p className="text-slip-dim">ยอดขายวันนี้ (เก็บเงินแล้ว)</p>
+          <p className="num text-5xl leading-tight font-semibold text-flame">
+            {formatBahtWithSign(data.todayRevenue)}
+          </p>
+          <p className="mt-1 text-slip-dim">
+            {compareWithYesterday(data.todayRevenue, data.yesterdayRevenue)}
+          </p>
+          <p className="text-slip-dim">
+            ปิดบิลไปแล้ว <span className="num text-slip">{data.todayBillCount}</span> บิล
+          </p>
+        </section>
 
-      <section className="flex flex-col divide-y divide-rule border-y border-rule">
-        <div className="flex items-baseline justify-between py-2">
-          <span className="text-slip-dim">ออเดอร์วันนี้ (ไม่นับที่ยกเลิก)</span>
-          <span className="num text-slip">{data.todayOrderCount} ใบ</span>
-        </div>
-        <div className="flex items-baseline justify-between py-2">
-          <span className="text-slip-dim">โต๊ะที่กำลังนั่งอยู่</span>
-          <span className="num text-slip">{data.openTableCount} โต๊ะ</span>
-        </div>
-        <div className="flex items-baseline justify-between py-2">
-          <span className="text-slip-dim">ยอดค้างชำระของโต๊ะที่ยังไม่ปิดบิล</span>
-          <span className="num text-slip">{formatBahtWithSign(data.unpaidAmount)}</span>
-        </div>
-        <div className="flex items-baseline justify-between py-2">
-          <span className="text-slip-dim">เรื่องแจ้งปัญหาที่ยังไม่ปิด</span>
-          <span className="num text-slip">{data.openTicketCount} เรื่อง</span>
-        </div>
-      </section>
+        <section className="flex flex-col divide-y divide-rule rounded-lg bg-griddle px-4 shadow-sm">
+          <div className="flex items-baseline justify-between py-3">
+            <span className="text-slip-dim">ออเดอร์วันนี้ (ไม่นับที่ยกเลิก)</span>
+            <span className="num text-slip">{data.todayOrderCount} ใบ</span>
+          </div>
+          <div className="flex items-baseline justify-between py-3">
+            <span className="text-slip-dim">โต๊ะที่กำลังนั่งอยู่</span>
+            <span className="num text-slip">{data.openTableCount} โต๊ะ</span>
+          </div>
+          <div className="flex items-baseline justify-between py-3">
+            <span className="text-slip-dim">ยอดค้างชำระของโต๊ะที่ยังไม่ปิดบิล</span>
+            <span className="num text-slip">{formatBahtWithSign(data.unpaidAmount)}</span>
+          </div>
+          <div className="flex items-baseline justify-between py-3">
+            <span className="text-slip-dim">เรื่องแจ้งปัญหาที่ยังไม่ปิด</span>
+            <span className="num text-slip">{data.openTicketCount} เรื่อง</span>
+          </div>
+        </section>
 
-      <section>
-        <h2 className="font-semibold text-slip">5 เมนูขายดีของวันนี้</h2>
-        {data.topMenus.length === 0 ? (
-          <EmptyState message="วันนี้ยังไม่มีรายการอาหารที่สั่งเข้ามา — ตัวเลขจะขึ้นทันทีที่ลูกค้าโต๊ะแรกกดยืนยันสั่ง" />
-        ) : (
-          <ul className="mt-3 flex flex-col gap-3">
-            {data.topMenus.map((menu) => (
-              <li key={menu.item_name}>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 flex-1 truncate text-slip">{menu.item_name}</span>
-                  <span className="num text-slip">{menu.quantity} จาน</span>
-                  <span className="num w-24 text-right text-slip-dim">
-                    {formatBaht(menu.amount)}
-                  </span>
-                </div>
-                <div
-                  className="mt-1 h-2 bg-slip-dim"
-                  style={{ width: `${(menu.quantity / maxQuantity) * 100}%` }}
-                  aria-hidden="true"
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        <section className="rounded-lg bg-griddle p-6 shadow-sm">
+          <h2 className="font-semibold text-slip">5 เมนูขายดีของวันนี้</h2>
+          {data.topMenus.length === 0 ? (
+            <EmptyState message="วันนี้ยังไม่มีรายการอาหารที่สั่งเข้ามา — ตัวเลขจะขึ้นทันทีที่ลูกค้าโต๊ะแรกกดยืนยันสั่ง" />
+          ) : (
+            <ul className="mt-3 flex flex-col gap-3">
+              {data.topMenus.map((menu) => (
+                <li key={menu.item_name}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 flex-1 truncate text-slip">{menu.item_name}</span>
+                    <span className="num text-slip">{menu.quantity} จาน</span>
+                    <span className="num w-24 text-right text-slip-dim">
+                      {formatBaht(menu.amount)}
+                    </span>
+                  </div>
+                  <div
+                    className="mt-1 h-2 rounded-full bg-flame/15"
+                    aria-hidden="true"
+                  >
+                    <div
+                      className="h-2 rounded-full bg-flame"
+                      style={{ width: `${(menu.quantity / maxQuantity) * 100}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      <section>
-        <h2 className="font-semibold text-slip">ยอดขาย 7 วันล่าสุด</h2>
-        <SalesTrend points={data.salesTrend} />
-      </section>
+        <section className="rounded-lg bg-griddle p-6 shadow-sm md:col-span-2">
+          <h2 className="font-semibold text-slip">ยอดขาย 7 วันล่าสุด</h2>
+          <SalesTrend points={data.salesTrend} />
+        </section>
+      </div>
     </div>
   );
 }

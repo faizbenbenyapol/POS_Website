@@ -46,24 +46,26 @@ INSERT INTO categories (name, sort_order) VALUES
   ('เครื่องดื่ม', 4);
 
 -- เมนู 20 รายการ ใช้ชื่อและราคาแบบร้านอาหารตามสั่งจริง
-INSERT INTO menu_items (category_id, name, description, price) VALUES
-  ((SELECT id FROM categories WHERE name='ของทานเล่น'), 'ปีกไก่ทอดน้ำปลา',      'ปีกไก่กลางทอดกรอบ โรยกระเทียมเจียว',        129.00),
-  ((SELECT id FROM categories WHERE name='ของทานเล่น'), 'หมูสะเต๊ะ 6 ไม้',       'เสิร์ฟพร้อมน้ำจิ้มถั่วและอาจาด',             99.00),
-  ((SELECT id FROM categories WHERE name='ของทานเล่น'), 'เฟรนช์ฟรายส์',          'ทอดกรอบ โรยผงปาปริก้า',                     69.00),
-  ((SELECT id FROM categories WHERE name='ของทานเล่น'), 'ยำวุ้นเส้นทะเล',        'กุ้งสด ปลาหมึก รสจัดจ้าน',                  149.00),
-  ((SELECT id FROM categories WHERE name='จานเดียว'),   'กะเพราหมูสับไข่ดาว',    'เผ็ดกลาง ไข่ดาวไข่แดงเยิ้ม',                 65.00),
-  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ข้าวผัดกุ้ง',           'กุ้งสด 5 ตัว หอมกระทะ',                      85.00),
-  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ผัดซีอิ๊วหมู',          'เส้นใหญ่ผัดไฟแรง',                           65.00),
-  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ผัดไทยกุ้งสด',          'เส้นจันท์ ใส่ไข่ เสิร์ฟพร้อมถั่วงอก',        90.00),
-  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ข้าวหมูกรอบราดซอส',     'หมูสามชั้นทอดกรอบ',                          75.00),
-  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ข้าวไข่เจียวหมูสับ',    'ไข่เจียวฟูใส่หมูสับ',                        60.00),
-  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ต้มยำกุ้งน้ำข้น',       'กุ้งแม่น้ำ เห็ดฟาง รสเปรี้ยวนำ',            180.00),
-  ((SELECT id FROM categories WHERE name='กับข้าว'),    'แกงเขียวหวานไก่',       'กะทิสด เสิร์ฟพร้อมโรตีหรือข้าวสวย',         120.00),
-  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ผัดผักบุ้งไฟแดง',       'ผักบุ้งกรอบ ผัดเต้าเจี้ยว',                  80.00),
-  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ปลาทับทิมนึ่งมะนาว',    'ปลาสด ๆ ทั้งตัว น้ำจิ้มซีฟู้ด',             320.00),
-  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ไข่พะโล้หมูสามชั้น',    'ตุ๋นนาน หมูเปื่อย',                         110.00),
-  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ข้าวสวย',               'ข้าวหอมมะลิ 1 ถ้วย',                         15.00),
-  ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'ชาไทยเย็น',            'ชาไทยแท้ นมข้นหวาน',                          45.00),
-  ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'น้ำมะนาวโซดา',         'สดชื่น ไม่หวานมาก',                           50.00),
-  ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'น้ำเปล่า',             'ขวด 600 มล.',                                 15.00),
-  ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'โซดา',                 'ขวดแก้ว',                                     25.00);
+-- รูปภาพ 11 รายการใช้ลิงก์จาก Unsplash (ตรวจแล้วว่าเปิดได้จริงก่อนใส่) ที่เหลือปล่อย NULL
+-- ไว้โชว์ว่าเมนูที่ยังไม่มีรูปจะขึ้นเป็นไอคอนตัวอักษรแทนบนหน้าจอ ไม่ใช่รูปหักหรือจอว่าง
+INSERT INTO menu_items (category_id, name, description, price, image_url) VALUES
+  ((SELECT id FROM categories WHERE name='ของทานเล่น'), 'ปีกไก่ทอดน้ำปลา',      'ปีกไก่กลางทอดกรอบ โรยกระเทียมเจียว',        129.00, 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='ของทานเล่น'), 'หมูสะเต๊ะ 6 ไม้',       'เสิร์ฟพร้อมน้ำจิ้มถั่วและอาจาด',             99.00, 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='ของทานเล่น'), 'เฟรนช์ฟรายส์',          'ทอดกรอบ โรยผงปาปริก้า',                     69.00, 'https://images.unsplash.com/photo-1622597467836-f3285f2131b8?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='ของทานเล่น'), 'ยำวุ้นเส้นทะเล',        'กุ้งสด ปลาหมึก รสจัดจ้าน',                  149.00, 'https://images.unsplash.com/photo-1553163147-622ab57be1c7?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='จานเดียว'),   'กะเพราหมูสับไข่ดาว',    'เผ็ดกลาง ไข่ดาวไข่แดงเยิ้ม',                 65.00, NULL),
+  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ข้าวผัดกุ้ง',           'กุ้งสด 5 ตัว หอมกระทะ',                      85.00, 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ผัดซีอิ๊วหมู',          'เส้นใหญ่ผัดไฟแรง',                           65.00, 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ผัดไทยกุ้งสด',          'เส้นจันท์ ใส่ไข่ เสิร์ฟพร้อมถั่วงอก',        90.00, NULL),
+  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ข้าวหมูกรอบราดซอส',     'หมูสามชั้นทอดกรอบ',                          75.00, NULL),
+  ((SELECT id FROM categories WHERE name='จานเดียว'),   'ข้าวไข่เจียวหมูสับ',    'ไข่เจียวฟูใส่หมูสับ',                        60.00, NULL),
+  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ต้มยำกุ้งน้ำข้น',       'กุ้งแม่น้ำ เห็ดฟาง รสเปรี้ยวนำ',            180.00, 'https://images.unsplash.com/photo-1541518763669-27fef04b14ea?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='กับข้าว'),    'แกงเขียวหวานไก่',       'กะทิสด เสิร์ฟพร้อมโรตีหรือข้าวสวย',         120.00, 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ผัดผักบุ้งไฟแดง',       'ผักบุ้งกรอบ ผัดเต้าเจี้ยว',                  80.00, NULL),
+  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ปลาทับทิมนึ่งมะนาว',    'ปลาสด ๆ ทั้งตัว น้ำจิ้มซีฟู้ด',             320.00, NULL),
+  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ไข่พะโล้หมูสามชั้น',    'ตุ๋นนาน หมูเปื่อย',                         110.00, 'https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='กับข้าว'),    'ข้าวสวย',               'ข้าวหอมมะลิ 1 ถ้วย',                         15.00, NULL),
+  ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'ชาไทยเย็น',            'ชาไทยแท้ นมข้นหวาน',                          45.00, 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'น้ำมะนาวโซดา',         'สดชื่น ไม่หวานมาก',                           50.00, 'https://images.unsplash.com/photo-1580217593608-61931cefc821?w=480&h=360&fit=crop&q=70&auto=format'),
+  ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'น้ำเปล่า',             'ขวด 600 มล.',                                 15.00, NULL),
+  ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'โซดา',                 'ขวดแก้ว',                                     25.00, NULL);

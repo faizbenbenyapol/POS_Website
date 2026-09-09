@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { TableSkeleton, EmptyState, ErrorState } from '@/components/DataState';
+import MenuItemThumb from '@/components/MenuItemThumb';
 import { apiFetch } from '@/lib/client';
 import { formatBaht, formatBahtWithSign } from '@/lib/format';
 import { readCart, writeCart, addToCart, cartTotal, type CartItem } from '@/lib/cart';
@@ -17,6 +18,7 @@ type MenuItem = {
   name: string;
   description: string | null;
   price: string;
+  image_url: string | null;
 };
 
 /**
@@ -108,10 +110,10 @@ export default function CustomerMenuPage({
                   type="button"
                   onClick={() => setActiveCategory(category.id)}
                   aria-pressed={activeCategory === category.id}
-                  className={`min-h-[44px] shrink-0 rounded-sm border px-4 whitespace-nowrap ${
+                  className={`min-h-[44px] shrink-0 rounded-full px-4 font-medium whitespace-nowrap ${
                     activeCategory === category.id
-                      ? 'border-slip bg-griddle text-slip'
-                      : 'border-rule text-slip-dim'
+                      ? 'bg-flame text-char'
+                      : 'bg-griddle text-slip-dim shadow-sm'
                   }`}
                 >
                   {category.name}
@@ -124,23 +126,28 @@ export default function CustomerMenuPage({
             <EmptyState message="หมวดนี้ยังไม่มีอาหารที่เปิดขายตอนนี้ — ลองเลือกหมวดอื่น หรือสอบถามพนักงาน" />
           )}
 
-          <ul className="flex flex-col">
+          <ul className="flex flex-col gap-3">
             {visibleItems.map((item) => (
               <li
                 key={item.id}
-                className="flex items-start gap-3 border-b border-rule py-3 last:border-b-0"
+                className="flex items-center gap-3 rounded-lg bg-griddle p-3 shadow-sm"
               >
+                <MenuItemThumb name={item.name} imageUrl={item.image_url} />
                 <div className="min-w-0 flex-1">
                   <p className="text-slip">{item.name}</p>
                   {item.description && (
                     <p className="text-sm text-slip-dim">{item.description}</p>
                   )}
-                  <p className="num mt-1 text-slip">{formatBaht(item.price)} บาท</p>
+                  <p className="num mt-1 font-medium text-slip">{formatBaht(item.price)} บาท</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleAdd(item)}
-                  className="min-h-[44px] min-w-[5.5rem] shrink-0 rounded-sm border border-rule px-3 text-slip"
+                  className={`min-h-[44px] min-w-[5.5rem] shrink-0 rounded-lg px-3 font-medium ${
+                    justAdded === item.id
+                      ? 'bg-served/10 text-served'
+                      : 'bg-flame/10 text-flame'
+                  }`}
                 >
                   {justAdded === item.id ? 'เพิ่มแล้ว' : 'เพิ่ม'}
                 </button>
@@ -151,10 +158,10 @@ export default function CustomerMenuPage({
       )}
 
       {totalCount > 0 && (
-        <div className="fixed inset-x-0 bottom-14 z-10 border-t border-rule bg-char px-4 py-3">
+        <div className="fixed inset-x-0 bottom-16 z-10 px-4">
           <Link
             href={`/t/${token}/cart`}
-            className="mx-auto flex min-h-[44px] max-w-md items-center justify-between rounded-sm bg-flame px-4 font-medium text-char"
+            className="mx-auto flex min-h-[52px] max-w-md items-center justify-between rounded-xl bg-flame px-4 font-medium text-char shadow-lg"
           >
             <span>ดูตะกร้า {totalCount} รายการ</span>
             <span className="num">{formatBahtWithSign(cartTotal(cart))}</span>

@@ -44,9 +44,9 @@ type Assignee = { id: number; full_name: string; is_active: number };
 
 /** สีกำกับความเร่งด่วน มีข้อความกำกับเสมอ ไม่สื่อความหมายด้วยสีอย่างเดียว */
 const PRIORITY_CLASS: Record<string, string> = {
-  URGENT: 'text-void',
-  NORMAL: 'text-slip-dim',
-  LOW: 'text-slip-dim',
+  URGENT: 'bg-void/10 text-void',
+  NORMAL: 'bg-char text-slip-dim',
+  LOW: 'bg-char text-slip-dim',
 };
 
 /** ตัวเลือกกรองสถานะ */
@@ -84,6 +84,9 @@ const EMPTY_FORM = {
   detail: '',
   priority: 'NORMAL',
 };
+
+/** ระยะเวลาระหว่างการดึงรายการใหม่ ให้ตรงกับกระดานออเดอร์เพื่อให้เห็นปุ่มเรียกพนักงาน/ขอเช็คบิลจากลูกค้าไว */
+const POLL_INTERVAL_MS = 10000;
 
 /**
  * หน้าจัดการเรื่องแจ้งปัญหา แสดงรายการพร้อมตัวกรอง และเปิดดูรายละเอียดพร้อมกล่องตอบกลับ
@@ -137,6 +140,11 @@ export default function TicketsPage() {
 
   useEffect(() => {
     load(true);
+  }, [load]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => load(false), POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
   }, [load]);
 
   useEffect(() => {
@@ -232,7 +240,9 @@ export default function TicketsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slip">เรื่องแจ้งปัญหา</h1>
-          <p className="text-slip-dim">เรื่องเร่งด่วนถูกเรียงขึ้นบนสุดเสมอ</p>
+          <p className="text-slip-dim">
+            เรื่องเร่งด่วนถูกเรียงขึ้นบนสุดเสมอ · อัปเดตอัตโนมัติทุก 10 วินาที
+          </p>
         </div>
         <button
           type="button"
@@ -241,13 +251,13 @@ export default function TicketsPage() {
             setFormError('');
             setCreateOpen(true);
           }}
-          className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
         >
           เปิดเรื่องใหม่
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3 border border-rule bg-griddle px-3 py-3">
+      <div className="flex flex-wrap gap-3 rounded-lg bg-griddle px-3 py-3 shadow-sm">
         <div className="min-w-[12rem] flex-1">
           <SelectField
             id="ticket-status-filter"
@@ -287,23 +297,29 @@ export default function TicketsPage() {
       )}
 
       {!loadError && tickets !== null && tickets.length > 0 && (
-        <ul className="flex flex-col">
+        <ul className="flex flex-col gap-3">
           {tickets.map((ticket) => (
-            <li key={ticket.id} className="border-b border-rule last:border-b-0">
+            <li key={ticket.id} className="overflow-hidden rounded-lg bg-griddle shadow-sm">
               <button
                 type="button"
                 onClick={() => {
                   setDetailId(ticket.id);
                   setReplyText('');
                 }}
-                className="w-full py-3 text-left"
+                className="w-full p-3 text-left"
               >
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span className="num text-sm text-slip-dim">{ticket.ticket_code}</span>
-                  <span className={PRIORITY_CLASS[ticket.priority] ?? 'text-slip-dim'}>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-sm ${
+                      PRIORITY_CLASS[ticket.priority] ?? 'bg-char text-slip-dim'
+                    }`}
+                  >
                     {TICKET_PRIORITY_LABELS[ticket.priority]}
                   </span>
-                  <span className="text-slip-dim">{TICKET_STATUS_LABELS[ticket.status]}</span>
+                  <span className="rounded-full bg-char px-2 py-0.5 text-sm text-slip-dim">
+                    {TICKET_STATUS_LABELS[ticket.status]}
+                  </span>
                   <span className="num ml-auto text-sm text-slip-dim">
                     {formatThaiDateTime(ticket.created_at)}
                   </span>
@@ -329,7 +345,7 @@ export default function TicketsPage() {
       >
         {detail && (
           <div className="flex flex-col gap-4">
-            <div className="border border-rule px-3 py-2">
+            <div className="rounded-lg bg-char px-3 py-2">
               <p className="text-sm text-slip-dim">
                 {TICKET_CATEGORY_LABELS[detail.category]} ·{' '}
                 {TICKET_PRIORITY_LABELS[detail.priority]} ·{' '}
@@ -377,7 +393,7 @@ export default function TicketsPage() {
               ) : (
                 <ul className="mt-2 flex flex-col gap-2">
                   {detailReplies.map((reply) => (
-                    <li key={reply.id} className="border-l-2 border-rule pl-3">
+                    <li key={reply.id} className="rounded-lg bg-char p-3">
                       <p className="num text-sm text-slip-dim">
                         {formatThaiDateTime(reply.created_at)} · {reply.user_name ?? 'ลูกค้า'}
                       </p>
@@ -399,12 +415,12 @@ export default function TicketsPage() {
                   onChange={(event) => setReplyText(event.target.value)}
                   rows={3}
                   placeholder="เช่น รับเรื่องแล้ว กำลังให้ครัวเร่งจานนี้ให้"
-                  className="w-full rounded-sm border border-rule bg-char px-3 py-2 text-slip placeholder:text-slip-dim"
+                  className="w-full rounded-lg bg-char px-3 py-2 text-slip placeholder:text-slip-dim"
                 />
                 <button
                   type="submit"
                   disabled={working}
-                  className="min-h-[44px] self-end rounded-sm bg-flame px-4 font-medium text-char disabled:opacity-60"
+                  className="min-h-[44px] self-end rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
                 >
                   {working ? 'กำลังส่ง…' : 'ส่งคำตอบ'}
                 </button>
@@ -446,7 +462,7 @@ export default function TicketsPage() {
               value={form.detail}
               onChange={(event) => setForm({ ...form, detail: event.target.value })}
               rows={4}
-              className="w-full rounded-sm border border-rule bg-char px-3 py-2 text-slip"
+              className="w-full rounded-lg bg-char px-3 py-2 text-slip"
             />
           </div>
           <FormActions

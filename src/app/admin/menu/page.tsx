@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Modal from '@/components/Modal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { TextField, NumberField, SelectField, CheckboxField, FormActions } from '@/components/Field';
+import MenuItemThumb from '@/components/MenuItemThumb';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { formatBaht } from '@/lib/format';
 
@@ -15,6 +16,7 @@ type MenuItem = {
   name: string;
   description: string | null;
   price: string;
+  image_url: string | null;
   is_available: number;
   order_count: number;
 };
@@ -28,6 +30,7 @@ const EMPTY_FORM = {
   name: '',
   description: '',
   price: '',
+  imageUrl: '',
   isAvailable: true,
 };
 
@@ -100,6 +103,7 @@ export default function MenuPage() {
             name: item.name,
             description: item.description ?? '',
             price: item.price,
+            imageUrl: item.image_url ?? '',
             isAvailable: item.is_available === 1,
           }
         : { ...EMPTY_FORM, categoryId: String(categories[0]?.id ?? '') },
@@ -123,6 +127,7 @@ export default function MenuPage() {
       name: form.name,
       description: form.description,
       price: Number(form.price || 0),
+      imageUrl: form.imageUrl,
       isAvailable: form.isAvailable,
     };
     const result = editing
@@ -179,13 +184,13 @@ export default function MenuPage() {
         <button
           type="button"
           onClick={() => openForm()}
-          className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
         >
           เพิ่มเมนู
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3 border border-rule bg-griddle px-3 py-3">
+      <div className="flex flex-wrap gap-3 rounded-lg bg-griddle px-3 py-3 shadow-sm">
         <div className="min-w-[12rem] flex-1">
           <TextField
             id="menu-search"
@@ -228,7 +233,7 @@ export default function MenuPage() {
             <button
               type="button"
               onClick={() => openForm()}
-              className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+              className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
             >
               เพิ่มเมนู
             </button>
@@ -237,57 +242,54 @@ export default function MenuPage() {
       )}
 
       {!loadError && items !== null && items.length > 0 && (
-        <div className="overflow-x-auto border border-rule">
-          <table className="w-full min-w-[46rem] border-collapse">
-            <thead>
-              <tr className="border-b border-rule bg-griddle text-left text-slip-dim">
-                <th className="px-3 py-2 font-medium">ชื่อเมนู</th>
-                <th className="px-3 py-2 font-medium">หมวดหมู่</th>
-                <th className="px-3 py-2 text-right font-medium">ราคา (บาท)</th>
-                <th className="px-3 py-2 text-right font-medium">เคยสั่ง</th>
-                <th className="px-3 py-2 font-medium">สถานะ</th>
-                <th className="px-3 py-2 font-medium">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-b border-rule last:border-b-0 align-top">
-                  <td className="px-3 py-2">
-                    <p className="text-slip">{item.name}</p>
-                    {item.description && (
-                      <p className="text-sm text-slip-dim">{item.description}</p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-slip-dim">{item.category_name}</td>
-                  <td className="num px-3 py-2 text-right text-slip">{formatBaht(item.price)}</td>
-                  <td className="num px-3 py-2 text-right text-slip-dim">{item.order_count}</td>
-                  <td className="px-3 py-2">
-                    <span className={item.is_available === 1 ? 'text-served' : 'text-slip-dim'}>
-                      {item.is_available === 1 ? 'เปิดขาย' : 'ปิดขาย'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openForm(item)}
-                        className="min-h-[44px] text-slip underline underline-offset-4"
-                      >
-                        แก้ไข
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item)}
-                        className="min-h-[44px] text-void underline underline-offset-4"
-                      >
-                        ลบ
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item) => (
+            <article
+              key={item.id}
+              className="flex flex-col overflow-hidden rounded-lg bg-griddle shadow-sm"
+            >
+              <MenuItemThumb
+                name={item.name}
+                imageUrl={item.image_url}
+                size="h-36 w-full"
+                rounded="rounded-none"
+              />
+              <div className="flex flex-1 flex-col gap-1 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 flex-1 text-slip">{item.name}</p>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-sm ${
+                      item.is_available === 1 ? 'bg-served/10 text-served' : 'bg-char text-slip-dim'
+                    }`}
+                  >
+                    {item.is_available === 1 ? 'เปิดขาย' : 'ปิดขาย'}
+                  </span>
+                </div>
+                {item.description && <p className="text-sm text-slip-dim">{item.description}</p>}
+                <p className="text-sm text-slip-dim">{item.category_name}</p>
+                <div className="mt-auto flex items-center justify-between pt-2">
+                  <p className="num font-medium text-slip">{formatBaht(item.price)} บาท</p>
+                  <p className="num text-sm text-slip-dim">เคยสั่ง {item.order_count}</p>
+                </div>
+                <div className="mt-2 flex gap-2 border-t border-rule pt-2">
+                  <button
+                    type="button"
+                    onClick={() => openForm(item)}
+                    className="min-h-[40px] flex-1 rounded-lg bg-char text-slip"
+                  >
+                    แก้ไข
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(item)}
+                    className="min-h-[40px] flex-1 rounded-lg bg-void/10 text-void"
+                  >
+                    ลบ
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       )}
 
@@ -325,6 +327,19 @@ export default function MenuPage() {
             onChange={(value) => setForm({ ...form, price: value })}
             step={0.01}
           />
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <TextField
+                id="menu-image"
+                label="ลิงก์รูปภาพ (ไม่บังคับ)"
+                value={form.imageUrl}
+                onChange={(value) => setForm({ ...form, imageUrl: value })}
+                placeholder="https://…"
+                hint="วางลิงก์รูปอาหาร ถ้าไม่มีระบบจะโชว์ไอคอนตัวอักษรแทน"
+              />
+            </div>
+            <MenuItemThumb name={form.name || '?'} imageUrl={form.imageUrl || null} />
+          </div>
           <CheckboxField
             label="เปิดขาย (ลูกค้าเห็นเมนูนี้และสั่งได้)"
             checked={form.isAvailable}

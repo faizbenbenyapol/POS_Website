@@ -154,7 +154,7 @@ export default function UsersPage() {
         <button
           type="button"
           onClick={() => openForm()}
-          className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
         >
           เพิ่มผู้ใช้
         </button>
@@ -175,7 +175,7 @@ export default function UsersPage() {
             <button
               type="button"
               onClick={() => openForm()}
-              className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+              className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
             >
               เพิ่มผู้ใช้คนแรก
             </button>
@@ -184,10 +184,10 @@ export default function UsersPage() {
       )}
 
       {!loadError && items !== null && items.length > 0 && (
-        <div className="overflow-x-auto border border-rule">
+        <div className="overflow-x-auto rounded-lg bg-griddle shadow-sm">
           <table className="w-full min-w-[44rem] border-collapse">
             <thead>
-              <tr className="border-b border-rule bg-griddle text-left text-slip-dim">
+              <tr className="bg-char text-left text-slip-dim">
                 <th className="px-3 py-2 font-medium">ชื่อผู้ใช้</th>
                 <th className="px-3 py-2 font-medium">ชื่อ-สกุล</th>
                 <th className="px-3 py-2 font-medium">บทบาท</th>
@@ -205,7 +205,11 @@ export default function UsersPage() {
                     {user.role === 'ADMIN' ? 'ผู้ดูแลระบบ' : 'พนักงาน'}
                   </td>
                   <td className="px-3 py-2">
-                    <span className={user.is_active === 1 ? 'text-served' : 'text-slip-dim'}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-sm ${
+                        user.is_active === 1 ? 'bg-served/10 text-served' : 'bg-char text-slip-dim'
+                      }`}
+                    >
                       {user.is_active === 1 ? 'ใช้งานได้' : 'ปิดใช้งาน'}
                     </span>
                   </td>

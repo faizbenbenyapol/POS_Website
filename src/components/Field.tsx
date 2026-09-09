@@ -1,6 +1,6 @@
 /** คลาสพื้นฐานของช่องกรอกทุกชนิด ประกาศไว้ที่เดียวเพื่อให้ทุกฟอร์มหน้าตาเหมือนกัน */
 const INPUT_CLASS =
-  'min-h-[44px] w-full rounded-sm border border-rule bg-char px-3 text-slip placeholder:text-slip-dim';
+  'min-h-[44px] w-full rounded-lg bg-char px-3 text-slip placeholder:text-slip-dim';
 
 /**
  * ช่องกรอกข้อความพร้อมป้ายกำกับ ใช้กับชื่อ คำอธิบาย และรหัสผ่าน
@@ -192,7 +192,7 @@ export function FormActions({
   return (
     <>
       {error && (
-        <p role="alert" className="border-l-2 border-void bg-char px-3 py-2 text-sm text-slip">
+        <p role="alert" className="rounded-lg border-l-4 border-void bg-char px-3 py-2 text-sm text-slip">
           {error}
         </p>
       )}
@@ -200,14 +200,14 @@ export function FormActions({
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-[44px] rounded-sm border border-rule px-4 text-slip"
+          className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
         >
           ยกเลิก
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char disabled:opacity-60"
+          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
         >
           {saving ? 'กำลังบันทึก…' : submitLabel}
         </button>

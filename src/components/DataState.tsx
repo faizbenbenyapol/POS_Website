@@ -9,7 +9,7 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="flex flex-col gap-2" aria-busy="true" aria-label="กำลังโหลดข้อมูล">
       {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="h-12 animate-pulse rounded-sm bg-griddle" />
+        <div key={index} className="h-12 animate-pulse rounded-lg bg-griddle" />
       ))}
     </div>
   );
@@ -30,7 +30,7 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-start gap-3 border border-dashed border-rule px-4 py-8">
+    <div className="flex flex-col items-start gap-3 rounded-lg border-2 border-dashed border-rule px-4 py-8">
       <p className="text-slip-dim">{message}</p>
       {action}
     </div>
@@ -52,7 +52,7 @@ export function ErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div role="alert" className="border-l-2 border-void bg-griddle px-4 py-4">
+    <div role="alert" className="rounded-lg border-l-4 border-void bg-griddle px-4 py-4 shadow-sm">
       <p className="text-slip">{message}</p>
       <button
         type="button"
@@ -87,7 +87,7 @@ export function Notice({
   return (
     <div
       role="status"
-      className={`flex items-start gap-3 border-l-2 bg-griddle px-4 py-3 ${
+      className={`flex items-start gap-3 rounded-lg border-l-4 bg-griddle px-4 py-3 shadow-sm ${
         tone === 'success' ? 'border-served' : 'border-void'
       }`}
     >

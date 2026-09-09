@@ -61,7 +61,7 @@ function LoginForm() {
           onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
           autoCapitalize="none"
-          className="min-h-[44px] rounded-sm border border-rule bg-griddle px-3 text-slip placeholder:text-slip-dim"
+          className="min-h-[44px] rounded-lg bg-char px-3 text-slip placeholder:text-slip-dim"
           placeholder="เช่น staff01"
         />
       </div>
@@ -77,12 +77,12 @@ function LoginForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
-          className="min-h-[44px] rounded-sm border border-rule bg-griddle px-3 text-slip"
+          className="min-h-[44px] rounded-lg bg-char px-3 text-slip"
         />
       </div>
 
       {errorMessage && (
-        <p role="alert" className="border-l-2 border-void bg-griddle px-3 py-2 text-sm text-slip">
+        <p role="alert" className="rounded-lg border-l-4 border-void bg-char px-3 py-2 text-sm text-slip">
           {errorMessage}
         </p>
       )}
@@ -90,7 +90,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char transition-opacity duration-200 disabled:opacity-60"
+        className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char transition-opacity duration-200 disabled:opacity-60"
       >
         {submitting ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
       </button>
@@ -107,16 +107,18 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-8 px-6 py-10">
-      <div>
-        <h1 className="text-2xl font-semibold text-slip">เข้าสู่ระบบ</h1>
-        <p className="mt-1 text-slip-dim">สำหรับพนักงานและผู้ดูแลร้านเท่านั้น</p>
-      </div>
+      <div className="flex flex-col gap-8 rounded-xl bg-griddle p-8 shadow-sm">
+        <div>
+          <h1 className="text-2xl font-semibold text-slip">เข้าสู่ระบบ</h1>
+          <p className="mt-1 text-slip-dim">สำหรับพนักงานและผู้ดูแลร้านเท่านั้น</p>
+        </div>
 
-      <Suspense
-        fallback={<div className="h-64 animate-pulse rounded-sm bg-griddle" aria-hidden="true" />}
-      >
-        <LoginForm />
-      </Suspense>
+        <Suspense
+          fallback={<div className="h-64 animate-pulse rounded-lg bg-char" aria-hidden="true" />}
+        >
+          <LoginForm />
+        </Suspense>
+      </div>
     </main>
   );
 }

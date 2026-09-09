@@ -59,9 +59,9 @@ export default function CustomerTicketPage({
     return (
       <div className="flex flex-col gap-4">
         <h1 className="text-xl font-semibold text-slip">ส่งเรื่องให้ร้านแล้ว</h1>
-        <div className="border border-rule px-4 py-4">
+        <div className="rounded-lg bg-griddle p-4 shadow-sm">
           <p className="text-slip-dim">รหัสเรื่องของคุณ</p>
-          <p className="num text-3xl font-semibold text-slip">{ticketCode}</p>
+          <p className="num text-3xl font-semibold text-flame">{ticketCode}</p>
           <p className="mt-2 text-slip-dim">
             เก็บรหัสนี้ไว้แจ้งพนักงานได้เลย พนักงานจะเห็นเรื่องนี้ที่หน้าจอหลังร้านทันที
           </p>
@@ -74,13 +74,13 @@ export default function CustomerTicketPage({
               setSubject('');
               setDetail('');
             }}
-            className="min-h-[44px] rounded-sm border border-rule px-4 text-slip"
+            className="min-h-[44px] rounded-lg bg-griddle px-4 text-slip shadow-sm"
           >
             แจ้งเรื่องอื่นอีก
           </button>
           <Link
             href={`/t/${token}`}
-            className="flex min-h-[44px] items-center rounded-sm bg-flame px-4 font-medium text-char"
+            className="flex min-h-[44px] items-center rounded-lg bg-flame px-4 font-medium text-char"
           >
             กลับไปหน้าเมนู
           </Link>
@@ -122,12 +122,12 @@ export default function CustomerTicketPage({
           onChange={(event) => setDetail(event.target.value)}
           rows={5}
           placeholder="เล่าให้ฟังหน่อยว่าเกิดอะไรขึ้น"
-          className="w-full rounded-sm border border-rule bg-griddle px-3 py-2 text-slip placeholder:text-slip-dim"
+          className="w-full rounded-lg bg-griddle px-3 py-2 text-slip shadow-sm placeholder:text-slip-dim"
         />
       </div>
 
       {errorMessage && (
-        <p role="alert" className="border-l-2 border-void bg-griddle px-3 py-2 text-slip">
+        <p role="alert" className="rounded-lg border-l-4 border-void bg-griddle px-3 py-2 text-slip shadow-sm">
           {errorMessage}
         </p>
       )}
@@ -135,7 +135,7 @@ export default function CustomerTicketPage({
       <button
         type="submit"
         disabled={submitting}
-        className="min-h-[52px] rounded-sm bg-flame px-4 font-medium text-char disabled:opacity-60"
+        className="min-h-[52px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
       >
         {submitting ? 'กำลังส่ง…' : 'ส่งเรื่องให้ร้าน'}
       </button>

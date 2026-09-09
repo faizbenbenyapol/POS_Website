@@ -40,7 +40,7 @@ export default function Modal({
         event.preventDefault();
         onClose();
       }}
-      className="w-[min(32rem,calc(100vw-2rem))] rounded-sm border border-rule bg-griddle p-0 text-slip backdrop:bg-black/70"
+      className="w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-rule bg-griddle p-0 text-slip shadow-xl backdrop:bg-black/50"
     >
       <div className="flex items-center justify-between border-b border-rule px-4 py-3">
         <h2 className="font-semibold text-slip">{title}</h2>
@@ -48,7 +48,7 @@ export default function Modal({
           type="button"
           onClick={onClose}
           aria-label="ปิดหน้าต่าง"
-          className="flex h-11 w-11 items-center justify-center rounded-sm text-slip-dim hover:text-slip"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-slip-dim hover:bg-char hover:text-slip"
         >
           ✕
         </button>

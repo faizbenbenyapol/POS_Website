@@ -178,7 +178,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         <button
           type="button"
           onClick={() => openForm()}
-          className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
         >
           เพิ่มโต๊ะ
         </button>
@@ -199,7 +199,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
             <button
               type="button"
               onClick={() => openForm()}
-              className="min-h-[44px] rounded-sm bg-flame px-4 font-medium text-char"
+              className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
             >
               เพิ่มโต๊ะแรก
             </button>
@@ -208,10 +208,10 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
       )}
 
       {!loadError && items !== null && items.length > 0 && (
-        <div className="overflow-x-auto border border-rule">
+        <div className="overflow-x-auto rounded-lg bg-griddle shadow-sm">
           <table className="w-full min-w-[42rem] border-collapse">
             <thead>
-              <tr className="border-b border-rule bg-griddle text-left text-slip-dim">
+              <tr className="bg-char text-left text-slip-dim">
                 <th className="px-3 py-2 font-medium">เลขโต๊ะ</th>
                 <th className="px-3 py-2 text-right font-medium">ที่นั่ง</th>
                 <th className="px-3 py-2 font-medium">สถานะโต๊ะ</th>
@@ -225,12 +225,20 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
                   <td className="num px-3 py-2 text-lg text-slip">{table.table_no}</td>
                   <td className="num px-3 py-2 text-right text-slip">{table.seats}</td>
                   <td className="px-3 py-2">
-                    <span className={table.is_active === 1 ? 'text-served' : 'text-slip-dim'}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-sm ${
+                        table.is_active === 1 ? 'bg-served/10 text-served' : 'bg-char text-slip-dim'
+                      }`}
+                    >
                       {table.is_active === 1 ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <span className={table.has_open_session > 0 ? 'text-waiting' : 'text-slip-dim'}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-sm ${
+                        table.has_open_session > 0 ? 'bg-waiting/10 text-waiting' : 'bg-char text-slip-dim'
+                      }`}
+                    >
                       {table.has_open_session > 0 ? 'มีลูกค้านั่งอยู่' : 'ว่าง'}
                     </span>
                   </td>
@@ -309,10 +317,10 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
               <img
                 src={qrImage}
                 alt={`QR สำหรับโต๊ะ ${qrTable.table_no}`}
-                className="mx-auto w-full max-w-[16rem] rounded-sm border border-rule"
+                className="mx-auto w-full max-w-[16rem] rounded-lg bg-char p-2"
               />
             ) : (
-              <div className="mx-auto h-64 w-64 animate-pulse rounded-sm bg-char" />
+              <div className="mx-auto h-64 w-64 animate-pulse rounded-lg bg-char" />
             )}
 
             <div>
@@ -324,14 +332,14 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
               <button
                 type="button"
                 onClick={() => setQrTable(null)}
-                className="min-h-[44px] rounded-sm border border-rule px-4 text-slip"
+                className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
               >
                 ปิด
               </button>
               <a
                 href={qrImage || '#'}
                 download={`qr-table-${qrTable.table_no}.png`}
-                className="flex min-h-[44px] items-center rounded-sm bg-flame px-4 font-medium text-char"
+                className="flex min-h-[44px] items-center rounded-lg bg-flame px-4 font-medium text-char"
               >
                 ดาวน์โหลด QR
               </a>
