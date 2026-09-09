@@ -1,0 +1,71 @@
+@import 'tailwindcss';
+
+/* =============================================================
+   Design token ตามหัวข้อ 14 ของ plan.md — Dark Mode Minimalist
+   ที่มาของสีคือของจริงในร้าน: ถ่านในเตา เหล็กกระทะ กระดาษสลิป ไฟเตา
+   ห้ามใช้ palette ดิบของ Tailwind ในโค้ด ให้เรียกผ่านตัวแปรเหล่านี้เท่านั้น
+   ============================================================= */
+@theme static {
+  --color-char: #121110;      /* พื้นหลังหลัก — สีถ่านในเตา */
+  --color-griddle: #1a1917;   /* พื้นแผง/แถบข้าง — เหล็กกระทะ */
+  --color-rule: #2c2a27;      /* เส้นคั่น ขอบ — รอยพับกระดาษ */
+  --color-slip: #ede7dc;      /* ตัวอักษรหลัก — กระดาษสลิป */
+  --color-slip-dim: #968f86;  /* ตัวอักษรรอง — หมึกจาง */
+  --color-flame: #f0662b;     /* accent เดียวของระบบ — ไฟเตา */
+  --color-served: #6fa07a;    /* สถานะเสิร์ฟแล้ว */
+  --color-waiting: #d8a23c;   /* สถานะกำลังทำ */
+  --color-void: #c4503f;      /* ยกเลิก/ผิดพลาด */
+
+  /* ฟอนต์: IBM Plex Sans Thai ทุกข้อความ, IBM Plex Mono เฉพาะตัวเลขเงิน/เวลา/รหัส */
+  --font-sans: var(--font-plex-thai), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  /* มุมโค้ง 4px เท่านั้น — ของในร้านเป็นกระดาษกับเหล็ก ไม่ใช่แคปซูล */
+  --radius-sm: 4px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+}
+
+/* พื้นฐานทั้งเอกสาร: สระไทยต้องไม่ชนกัน จึงตรึง line-height 1.7 และห้าม letter-spacing ติดลบ */
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-char);
+  color: var(--color-slip);
+  font-family: var(--font-sans);
+  line-height: 1.7;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* หัวข้อแน่นกว่าเนื้อความได้ แต่ไม่ต่ำกว่า 1.35 เพราะวรรณยุกต์ไทยจะชนบรรทัดบน */
+h1, h2, h3, h4 {
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+/* ตัวเลขเงิน เวลา และรหัสต่าง ๆ ใช้ความกว้างตัวเลขเท่ากันเพื่อให้คอลัมน์ตรงกัน */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* focus ring ต้องมองเห็นชัดทุกที่ ตาม checklist การเข้าถึงได้ */
+:focus-visible {
+  outline: 2px solid var(--color-flame);
+  outline-offset: 2px;
+}
+
+/* motion มีได้เฉพาะที่ตอบการกระทำของผู้ใช้ และต้องเคารพการตั้งค่าของระบบ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

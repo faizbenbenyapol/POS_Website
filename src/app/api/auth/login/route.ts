@@ -1,0 +1,44 @@
+import type { NextRequest } from 'next/server';
+import { apiOk, apiError, ERROR_CODES } from '@/lib/api';
+import { authenticate, createToken, setAuthCookie } from '@/lib/auth';
+import { loginSchema, firstErrorMessage } from '@/lib/validation';
+
+/**
+ * รับชื่อผู้ใช้กับรหัสผ่าน ตรวจกับตาราง users แล้วออก JWT ใส่ httpOnly cookie
+ * ไม่ส่ง token กลับใน body เพื่อไม่ให้ฝั่งเบราว์เซอร์เก็บลง localStorage ได้
+ *
+ * @param request - คำขอที่มี body เป็น JSON { username, password }
+ * @returns ข้อมูลผู้ใช้ที่ล็อกอินสำเร็จ หรือ error พร้อมข้อความภาษาไทย
+ */
+export async function POST(request: NextRequest) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return apiError(ERROR_CODES.VALIDATION_ERROR, 'ข้อมูลที่ส่งมาไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+  }
+
+  const parsed = loginSchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
+  }
+
+  const result = await authenticate(parsed.data.username, parsed.data.password);
+  if (!result.ok) {
+    if (result.reason === 'ACCOUNT_DISABLED') {
+      return apiError(
+        ERROR_CODES.ACCOUNT_DISABLED,
+        'บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบให้เปิดใช้งานก่อน',
+        403,
+      );
+    }
+    return apiError(
+      ERROR_CODES.INVALID_CREDENTIALS,
+      'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจตัวสะกดแล้วลองใหม่',
+      401,
+    );
+  }
+
+  await setAuthCookie(await createToken(result.user));
+  return apiOk(result.user);
+}
