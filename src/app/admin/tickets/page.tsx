@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import Modal from '@/components/Modal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
-import { SelectField, TextField, FormActions } from '@/components/Field';
+import { SelectField, TextField, CheckboxField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { formatThaiDateTime } from '@/lib/format';
+import { PlusIcon } from '@/components/Icons';
 import {
   TICKET_CATEGORY_LABELS,
   TICKET_PRIORITY_LABELS,
@@ -251,9 +252,10 @@ export default function TicketsPage() {
             setFormError('');
             setCreateOpen(true);
           }}
-          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
         >
-          เปิดเรื่องใหม่
+          <PlusIcon className="w-4 h-4" />
+          <span>เปิดเรื่องใหม่</span>
         </button>
       </div>
 
@@ -420,7 +422,7 @@ export default function TicketsPage() {
                 <button
                   type="submit"
                   disabled={working}
-                  className="min-h-[44px] self-end rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
+                  className="min-h-[44px] self-end rounded-xl bg-[#06C755] px-5 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-60"
                 >
                   {working ? 'กำลังส่ง…' : 'ส่งคำตอบ'}
                 </button>

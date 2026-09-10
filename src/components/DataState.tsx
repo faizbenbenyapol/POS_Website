@@ -1,3 +1,5 @@
+import { CloseIcon } from '@/components/Icons';
+
 /**
  * โครงร่างระหว่างโหลดข้อมูลตาราง แสดงแทน spinner ตามข้อกำหนดหัวข้อ 14.5
  * เพื่อให้ผู้ใช้เห็นล่วงหน้าว่าสิ่งที่กำลังมาหน้าตาเป็นตารางกี่แถว
@@ -99,7 +101,7 @@ export function Notice({
         aria-label="ปิดข้อความแจ้งเตือน"
         className="shrink-0 text-slip-dim hover:text-slip"
       >
-        ✕
+        <CloseIcon className="w-4 h-4" />
       </button>
     </div>
   );

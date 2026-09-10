@@ -6,6 +6,7 @@ import Modal from '@/components/Modal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { TextField, NumberField, CheckboxField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
+import { PlusIcon, DownloadIcon, PrintIcon } from '@/components/Icons';
 
 /** โต๊ะ 1 แถวตามที่ GET /api/admin/tables คืนมา */
 type DiningTable = {
@@ -178,9 +179,10 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         <button
           type="button"
           onClick={() => openForm()}
-          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
         >
-          เพิ่มโต๊ะ
+          <PlusIcon className="w-4 h-4" />
+          <span>เพิ่มโต๊ะ</span>
         </button>
       </div>
 
@@ -199,9 +201,10 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
             <button
               type="button"
               onClick={() => openForm()}
-              className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+              className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
             >
-              เพิ่มโต๊ะแรก
+              <PlusIcon className="w-4 h-4" />
+              <span>เพิ่มโต๊ะแรก</span>
             </button>
           }
         />
@@ -243,25 +246,25 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => setQrTable(table)}
-                        className="min-h-[44px] text-slip underline underline-offset-4"
+                        className="rounded-lg border border-rule bg-paper px-3 py-1 text-xs font-semibold text-slip transition-all hover:border-[#06C755] hover:text-[#06C755]"
                       >
                         ดู QR
                       </button>
                       <button
                         type="button"
                         onClick={() => openForm(table)}
-                        className="min-h-[44px] text-slip underline underline-offset-4"
+                        className="rounded-lg border border-rule bg-paper px-3 py-1 text-xs font-semibold text-slip transition-all hover:border-[#06C755] hover:text-[#06C755]"
                       >
                         แก้ไข
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(table)}
-                        className="min-h-[44px] text-void underline underline-offset-4"
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 transition-all hover:bg-red-100"
                       >
                         ลบ
                       </button>
@@ -311,24 +314,36 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
       >
         {qrTable && (
           <div className="flex flex-col gap-4">
+            <div className="printable-receipt hidden print:block text-center p-6 bg-white border border-gray-300 rounded-xl shadow-lg">
+              <h2 className="text-2xl font-black text-gray-900">ยินดีต้อนรับ</h2>
+              <p className="text-lg font-bold text-[#06C755] mt-1">โต๊ะ {qrTable.table_no}</p>
+              {qrImage && (
+                <img
+                  src={qrImage}
+                  alt={`QR สำหรับโต๊ะ ${qrTable.table_no}`}
+                  className="mx-auto my-4 w-64 h-64 border border-gray-200 rounded-xl p-3"
+                />
+              )}
+              <p className="text-sm font-semibold text-gray-700">สแกน QR Code เพื่อดูเมนูและสั่งอาหารได้ทันที</p>
+              <p className="text-xs text-gray-500 mt-1">ขอบคุณที่มาอุดหนุนครับ/ค่ะ</p>
+            </div>
+
             {qrImage ? (
-              // ใช้ <img> ธรรมดาเพราะภาพเป็น data URL ที่สร้างสด next/image ปรับขนาดให้ไม่ได้
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={qrImage}
                 alt={`QR สำหรับโต๊ะ ${qrTable.table_no}`}
-                className="mx-auto w-full max-w-[16rem] rounded-lg bg-char p-2"
+                className="mx-auto w-full max-w-[16rem] rounded-lg bg-char p-2 no-print"
               />
             ) : (
-              <div className="mx-auto h-64 w-64 animate-pulse rounded-lg bg-char" />
+              <div className="mx-auto h-64 w-64 animate-pulse rounded-lg bg-char no-print" />
             )}
 
-            <div>
+            <div className="no-print">
               <p className="text-sm text-slip-dim">ลิงก์ที่อยู่ใน QR</p>
               <p className="num text-sm break-all text-slip">{buildTableUrl(qrTable.qr_token)}</p>
             </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2 no-print">
               <button
                 type="button"
                 onClick={() => setQrTable(null)}
@@ -336,12 +351,21 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
               >
                 ปิด
               </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex min-h-[44px] items-center gap-1.5 rounded-xl border border-rule bg-white px-4 font-bold text-sm text-slip shadow-sm hover:bg-char transition-colors"
+              >
+                <PrintIcon className="w-4 h-4" />
+                <span>พิมพ์ป้ายตั้งโต๊ะ</span>
+              </button>
               <a
                 href={qrImage || '#'}
                 download={`qr-table-${qrTable.table_no}.png`}
-                className="flex min-h-[44px] items-center rounded-lg bg-flame px-4 font-medium text-char"
+                className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 hover:bg-[#00A040] transition-colors"
               >
-                ดาวน์โหลด QR
+                <DownloadIcon className="w-4 h-4" />
+                <span>ดาวน์โหลด QR</span>
               </a>
             </div>
           </div>

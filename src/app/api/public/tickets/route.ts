@@ -16,31 +16,36 @@ import { customerTicketSchema, firstErrorMessage } from '@/lib/validation';
  * @returns รหัส ticket ที่สร้าง หรือ error พร้อมข้อความไทย
  */
 export async function POST(request: NextRequest) {
-  const parsed = customerTicketSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
+  try {
+    const parsed = customerTicketSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
+    }
+
+    const found = await findTableSession(parsed.data.token);
+    if (!found.ok) {
+      return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(found.reason), 404);
+    }
+
+    const created = await withTransaction(async (conn) => {
+      const ticketCode = await generateTicketCode(conn);
+      const [result] = await conn.execute<ResultSetHeader>(
+        `INSERT INTO tickets (ticket_code, source, table_id, category, subject, detail)
+         VALUES (?, 'CUSTOMER', ?, ?, ?, ?)`,
+        [
+          ticketCode,
+          found.tableId,
+          parsed.data.category,
+          parsed.data.subject,
+          parsed.data.detail,
+        ],
+      );
+      return { id: result.insertId, ticketCode };
+    });
+
+    return apiOk(created, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
+    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
   }
-
-  const found = await findTableSession(parsed.data.token);
-  if (!found.ok) {
-    return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(found.reason), 404);
-  }
-
-  const created = await withTransaction(async (conn) => {
-    const ticketCode = await generateTicketCode(conn);
-    const [result] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO tickets (ticket_code, source, table_id, category, subject, detail)
-       VALUES (?, 'CUSTOMER', ?, ?, ?, ?)`,
-      [
-        ticketCode,
-        found.tableId,
-        parsed.data.category,
-        parsed.data.subject,
-        parsed.data.detail,
-      ],
-    );
-    return { id: result.insertId, ticketCode };
-  });
-
-  return apiOk(created, 201);
 }

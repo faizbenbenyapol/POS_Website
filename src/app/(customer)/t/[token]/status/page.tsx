@@ -114,19 +114,19 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-40">
-      <h1 className="text-xl font-semibold text-slip">สถานะอาหารของโต๊ะนี้</h1>
+    <div className="flex flex-col gap-4 pb-44">
+      <h1 className="text-xl font-bold text-slip">สถานะอาหารของโต๊ะนี้</h1>
 
       {orders.map((order, index) => (
-        <section key={order.id} className="overflow-hidden rounded-lg bg-griddle shadow-sm">
-          <header className="flex flex-wrap items-baseline justify-between gap-2 bg-char px-3 py-2">
-            <p className="text-slip">ใบสั่งที่ {index + 1}</p>
-            <p className="num text-sm text-slip-dim">
+        <section key={order.id} className="lm-card overflow-hidden">
+          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-rule bg-char px-4 py-3">
+            <p className="font-bold text-sm text-slip">ใบสั่งที่ {index + 1}</p>
+            <p className="num text-xs font-medium text-slip-dim">
               {order.order_code} · {formatThaiTime(order.created_at)}
             </p>
           </header>
 
-          <ul>
+          <ul className="px-4 py-2">
             {items
               .filter((item) => item.order_id === order.id)
               .map((item) => {
@@ -134,18 +134,22 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
                 return (
                   <li
                     key={item.id}
-                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-rule px-3 py-2 last:border-b-0"
+                    className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-rule py-2.5 last:border-b-0"
                   >
-                    <span className="num text-slip-dim">×{item.quantity}</span>
-                    <span className="min-w-0 flex-1 text-slip">{item.item_name}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-sm ${status.className}`}>
-                      {status.label}
-                    </span>
-                    <span className="num w-20 text-right text-slip">
-                      {formatBaht(Number(item.unit_price) * item.quantity)}
-                    </span>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="num font-bold text-xs text-[#06C755]">×{item.quantity}</span>
+                      <span className="min-w-0 flex-1 text-sm font-medium text-slip">{item.item_name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${status.className}`}>
+                        {status.label}
+                      </span>
+                      <span className="num font-bold text-xs text-slip">
+                        {formatBaht(Number(item.unit_price) * item.quantity)}
+                      </span>
+                    </div>
                     {item.note && (
-                      <p className="w-full text-sm text-slip-dim">หมายเหตุ: {item.note}</p>
+                      <p className="w-full text-xs font-medium text-void pl-5">** หมายเหตุ: {item.note}</p>
                     )}
                   </li>
                 );
@@ -154,11 +158,11 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
         </section>
       ))}
 
-      <div className="fixed inset-x-0 bottom-16 z-10 px-4">
-        <div className="mx-auto flex max-w-md flex-col gap-2 rounded-xl bg-griddle p-3 shadow-lg">
+      <div className="fixed inset-x-0 bottom-16 z-20 px-4">
+        <div className="mx-auto flex max-w-md flex-col gap-2 rounded-2xl lm-glass-bar border border-rule p-4 shadow-xl">
           <div className="flex items-baseline justify-between">
-            <span className="text-slip-dim">ยอดสะสมของโต๊ะ (ไม่รวมรายการที่ยกเลิก)</span>
-            <span className="num text-lg font-medium text-slip">{formatBahtWithSign(total)}</span>
+            <span className="text-xs font-bold text-slip-dim">ยอดสะสมของโต๊ะ (ไม่รวมรายการยกเลิก)</span>
+            <span className="num text-lg font-black text-[#06C755]">{formatBahtWithSign(total)}</span>
           </div>
           <QuickTicketButton
             token={token}
@@ -166,8 +170,8 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
             subject="ขอเช็คบิล/ชำระเงิน"
             detail={`ลูกค้าขอปิดบิลและชำระเงิน ยอดสะสม ${formatBahtWithSign(total)}`}
             idleLabel="ขอเช็คบิล / ชำระเงิน"
-            sentLabel="✓ แจ้งพนักงานแล้ว กำลังนำบิลมาให้"
-            className="min-h-[48px] w-full rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
+            sentLabel="แจ้งพนักงานแล้ว กำลังนำบิลมาให้"
+            className="min-h-[48px] w-full rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-80"
           />
         </div>
       </div>

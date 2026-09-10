@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { CloseIcon } from '@/components/Icons';
 
 /**
  * กล่อง modal สำหรับฟอร์มเพิ่ม/แก้ไขข้อมูลในหน้าหลังบ้าน
@@ -40,7 +41,7 @@ export default function Modal({
         event.preventDefault();
         onClose();
       }}
-      className="w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-rule bg-griddle p-0 text-slip shadow-xl backdrop:bg-black/50"
+      className="w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-rule bg-griddle p-0 text-slip shadow-xl backdrop:bg-black/50 fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 open:flex open:flex-col m-0"
     >
       <div className="flex items-center justify-between border-b border-rule px-4 py-3">
         <h2 className="font-semibold text-slip">{title}</h2>
@@ -50,7 +51,7 @@ export default function Modal({
           aria-label="ปิดหน้าต่าง"
           className="flex h-11 w-11 items-center justify-center rounded-lg text-slip-dim hover:bg-char hover:text-slip"
         >
-          ✕
+          <CloseIcon className="w-5 h-5" />
         </button>
       </div>
       <div className="px-4 py-4">{children}</div>

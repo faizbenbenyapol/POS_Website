@@ -8,6 +8,37 @@ import { apiFetch, jsonBody } from '@/lib/client';
 import { formatBaht, formatBahtWithSign } from '@/lib/format';
 import { readCart, writeCart, cartTotal, type CartItem } from '@/lib/cart';
 
+/** รายการข้อความด่วนสำหรับระบุหมายเหตุอาหาร */
+const PRESET_NOTES = [
+  { label: 'เผ็ดน้อย', value: 'เผ็ดน้อย' },
+  { label: 'เผ็ดมาก', value: 'เผ็ดมาก' },
+  { label: 'ไม่ใส่ผัก', value: 'ไม่ใส่ผัก' },
+  { label: 'เพิ่มไข่ดาว', value: 'เพิ่มไข่ดาว' },
+  { label: 'พิเศษ', value: 'พิเศษ' },
+  { label: 'ไม่หวาน', value: 'ไม่หวาน' },
+];
+
+/**
+ * สลับ/เพิ่ม/ลดข้อความด่วนลงในหมายเหตุของรายการอาหาร
+ *
+ * @param currentNote - หมายเหตุปัจจุบัน
+ * @param value - ข้อความด่วนที่จะสลับ
+ * @returns หมายเหตุฉบับอัปเดต
+ */
+function togglePresetNote(currentNote: string, value: string): string {
+  const parts = currentNote
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (parts.includes(value)) {
+    const filtered = parts.filter((p) => p !== value);
+    return filtered.join(', ');
+  } else {
+    return [...parts, value].join(', ');
+  }
+}
+
 /**
  * หน้าตะกร้าของลูกค้า แก้จำนวน ใส่หมายเหตุรายรายการ แล้วกดยืนยันสั่ง
  * ยอดรวมตรึงไว้ล่างจอเพื่อให้เห็นตลอดขณะเลื่อนดูรายการ
@@ -78,6 +109,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
    * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือสร้างออเดอร์และเปลี่ยนหน้า
    */
   async function handleSubmit() {
+    if (items.length === 0 || submitting) return;
     setSubmitting(true);
     setErrorMessage('');
     const result = await apiFetch<{ orderCode: string }>('/api/public/orders', {
@@ -102,7 +134,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
   }
 
   if (!ready) {
-    return <div className="h-40 animate-pulse rounded-lg bg-griddle" aria-label="กำลังเปิดตะกร้า" />;
+    return <div className="h-40 animate-pulse rounded-2xl bg-white" aria-label="กำลังเปิดตะกร้า" />;
   }
 
   if (items.length === 0) {
@@ -112,7 +144,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
         action={
           <Link
             href={`/t/${token}`}
-            className="flex min-h-[44px] items-center rounded-lg bg-flame px-4 font-medium text-char"
+            className="flex min-h-[46px] items-center rounded-xl bg-[#06C755] px-5 font-bold text-white shadow-md shadow-[#06C755]/20"
           >
             เลือกอาหาร
           </Link>
@@ -122,38 +154,38 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-32">
-      <h1 className="text-xl font-semibold text-slip">ตะกร้าของโต๊ะนี้</h1>
+    <div className="flex flex-col gap-4 pb-36">
+      <h1 className="text-xl font-bold text-slip">ตะกร้าสั่งอาหารของโต๊ะนี้</h1>
 
       <ul className="flex flex-col gap-3">
         {items.map((item) => (
-          <li key={item.menuItemId} className="rounded-lg bg-griddle p-3 shadow-sm">
+          <li key={item.menuItemId} className="lm-card p-4">
             <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 flex-1 text-slip">{item.name}</p>
-              <p className="num shrink-0 font-medium text-slip">
+              <p className="min-w-0 flex-1 font-bold text-sm text-slip">{item.name}</p>
+              <p className="num shrink-0 font-bold text-[#06C755] text-sm">
                 {formatBaht(item.price * item.quantity)}
               </p>
             </div>
 
-            <div className="mt-2 flex items-center gap-3">
+            <div className="mt-3 flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => changeQuantity(item.menuItemId, -1)}
                 aria-label={`ลดจำนวน ${item.name}`}
-                className="h-11 w-11 rounded-lg bg-char text-slip"
+                className="h-10 w-10 rounded-full border border-rule bg-char text-base font-bold text-slip hover:bg-rule"
               >
                 −
               </button>
-              <span className="num w-8 text-center text-slip">{item.quantity}</span>
+              <span className="num w-8 text-center font-bold text-slip">{item.quantity}</span>
               <button
                 type="button"
                 onClick={() => changeQuantity(item.menuItemId, 1)}
                 aria-label={`เพิ่มจำนวน ${item.name}`}
-                className="h-11 w-11 rounded-lg bg-char text-slip"
+                className="h-10 w-10 rounded-full border border-rule bg-char text-base font-bold text-slip hover:bg-rule"
               >
                 +
               </button>
-              <span className="num ml-auto text-sm text-slip-dim">
+              <span className="num ml-auto text-xs font-medium text-slip-dim">
                 {formatBaht(item.price)} / จาน
               </span>
             </div>
@@ -163,23 +195,44 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
               onChange={(event) => changeNote(item.menuItemId, event.target.value)}
               placeholder="หมายเหตุ เช่น ไม่ใส่ผัก เผ็ดน้อย"
               aria-label={`หมายเหตุสำหรับ ${item.name}`}
-              className="mt-2 min-h-[44px] w-full rounded-lg bg-char px-3 text-slip placeholder:text-slip-dim"
+              className="mt-3 min-h-[44px] w-full rounded-xl border border-rule bg-char px-3.5 text-xs text-slip placeholder:text-slip-dim focus:border-[#06C755]"
             />
+
+            {/* แถบชิปข้อความด่วน */}
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {PRESET_NOTES.map((chip) => {
+                const isSelected = item.note.includes(chip.value);
+                return (
+                  <button
+                    key={chip.value}
+                    type="button"
+                    onClick={() => changeNote(item.menuItemId, togglePresetNote(item.note, chip.value))}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                      isSelected
+                        ? 'bg-[#06C755] text-white shadow-sm'
+                        : 'bg-char border border-rule text-slip-dim hover:bg-rule'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                );
+              })}
+            </div>
           </li>
         ))}
       </ul>
 
       {errorMessage && (
-        <p role="alert" className="rounded-lg border-l-4 border-void bg-griddle px-3 py-2 text-slip shadow-sm">
+        <p role="alert" className="rounded-xl border-l-4 border-void bg-void/10 px-3 py-2 text-xs font-medium text-void">
           {errorMessage}
         </p>
       )}
 
-      <div className="fixed inset-x-0 bottom-16 z-10 px-4">
-        <div className="mx-auto flex max-w-md flex-col gap-2 rounded-xl bg-griddle p-3 shadow-lg">
+      <div className="fixed inset-x-0 bottom-16 z-20 px-4">
+        <div className="mx-auto flex max-w-md flex-col gap-2.5 rounded-2xl lm-glass-bar border border-rule p-4 shadow-xl">
           <div className="flex items-baseline justify-between">
-            <span className="text-slip-dim">ยอดรวม</span>
-            <span className="num text-lg font-medium text-slip">
+            <span className="text-xs font-bold text-slip-dim">ยอดเงินรวมสุทธิ</span>
+            <span className="num text-xl font-black text-[#06C755]">
               {formatBahtWithSign(cartTotal(items))}
             </span>
           </div>
@@ -187,11 +240,11 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="min-h-[52px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
+            className="min-h-[50px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-80"
           >
             {submitting
               ? 'กำลังส่งไปที่ครัว…'
-              : `ยืนยันสั่ง (${formatBahtWithSign(cartTotal(items))})`}
+              : `ยืนยันสั่งอาหาร (${formatBahtWithSign(cartTotal(items))})`}
           </button>
         </div>
       </div>

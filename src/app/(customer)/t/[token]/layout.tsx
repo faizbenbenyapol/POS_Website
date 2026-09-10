@@ -1,5 +1,6 @@
 import CustomerNav from './CustomerNav';
 import QuickTicketButton from '@/components/QuickTicketButton';
+import { UtensilsIcon } from '@/components/Icons';
 import { findTableSession, sessionErrorMessage } from '@/lib/session';
 
 /**
@@ -42,22 +43,31 @@ export default async function CustomerLayout({ children, params }: LayoutProps) 
 
   return (
     <div className="flex min-h-screen flex-col bg-char pb-20">
-      <header className="sticky top-0 z-10 bg-griddle px-4 py-3 shadow-sm">
-        <div className="mx-auto flex max-w-md items-baseline justify-between gap-3">
-          <p className="font-medium text-slip-dim">{SHOP_NAME}</p>
-          <p className="text-slip">
-            โต๊ะ <span className="num text-2xl font-semibold text-flame">{found.tableNo}</span>
-          </p>
+      <header className="sticky top-0 z-20 lm-header-gradient px-4 py-3.5 shadow-md">
+        <div className="mx-auto flex max-w-md items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white">
+              <UtensilsIcon className="w-4 h-4" />
+            </span>
+            <div>
+              <p className="text-xs font-medium text-white/80">{SHOP_NAME}</p>
+              <h2 className="text-sm font-bold text-white">สั่งอาหารออนไลน์</h2>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-sm font-bold text-[#00A040] shadow-sm">
+            <span>โต๊ะ</span>
+            <span className="num text-base font-black">{found.tableNo}</span>
+          </div>
         </div>
-        <div className="mx-auto mt-2 max-w-md">
+        <div className="mx-auto mt-2.5 max-w-md">
           <QuickTicketButton
             token={token}
             category="OTHER"
             subject="เรียกพนักงาน"
             detail="ลูกค้ากดปุ่มเรียกพนักงานจากหน้าจอสั่งอาหาร"
-            idleLabel="🔔 เรียกพนักงาน"
-            sentLabel="✓ เรียกพนักงานแล้ว กำลังมาหา"
-            className="min-h-[40px] w-full rounded-lg bg-flame/10 px-3 text-sm font-medium text-flame disabled:opacity-60"
+            idleLabel="เรียกพนักงาน"
+            sentLabel="เรียกพนักงานแล้ว กำลังมาหา"
+            className="min-h-[38px] w-full rounded-full bg-white/20 px-3 text-xs font-semibold text-white transition-opacity hover:bg-white/30 disabled:opacity-80 flex items-center justify-center gap-1.5"
           />
         </div>
       </header>

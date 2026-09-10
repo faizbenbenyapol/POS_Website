@@ -6,6 +6,7 @@ import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/Data
 import { TextField, SelectField, CheckboxField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { formatThaiDate } from '@/lib/format';
+import { PlusIcon } from '@/components/Icons';
 
 /** ผู้ใช้ 1 แถวตามที่ GET /api/admin/users คืนมา (ไม่มี password_hash) */
 type SystemUser = {
@@ -154,9 +155,10 @@ export default function UsersPage() {
         <button
           type="button"
           onClick={() => openForm()}
-          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
         >
-          เพิ่มผู้ใช้
+          <PlusIcon className="w-4 h-4" />
+          <span>เพิ่มผู้ใช้</span>
         </button>
       </div>
 
@@ -175,9 +177,10 @@ export default function UsersPage() {
             <button
               type="button"
               onClick={() => openForm()}
-              className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+              className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
             >
-              เพิ่มผู้ใช้คนแรก
+              <PlusIcon className="w-4 h-4" />
+              <span>เพิ่มผู้ใช้คนแรก</span>
             </button>
           }
         />
@@ -215,18 +218,18 @@ export default function UsersPage() {
                   </td>
                   <td className="num px-3 py-2 text-slip-dim">{formatThaiDate(user.created_at)}</td>
                   <td className="px-3 py-2">
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => openForm(user)}
-                        className="min-h-[44px] text-slip underline underline-offset-4"
+                        className="rounded-lg border border-rule bg-paper px-3 py-1 text-xs font-semibold text-slip transition-all hover:border-[#06C755] hover:text-[#06C755]"
                       >
                         แก้ไข
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(user)}
-                        className="min-h-[44px] text-void underline underline-offset-4"
+                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 transition-all hover:bg-red-100"
                       >
                         ลบ
                       </button>

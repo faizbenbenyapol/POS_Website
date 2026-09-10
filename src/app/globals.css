@@ -1,34 +1,34 @@
 @import 'tailwindcss';
 
 /* =============================================================
-   Design token — Modern Flat & Modular
-   พื้นหลังเรียบ สีล้วน (ไม่มีไล่เฉด) จัดกลุ่มเนื้อหาเป็นการ์ด/โมดูลแยกกันชัดเจน
-   ตัวแปรชื่อเดิมยังใช้อยู่ (char/griddle/rule/slip/slip-dim/flame/served/waiting/void)
-   แต่เปลี่ยนความหมายเป็นชุดสีโทนสว่าง เพื่อไม่ต้องแก้ class ทั้งโปรเจกต์
+   Design tokens — Flat, Data-Dense, No-AI
+   เน้นความชัดเจน ไม่มี gradient ไม่มี glow ไม่มี blur
+   ตัวเลขโดด ข้อมูลอ่านง่ายก่อน สวยงามเป็นผลพลอยได้
+   สไตล์อ้างอิง: Stripe Dashboard, Linear, Vercel
    ============================================================= */
 @theme static {
-  --color-char: #faf9f7;      /* พื้นหลังหน้า, พื้น input, และตัวอักษรบนปุ่ม accent (สว่างพอสำหรับทั้งสองที่) */
-  --color-griddle: #ffffff;   /* พื้นผิวการ์ด/โมดูล — modal, แถบนำทาง, แถบกรอง, ตาราง, แจ้งเตือน */
-  --color-rule: #e6e3dc;      /* เส้นคั่น ขอบบาง */
-  --color-slip: #201d1a;      /* ตัวอักษรหลัก */
-  --color-slip-dim: #7a746a;  /* ตัวอักษรรอง */
-  --color-flame: #f0662b;     /* accent เดียวของระบบ */
-  --color-served: #1f9d55;    /* สถานะเสิร์ฟแล้ว */
-  --color-waiting: #d68a1a;   /* สถานะกำลังทำ */
-  --color-void: #d64545;      /* ยกเลิก/ผิดพลาด */
+  --color-char: #f5f5f5;       /* พื้นหลังหน้า app */
+  --color-griddle: #fafafa;    /* พื้นหลัง sidebar/secondary */
+  --color-paper: #ffffff;      /* พื้นหลัง card / panel */
+  --color-rule: #e4e4e7;       /* เส้นคั่น / ขอบ */
+  --color-slip: #18181b;       /* ตัวอักษรหลัก */
+  --color-slip-dim: #71717a;   /* ตัวอักษรรอง label */
+  --color-flame: #16a34a;      /* green-600 สีหลักของระบบ */
+  --color-served: #16a34a;     /* สถานะเสิร์ฟแล้ว */
+  --color-waiting: #d97706;    /* สถานะกำลังทำ amber-600 */
+  --color-void: #dc2626;       /* ยกเลิก/ผิดพลาด red-600 */
 
   /* ฟอนต์: IBM Plex Sans Thai ทุกข้อความ, IBM Plex Mono เฉพาะตัวเลขเงิน/เวลา/รหัส */
-  --font-sans: var(--font-plex-thai), system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-sans: 'IBM Plex Sans Thai', 'Sukhumvit Set', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* มุมโค้งแบบโมดูล — ใหญ่กว่าเดิมชัดเจนเพื่อให้การ์ด/ปุ่ม/ช่องกรอกดูนุ่มและเป็นโมดูล */
-  --radius-sm: 10px;  /* ปุ่ม ช่องกรอก ชิป */
-  --radius-md: 14px;  /* การ์ดมาตรฐาน */
-  --radius-lg: 18px;  /* การ์ดใหญ่ กล่องเมนู */
-  --radius-xl: 22px;  /* โมดูลเด่น เช่น การ์ดล็อกอิน แถบตะกร้าลอย */
+  /* มุมโค้งแบบ product-grade — โค้งน้อย ดูเป็นธุรกิจ ไม่ใช่ marketing page */
+  --radius-sm: 6px;   /* ปุ่มเล็ก badge tag */
+  --radius-md: 8px;   /* ปุ่มมาตรฐาน input dropdown */
+  --radius-lg: 10px;  /* card panel */
 }
 
-/* พื้นฐานทั้งเอกสาร: สระไทยต้องไม่ชนกัน จึงตรึง line-height 1.7 และห้าม letter-spacing ติดลบ */
+/* รีเซ็ตพื้นฐาน */
 html {
   color-scheme: light;
 }
@@ -37,15 +37,20 @@ body {
   background-color: var(--color-char);
   color: var(--color-slip);
   font-family: var(--font-sans);
-  line-height: 1.7;
+  line-height: 1.6;
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
 }
 
-/* หัวข้อแน่นกว่าเนื้อความได้ แต่ไม่ต่ำกว่า 1.35 เพราะวรรณยุกต์ไทยจะชนบรรทัดบน */
+/* Tailwind reset ล้าง margin:auto ของ dialog ออก — ต้องกู้คืนให้ browser center dialog ให้อัตโนมัติ */
+dialog {
+  margin: auto;
+}
+
+/* หัวข้อไม่ต้องการ line-height สูง */
 h1, h2, h3, h4 {
-  line-height: 1.35;
-  letter-spacing: 0;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
 /* ตัวเลขเงิน เวลา และรหัสต่าง ๆ ใช้ความกว้างตัวเลขเท่ากันเพื่อให้คอลัมน์ตรงกัน */
@@ -54,13 +59,13 @@ h1, h2, h3, h4 {
   font-variant-numeric: tabular-nums;
 }
 
-/* focus ring ต้องมองเห็นชัดทุกที่ ตาม checklist การเข้าถึงได้ */
+/* focus ring มองเห็นชัด */
 :focus-visible {
   outline: 2px solid var(--color-flame);
   outline-offset: 2px;
 }
 
-/* motion มีได้เฉพาะที่ตอบการกระทำของผู้ใช้ และต้องเคารพการตั้งค่าของระบบ */
+/* เคารพการตั้งค่า reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -68,5 +73,54 @@ h1, h2, h3, h4 {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* =============================================================
+   App-wide utility classes — ไม่มี gradient ไม่มี blur ไม่มี glow
+   ============================================================= */
+
+/* Header ของ sidebar admin — solid color ไม่มี gradient */
+.lm-header-solid {
+  background-color: #16a34a;
+}
+
+/* Header ของหน้าลูกค้า (ฝั่ง /t/[token]) — ยังคง gradient เพราะใช้กับมือถือ */
+.lm-header-gradient {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+}
+
+/* Card มาตรฐาน */
+.lm-card {
+  background-color: #ffffff;
+  border: 1px solid var(--color-rule);
+  border-radius: 10px;
+}
+
+/* =============================================================
+   Print styles — สำหรับสลิปใบเสร็จ 80mm
+   ============================================================= */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .printable-receipt,
+  .printable-receipt * {
+    visibility: visible;
+  }
+  .printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    padding: 4mm;
+    margin: 0 auto;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12px;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
   }
 }

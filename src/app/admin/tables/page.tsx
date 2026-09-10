@@ -7,7 +7,12 @@ import TableManager from './TableManager';
  *
  * @returns หน้าจัดการโต๊ะพร้อม QR
  */
+
+// บังคับให้ render ฝั่งเซิร์ฟเวอร์ทุกครั้ง เพราะต้องอ่าน env และ qrcode ทำงานใน browser เท่านั้น
+export const dynamic = 'force-dynamic';
+
 export default function TablesPage() {
   const baseUrl = process.env.APP_BASE_URL ?? '';
   return <TableManager baseUrl={baseUrl} />;
 }
+

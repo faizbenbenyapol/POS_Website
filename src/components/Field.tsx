@@ -1,3 +1,5 @@
+import CustomSelect from '@/components/Select';
+
 /** คลาสพื้นฐานของช่องกรอกทุกชนิด ประกาศไว้ที่เดียวเพื่อให้ทุกฟอร์มหน้าตาเหมือนกัน */
 const INPUT_CLASS =
   'min-h-[44px] w-full rounded-lg bg-char px-3 text-slip placeholder:text-slip-dim';
@@ -118,23 +120,13 @@ export function SelectField({
   options: { value: string; label: string }[];
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-sm text-slip-dim">
-        {label}
-      </label>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={INPUT_CLASS}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value} className="bg-char">
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
+    <CustomSelect
+      id={id}
+      label={label}
+      value={value}
+      onChange={onChange}
+      options={options}
+    />
   );
 }
 
@@ -207,7 +199,7 @@ export function FormActions({
         <button
           type="submit"
           disabled={saving}
-          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
+          className="min-h-[44px] rounded-xl bg-[#06C755] px-5 font-bold text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-60"
         >
           {saving ? 'กำลังบันทึก…' : submitLabel}
         </button>

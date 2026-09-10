@@ -14,10 +14,15 @@ type RouteContext = { params: Promise<{ token: string }> };
  * @returns ข้อมูลโต๊ะและ sessionId หรือ error ที่บอกลูกค้าว่าต้องทำอะไรต่อ
  */
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const { token } = await context.params;
-  const result = await resolveTableSession(token);
-  if (!result.ok) {
-    return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(result.reason), 404);
+  try {
+    const { token } = await context.params;
+    const result = await resolveTableSession(token);
+    if (!result.ok) {
+      return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(result.reason), 404);
+    }
+    return apiOk(result.session);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
+    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
   }
-  return apiOk(result.session);
 }

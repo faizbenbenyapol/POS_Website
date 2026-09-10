@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { LockIcon } from '@/components/Icons';
 
 /**
  * ฟอร์มล็อกอินของพนักงาน ส่งข้อมูลไป POST /api/auth/login แล้วพาเข้าหลังบ้าน
@@ -51,7 +52,7 @@ function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
       <div className="flex flex-col gap-2">
-        <label htmlFor="username" className="text-sm text-slip-dim">
+        <label htmlFor="username" className="text-xs font-bold text-slip-dim">
           ชื่อผู้ใช้
         </label>
         <input
@@ -61,13 +62,13 @@ function LoginForm() {
           onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
           autoCapitalize="none"
-          className="min-h-[44px] rounded-lg bg-char px-3 text-slip placeholder:text-slip-dim"
-          placeholder="เช่น staff01"
+          className="min-h-[46px] rounded-xl border border-rule bg-char px-4 text-sm text-slip placeholder:text-slip-dim focus:border-[#06C755]"
+          placeholder="เช่น admin หรือ staff01"
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <label htmlFor="password" className="text-sm text-slip-dim">
+        <label htmlFor="password" className="text-xs font-bold text-slip-dim">
           รหัสผ่าน
         </label>
         <input
@@ -77,12 +78,13 @@ function LoginForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
-          className="min-h-[44px] rounded-lg bg-char px-3 text-slip"
+          className="min-h-[46px] rounded-xl border border-rule bg-char px-4 text-sm text-slip focus:border-[#06C755]"
+          placeholder="••••••••"
         />
       </div>
 
       {errorMessage && (
-        <p role="alert" className="rounded-lg border-l-4 border-void bg-char px-3 py-2 text-sm text-slip">
+        <p role="alert" className="rounded-xl border-l-4 border-void bg-void/10 px-3 py-2 text-xs font-medium text-void">
           {errorMessage}
         </p>
       )}
@@ -90,7 +92,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char transition-opacity duration-200 disabled:opacity-60"
+        className="mt-2 min-h-[48px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-60"
       >
         {submitting ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
       </button>
@@ -107,17 +109,22 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-8 px-6 py-10">
-      <div className="flex flex-col gap-8 rounded-xl bg-griddle p-8 shadow-sm">
-        <div>
-          <h1 className="text-2xl font-semibold text-slip">เข้าสู่ระบบ</h1>
-          <p className="mt-1 text-slip-dim">สำหรับพนักงานและผู้ดูแลร้านเท่านั้น</p>
+      <div className="lm-card overflow-hidden p-0 shadow-xl">
+        <div className="lm-header-gradient p-6 text-white text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-2xl shadow-inner">
+            <LockIcon className="w-7 h-7 text-white" />
+          </div>
+          <h1 className="mt-3 text-xl font-bold text-white">เข้าสู่ระบบหลังบ้าน</h1>
+          <p className="mt-1 text-xs text-white/80">สำหรับพนักงานและผู้ดูแลร้านเท่านั้น</p>
         </div>
 
-        <Suspense
-          fallback={<div className="h-64 animate-pulse rounded-lg bg-char" aria-hidden="true" />}
-        >
-          <LoginForm />
-        </Suspense>
+        <div className="p-6">
+          <Suspense
+            fallback={<div className="h-48 animate-pulse rounded-xl bg-char" aria-hidden="true" />}
+          >
+            <LoginForm />
+          </Suspense>
+        </div>
       </div>
     </main>
   );

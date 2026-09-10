@@ -7,6 +7,7 @@ import { TextField, NumberField, SelectField, CheckboxField, FormActions } from 
 import MenuItemThumb from '@/components/MenuItemThumb';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { formatBaht } from '@/lib/format';
+import { PlusIcon } from '@/components/Icons';
 
 /** เมนู 1 แถวตามที่ GET /api/admin/menu-items คืนมา */
 type MenuItem = {
@@ -184,9 +185,10 @@ export default function MenuPage() {
         <button
           type="button"
           onClick={() => openForm()}
-          className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+          className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
         >
-          เพิ่มเมนู
+          <PlusIcon className="w-4 h-4" />
+          <span>เพิ่มเมนู</span>
         </button>
       </div>
 
@@ -233,9 +235,10 @@ export default function MenuPage() {
             <button
               type="button"
               onClick={() => openForm()}
-              className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+              className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
             >
-              เพิ่มเมนู
+              <PlusIcon className="w-4 h-4" />
+              <span>เพิ่มเมนู</span>
             </button>
           }
         />
@@ -246,7 +249,7 @@ export default function MenuPage() {
           {items.map((item) => (
             <article
               key={item.id}
-              className="flex flex-col overflow-hidden rounded-lg bg-griddle shadow-sm"
+              className="lm-card flex flex-col overflow-hidden transition-all hover:border-[#06C755]/50"
             >
               <MenuItemThumb
                 name={item.name}
@@ -254,35 +257,35 @@ export default function MenuPage() {
                 size="h-36 w-full"
                 rounded="rounded-none"
               />
-              <div className="flex flex-1 flex-col gap-1 p-3">
+              <div className="flex flex-1 flex-col gap-1.5 p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 text-slip">{item.name}</p>
+                  <p className="min-w-0 flex-1 font-bold text-sm text-slip">{item.name}</p>
                   <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-sm ${
-                      item.is_available === 1 ? 'bg-served/10 text-served' : 'bg-char text-slip-dim'
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                      item.is_available === 1 ? 'bg-[#06C755]/15 text-[#00A040]' : 'bg-char text-slip-dim'
                     }`}
                   >
                     {item.is_available === 1 ? 'เปิดขาย' : 'ปิดขาย'}
                   </span>
                 </div>
-                {item.description && <p className="text-sm text-slip-dim">{item.description}</p>}
-                <p className="text-sm text-slip-dim">{item.category_name}</p>
+                {item.description && <p className="text-xs text-slip-dim line-clamp-2">{item.description}</p>}
+                <p className="text-xs font-semibold text-[#06C755]">{item.category_name}</p>
                 <div className="mt-auto flex items-center justify-between pt-2">
-                  <p className="num font-medium text-slip">{formatBaht(item.price)} บาท</p>
-                  <p className="num text-sm text-slip-dim">เคยสั่ง {item.order_count}</p>
+                  <p className="num text-base font-extrabold text-slip">{formatBaht(item.price)} <span className="text-xs font-normal text-slip-dim">บาท</span></p>
+                  <p className="num text-xs text-slip-dim">สั่งไปแล้ว <strong className="text-slip">{item.order_count}</strong> ครั้ง</p>
                 </div>
-                <div className="mt-2 flex gap-2 border-t border-rule pt-2">
+                <div className="mt-3 flex gap-2 border-t border-rule/50 pt-3">
                   <button
                     type="button"
                     onClick={() => openForm(item)}
-                    className="min-h-[40px] flex-1 rounded-lg bg-char text-slip"
+                    className="flex-1 rounded-xl border border-rule bg-paper py-2 text-xs font-bold text-slip transition-all hover:border-[#06C755] hover:text-[#06C755]"
                   >
                     แก้ไข
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(item)}
-                    className="min-h-[40px] flex-1 rounded-lg bg-void/10 text-void"
+                    className="flex-1 rounded-xl border border-red-200 bg-red-50 py-2 text-xs font-bold text-red-600 transition-all hover:bg-red-100"
                   >
                     ลบ
                   </button>

@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 
-/** คอนฟิกหลักของ Next.js — โปรเจกต์นี้ใช้ค่าเริ่มต้นทั้งหมด ไม่มีการปรับแต่งพิเศษ */
-const nextConfig: NextConfig = {};
+/** คอนฟิกหลักของ Next.js — กำหนด mysql2 เป็น serverExternalPackages ป้องกัน Webpack chunk error */
+const nextConfig: NextConfig = {
+  serverExternalPackages: ['mysql2'],
+};
 
 export default nextConfig;

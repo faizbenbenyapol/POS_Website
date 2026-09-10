@@ -20,6 +20,7 @@ export async function apiFetch<T>(
 ): Promise<ClientResult<T>> {
   try {
     const response = await fetch(path, {
+      credentials: 'same-origin',
       ...init,
       headers: init?.body
         ? { 'Content-Type': 'application/json', ...init?.headers }

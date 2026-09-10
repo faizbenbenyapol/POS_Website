@@ -102,54 +102,59 @@ async function priceItems(
  * @returns รหัสออเดอร์และยอดรวม หรือ error พร้อมข้อความไทยบอกวิธีแก้
  */
 export async function POST(request: NextRequest) {
-  const parsed = createOrderSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) {
-    return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
-  }
+  try {
+    const parsed = createOrderSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
+    }
 
-  const session = await resolveTableSession(parsed.data.token);
-  if (!session.ok) {
-    return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(session.reason), 404);
-  }
+    const session = await resolveTableSession(parsed.data.token);
+    if (!session.ok) {
+      return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(session.reason), 404);
+    }
 
-  const created = await withTransaction(async (conn) => {
-    const priced = await priceItems(conn, parsed.data.items);
-    if (!priced) return null;
+    const created = await withTransaction(async (conn) => {
+      const priced = await priceItems(conn, parsed.data.items);
+      if (!priced) return null;
 
-    const total = priced.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-    const orderCode = await generateOrderCode(conn);
+      const total = priced.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+      const orderCode = await generateOrderCode(conn);
 
-    const [orderResult] = await conn.execute<ResultSetHeader>(
-      'INSERT INTO orders (session_id, order_code, status, total_amount) VALUES (?, ?, ?, ?)',
-      [session.session.sessionId, orderCode, 'PENDING', total],
-    );
+      const [orderResult] = await conn.execute<ResultSetHeader>(
+        'INSERT INTO orders (session_id, order_code, status, total_amount) VALUES (?, ?, ?, ?)',
+        [session.session.sessionId, orderCode, 'PENDING', total],
+      );
 
-    for (const item of priced) {
-      await conn.execute(
-        `INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price, quantity, note, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          orderResult.insertId,
-          item.menuItemId,
-          item.itemName,
-          item.unitPrice,
-          item.quantity,
-          item.note,
-          'PENDING',
-        ],
+      for (const item of priced) {
+        await conn.execute(
+          `INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price, quantity, note, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            orderResult.insertId,
+            item.menuItemId,
+            item.itemName,
+            item.unitPrice,
+            item.quantity,
+            item.note,
+            'PENDING',
+          ],
+        );
+      }
+      return { orderId: orderResult.insertId, orderCode, total };
+    });
+
+    if (!created) {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'มีเมนูในตะกร้าที่เพิ่งถูกปิดขาย กรุณากลับไปหน้าเมนูแล้วเลือกรายการใหม่',
+        409,
       );
     }
-    return { orderId: orderResult.insertId, orderCode, total };
-  });
-
-  if (!created) {
-    return apiError(
-      ERROR_CODES.VALIDATION_ERROR,
-      'มีเมนูในตะกร้าที่เพิ่งถูกปิดขาย กรุณากลับไปหน้าเมนูแล้วเลือกรายการใหม่',
-      409,
-    );
+    return apiOk(created, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
+    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
   }
-  return apiOk(created, 201);
 }
 
 /**
@@ -163,32 +168,37 @@ export async function POST(request: NextRequest) {
  * @returns ข้อมูลโต๊ะ รายการออเดอร์พร้อมรายการอาหาร และยอดรวม
  */
 export async function GET(request: NextRequest) {
-  const token = request.nextUrl.searchParams.get('token') ?? '';
-  const found = await findTableSession(token);
-  if (!found.ok) {
-    return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(found.reason), 404);
+  try {
+    const token = request.nextUrl.searchParams.get('token') ?? '';
+    const found = await findTableSession(token);
+    if (!found.ok) {
+      return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(found.reason), 404);
+    }
+    if (found.sessionId === null) {
+      return apiOk({ tableNo: found.tableNo, orders: [], items: [], total: 0 });
+    }
+
+    const orders = await query<OrderRow>(
+      `SELECT id, order_code, status, total_amount, created_at
+         FROM orders WHERE session_id = ? ORDER BY id`,
+      [found.sessionId],
+    );
+    const items = await query<OrderItemRow>(
+      `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.status
+         FROM order_items oi
+         JOIN orders o ON o.id = oi.order_id
+        WHERE o.session_id = ?
+        ORDER BY oi.id`,
+      [found.sessionId],
+    );
+
+    const total = items
+      .filter((item) => item.status !== 'CANCELLED')
+      .reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0);
+
+    return apiOk({ tableNo: found.tableNo, orders, items, total });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
+    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
   }
-  if (found.sessionId === null) {
-    return apiOk({ tableNo: found.tableNo, orders: [], items: [], total: 0 });
-  }
-
-  const orders = await query<OrderRow>(
-    `SELECT id, order_code, status, total_amount, created_at
-       FROM orders WHERE session_id = ? ORDER BY id`,
-    [found.sessionId],
-  );
-  const items = await query<OrderItemRow>(
-    `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.status
-       FROM order_items oi
-       JOIN orders o ON o.id = oi.order_id
-      WHERE o.session_id = ?
-      ORDER BY oi.id`,
-    [found.sessionId],
-  );
-
-  const total = items
-    .filter((item) => item.status !== 'CANCELLED')
-    .reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0);
-
-  return apiOk({ tableNo: found.tableNo, orders, items, total });
 }

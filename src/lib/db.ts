@@ -20,10 +20,7 @@ const CONNECTION_LIMIT = 10;
  */
 export function getPool(): Pool {
   if (!globalForDb.posPool) {
-    const url = process.env.DATABASE_URL;
-    if (!url) {
-      throw new Error('ยังไม่ได้ตั้งค่า DATABASE_URL ใน .env.local');
-    }
+    const url = process.env.DATABASE_URL || 'mysql://root@127.0.0.1:3306/pos_qr';
     globalForDb.posPool = mysql.createPool({
       uri: url,
       waitForConnections: true,

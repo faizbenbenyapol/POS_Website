@@ -1,12 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import PromptPayQR from '@/components/PromptPayQR';
+import ReceiptPrintModal, { ReceiptData } from '@/components/ReceiptPrintModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { SelectField } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
+import { downloadCsvFile } from '@/lib/exportCsv';
 import { formatBaht, formatBahtWithSign, formatThaiTime } from '@/lib/format';
+import {
+  BellIcon,
+  BellOffIcon,
+  DownloadIcon,
+  CookingIcon,
+  CheckIcon,
+  CloseIcon,
+  PrintIcon,
+  CreditCardIcon,
+} from '@/components/Icons';
 
 /** ออเดอร์ 1 ใบบนกระดาน */
 type BoardOrder = {
@@ -71,6 +84,38 @@ function todayInputValue(): string {
 }
 
 /**
+ * สังเคราะห์เสียงสัญญาณเตือนเมื่อมีออเดอร์ใหม่เข้ามาด้วย Web Audio API
+ * ไม่ต้องพึ่งพาไฟล์เสียงภายนอก (.mp3)
+ */
+function playNewOrderSound() {
+  try {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const ctx = new AudioContextClass();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  } catch {
+    // ป้องกันการทำงานล้มเหลวหากเบราว์เซอร์ยังไม่เปิดให้เล่นเสียงอัตโนมัติก่อนคลิก
+  }
+}
+
+/**
  * กระดานออเดอร์ฝั่งร้าน จัดแบบกองใบสั่งเรียงใหม่สุดขึ้นบน
  * ดึงข้อมูลใหม่ทุก 10 วินาทีด้วยการ poll ธรรมดาตามข้อกำหนดหัวข้อ 10
  *
@@ -89,6 +134,34 @@ export default function OrdersBoardPage() {
   const [checkoutOrder, setCheckoutOrder] = useState<BoardOrder | null>(null);
   const [payMethod, setPayMethod] = useState('CASH');
   const [checkingOut, setCheckingOut] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printType, setPrintType] = useState<'KITCHEN' | 'RECEIPT'>('KITCHEN');
+  const [printData, setPrintData] = useState<ReceiptData | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const knownOrderIdsRef = useRef<Set<number> | null>(null);
+
+  /**
+   * เปิด Modal สำหรับพิมพ์ตั๋วครัวของออเดอร์
+   *
+   * @param order - ข้อมูลใบสั่งอาหาร
+   * @param orderItems - รายการอาหารในใบสั่ง
+   */
+  function handleOpenKitchenPrint(order: BoardOrder, orderItems: BoardItem[]) {
+    setPrintType('KITCHEN');
+    setPrintData({
+      tableNo: order.table_no,
+      orderCode: order.order_code,
+      createdAt: order.created_at,
+      items: orderItems
+        .filter((i) => i.status !== 'CANCELLED')
+        .map((i) => ({
+          itemName: i.item_name,
+          quantity: i.quantity,
+          note: i.note,
+        })),
+    });
+    setPrintModalOpen(true);
+  }
 
   /**
    * โหลดกระดานใหม่ตามตัวกรองปัจจุบัน
@@ -111,10 +184,24 @@ export default function OrdersBoardPage() {
         if (showSkeleton) setLoadError(result.message);
         return;
       }
-      setOrders(result.data.orders);
+
+      const newOrders = result.data.orders;
+      if (knownOrderIdsRef.current !== null && soundEnabled) {
+        const hasNewOrder = newOrders.some((o) => !knownOrderIdsRef.current!.has(o.id));
+        if (hasNewOrder) {
+          playNewOrderSound();
+          setNotice({
+            tone: 'success',
+            message: 'มีออเดอร์ใหม่เข้ามาที่หน้ากระดาน!',
+          });
+        }
+      }
+      knownOrderIdsRef.current = new Set(newOrders.map((o) => o.id));
+
+      setOrders(newOrders);
       setItems(result.data.items);
     },
-    [statusFilter, dateFilter],
+    [statusFilter, dateFilter, soundEnabled],
   );
 
   useEffect(() => {
@@ -182,12 +269,71 @@ export default function OrdersBoardPage() {
       setNotice({ tone: 'error', message: result.message });
       return;
     }
+
+    const sessionOrders = orders?.filter((o) => o.session_id === checkoutOrder.session_id) ?? [];
+    const sessionOrderIds = new Set(sessionOrders.map((o) => o.id));
+    const sessionItems = items.filter((i) => sessionOrderIds.has(i.order_id) && i.status !== 'CANCELLED');
+
     setNotice({
       tone: 'success',
       message: `ปิดบิลโต๊ะ ${checkoutOrder.table_no} แล้ว เก็บเงิน ${formatBahtWithSign(result.data.total)} โต๊ะกลับมาว่างพร้อมรับลูกค้ากลุ่มใหม่`,
     });
+
+    setPrintType('RECEIPT');
+    setPrintData({
+      tableNo: checkoutOrder.table_no,
+      createdAt: checkoutOrder.created_at,
+      items: sessionItems.map((i) => ({
+        itemName: i.item_name,
+        quantity: i.quantity,
+        unitPrice: i.unit_price,
+        note: i.note,
+      })),
+      totalAmount: result.data.total,
+      paymentMethod: payMethod,
+      paidAt: new Date().toISOString(),
+    });
     setCheckoutOrder(null);
+    setPrintModalOpen(true);
     load(false);
+  }
+
+  /**
+   * สร้างและดาวน์โหลดไฟล์ CSV สำหรับรายการออเดอร์ตามตัวกรองปัจจุบัน
+   */
+  function handleExportOrdersCsv() {
+    if (!orders || orders.length === 0) return;
+    const filename = `orders-report-${dateFilter || 'all'}.csv`;
+    const headers = [
+      'รหัสออเดอร์',
+      'เลขโต๊ะ',
+      'วันเวลาที่สั่ง',
+      'สถานะออเดอร์',
+      'รายการอาหารทั้งหมด',
+      'ยอดรวม (บาท)',
+      'สถานะรอบโต๊ะ',
+    ];
+
+    const rows = orders.map((order) => {
+      const orderItems = items.filter((i) => i.order_id === order.id);
+      const itemsSummary = orderItems
+        .map((i) => `${i.quantity}x ${i.item_name}${i.note ? ` (${i.note})` : ''}`)
+        .join(' | ');
+
+      const statusObj = STATUS_LABELS[order.status] ?? STATUS_LABELS.PENDING;
+
+      return [
+        order.order_code,
+        order.table_no,
+        formatThaiTime(order.created_at),
+        statusObj.label,
+        itemsSummary,
+        order.total_amount,
+        order.session_status === 'CLOSED' ? 'ปิดบิลแล้ว' : 'กำลังเปิด',
+      ];
+    });
+
+    downloadCsvFile(filename, headers, rows);
   }
 
   return (
@@ -197,7 +343,7 @@ export default function OrdersBoardPage() {
         <p className="text-slip-dim">อัปเดตอัตโนมัติทุก 10 วินาที ใบสั่งใหม่ขึ้นบนสุด</p>
       </div>
 
-      <div className="flex flex-wrap gap-3 rounded-lg bg-griddle px-3 py-3 shadow-sm">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg bg-griddle px-3 py-3 shadow-sm">
         <div className="min-w-[12rem] flex-1">
           <SelectField
             id="order-status-filter"
@@ -221,6 +367,36 @@ export default function OrdersBoardPage() {
             />
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setSoundEnabled((prev) => !prev)}
+          className={`min-h-[44px] rounded-lg px-4 font-medium transition-colors flex items-center gap-2 ${
+            soundEnabled
+              ? 'bg-flame/10 text-flame hover:bg-flame/20'
+              : 'bg-char text-slip-dim hover:bg-rule'
+          }`}
+        >
+          {soundEnabled ? (
+            <>
+              <BellIcon className="w-5 h-5" />
+              <span>เปิดเสียงเตือนอยู่</span>
+            </>
+          ) : (
+            <>
+              <BellOffIcon className="w-5 h-5" />
+              <span>ปิดเสียงเตือน</span>
+            </>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={handleExportOrdersCsv}
+          disabled={!orders || orders.length === 0}
+          className="min-h-[44px] rounded-lg bg-char px-4 text-slip transition-colors hover:bg-rule disabled:opacity-50 flex items-center gap-2"
+        >
+          <DownloadIcon className="w-5 h-5" />
+          <span>ส่งออกออเดอร์ CSV</span>
+        </button>
       </div>
 
       <Notice
@@ -253,20 +429,26 @@ export default function OrdersBoardPage() {
           const closed = order.session_status === 'CLOSED';
 
           return (
-            <article key={order.id} className="overflow-hidden rounded-lg bg-griddle shadow-sm">
-              <header className="flex flex-wrap items-center gap-x-4 gap-y-1 bg-char px-3 py-2">
-                <span className="num text-2xl font-semibold text-slip">{order.table_no}</span>
-                <span className="num text-slip-dim">{formatThaiTime(order.created_at)}</span>
-                <span className="num text-sm text-slip-dim">{order.order_code}</span>
-                <span className={`ml-auto rounded-full px-2 py-0.5 text-sm ${status.className}`}>
+            <article key={order.id} className="lm-card overflow-hidden">
+              <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rule bg-char px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#06C755] font-black text-sm text-white shadow-sm">
+                    {order.table_no}
+                  </span>
+                  <div>
+                    <span className="font-bold text-sm text-slip">โต๊ะ {order.table_no}</span>
+                    <p className="num text-xs text-slip-dim">{order.order_code} · {formatThaiTime(order.created_at)}</p>
+                  </div>
+                </div>
+                <span className={`ml-auto rounded-full px-3 py-1 font-bold text-xs ${status.className}`}>
                   {status.label}
                 </span>
-                <span className="num w-24 text-right font-medium text-slip">
+                <span className="num text-base font-bold text-[#06C755]">
                   {formatBaht(order.total_amount)}
                 </span>
               </header>
 
-              <ul>
+              <ul className="px-4 py-2">
                 {orderItems.map((item) => {
                   const itemStatus = STATUS_LABELS[item.status] ?? STATUS_LABELS.PENDING;
                   return (
@@ -316,38 +498,50 @@ export default function OrdersBoardPage() {
                       <button
                         type="button"
                         onClick={() => changeOrderStatus(order, 'PREPARING')}
-                        className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+                        className="min-h-[42px] rounded-xl bg-[#06C755] px-4 font-bold text-xs text-white shadow-sm hover:bg-[#00A040] transition-colors flex items-center gap-1.5"
                       >
-                        ครัวรับแล้ว เริ่มทำ
+                        <CookingIcon className="w-4 h-4" />
+                        <span>ครัวรับแล้ว เริ่มทำ</span>
                       </button>
                     )}
                     {order.status === 'PREPARING' && (
                       <button
                         type="button"
                         onClick={() => changeOrderStatus(order, 'SERVED')}
-                        className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char"
+                        className="min-h-[42px] rounded-xl bg-[#06C755] px-4 font-bold text-xs text-white shadow-sm hover:bg-[#00A040] transition-colors flex items-center gap-1.5"
                       >
-                        เสิร์ฟครบทั้งใบแล้ว
+                        <CheckIcon className="w-4 h-4" />
+                        <span>เสิร์ฟครบทั้งใบแล้ว</span>
                       </button>
                     )}
                     {order.status !== 'CANCELLED' && (
                       <button
                         type="button"
                         onClick={() => changeOrderStatus(order, 'CANCELLED')}
-                        className="min-h-[44px] rounded-lg bg-void/10 px-4 text-void"
+                        className="min-h-[42px] rounded-xl bg-void/10 px-4 font-bold text-xs text-void hover:bg-void/20 transition-colors flex items-center gap-1.5"
                       >
-                        ยกเลิกทั้งใบ
+                        <CloseIcon className="w-4 h-4" />
+                        <span>ยกเลิกทั้งใบ</span>
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenKitchenPrint(order, orderItems)}
+                      className="min-h-[42px] rounded-xl border border-rule bg-white px-4 font-bold text-xs text-slip hover:bg-char transition-colors flex items-center gap-1.5"
+                    >
+                      <PrintIcon className="w-4 h-4" />
+                      <span>พิมพ์ตั๋วครัว</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
                         setCheckoutOrder(order);
                         setPayMethod('CASH');
                       }}
-                      className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
+                      className="min-h-[42px] rounded-xl border border-[#06C755] bg-[#E8F9EE] px-4 font-bold text-xs text-[#00A040] hover:bg-[#06C755] hover:text-white transition-colors flex items-center gap-1.5"
                     >
-                      ปิดบิลโต๊ะ {order.table_no}
+                      <CreditCardIcon className="w-4 h-4" />
+                      <span>ปิดบิลโต๊ะ {order.table_no}</span>
                     </button>
                   </>
                 )}
@@ -361,39 +555,56 @@ export default function OrdersBoardPage() {
         open={checkoutOrder !== null}
         onClose={() => setCheckoutOrder(null)}
       >
-        {checkoutOrder && (
-          <div className="flex flex-col gap-4">
-            <p className="text-slip-dim">
-              ระบบจะรวมทุกใบสั่งของรอบการนั่งนี้ ยกเว้นรายการที่ยกเลิก แล้วปิดโต๊ะให้ว่าง
-              เมื่อปิดแล้วจะแก้ไขออเดอร์ของรอบนี้ไม่ได้อีก
-            </p>
-            <SelectField
-              id="checkout-method"
-              label="วิธีชำระเงิน"
-              value={payMethod}
-              onChange={setPayMethod}
-              options={PAYMENT_METHODS}
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCheckoutOrder(null)}
-                className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
-              >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                onClick={handleCheckout}
-                disabled={checkingOut}
-                className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
-              >
-                {checkingOut ? 'กำลังปิดบิล…' : 'ยืนยันปิดบิล'}
-              </button>
+        {checkoutOrder && (() => {
+          const sessionOrders = orders?.filter((o) => o.session_id === checkoutOrder.session_id) ?? [];
+          const sessionOrderIds = new Set(sessionOrders.map((o) => o.id));
+          const sessionItems = items.filter((i) => sessionOrderIds.has(i.order_id) && i.status !== 'CANCELLED');
+          const checkoutTotal = sessionItems.reduce((sum, i) => sum + Number(i.unit_price) * i.quantity, 0);
+
+          return (
+            <div className="flex flex-col gap-4">
+              <p className="text-slip-dim">
+                ระบบจะรวมทุกใบสั่งของรอบการนั่งนี้ ยกเว้นรายการที่ยกเลิก แล้วปิดโต๊ะให้ว่าง
+                เมื่อปิดแล้วจะแก้ไขออเดอร์ของรอบนี้ไม่ได้อีก
+              </p>
+              <SelectField
+                id="checkout-method"
+                label="วิธีชำระเงิน"
+                value={payMethod}
+                onChange={setPayMethod}
+                options={PAYMENT_METHODS}
+              />
+              {payMethod === 'TRANSFER' && (
+                <PromptPayQR amount={checkoutTotal} />
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCheckoutOrder(null)}
+                  className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCheckout}
+                  disabled={checkingOut}
+                  className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
+                >
+                  {checkingOut ? 'กำลังปิดบิล…' : 'ยืนยันปิดบิล'}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
+
+      <ReceiptPrintModal
+        open={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        type={printType}
+        data={printData}
+      />
     </div>
   );
 }
