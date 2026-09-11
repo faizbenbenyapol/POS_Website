@@ -26,7 +26,7 @@ function getPoolConfig(): PoolOptions {
     connectTimeout: 10000,
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000,
-    charset: 'utf8mb4_unicode_ci',
+    charset: 'utf8mb4',
     timezone: 'local',
     // ป้องกันปัญหาความคลาดเคลื่อนของทศนิยมเงิน
     decimalNumbers: false,
