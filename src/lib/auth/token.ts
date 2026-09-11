@@ -24,7 +24,10 @@ export type SessionUser = {
  * แยกฟังก์ชันเพื่อให้อ่านค่า runtime environment ล่าสุดเสมอ
  */
 function getSecretKey(): Uint8Array {
-  const secret = process.env.JWT_SECRET || '8f3c1a94d27be5061fa9c8d43e27b105a6f0dc9e4b3812577ae6c0d9f41b2e83';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not configured in environment variables');
+  }
   return new TextEncoder().encode(secret);
 }
 
