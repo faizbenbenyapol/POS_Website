@@ -4,6 +4,11 @@
 -- วิธีรัน: mysql -u root -p < db/schema.sql
 -- =============================================================
 
+-- บังคับ character set ของ connection เป็น utf8mb4 ก่อนนำเข้าข้อมูล
+-- ป้องกันปัญหาข้อความไทยเพี้ยน (mojibake) เวลา docker entrypoint รันไฟล์นี้
+-- ด้วย client charset เริ่มต้นที่ไม่ตรงกับไฟล์ (ซึ่งเป็น UTF-8)
+SET NAMES utf8mb4;
+
 CREATE DATABASE IF NOT EXISTS pos_qr
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
