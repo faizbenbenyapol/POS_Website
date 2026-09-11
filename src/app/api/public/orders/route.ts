@@ -5,6 +5,10 @@ import { query, withTransaction } from '@/lib/db';
 import { findTableSession, resolveTableSession, sessionErrorMessage } from '@/lib/session';
 import { createOrderSchema, firstErrorMessage } from '@/lib/validation';
 import { getBusinessDayRange } from '@/lib/format';
+import { createRateLimiter } from '@/lib/rateLimit';
+
+/** จำกัดการสั่งอาหาร 10 ครั้ง/นาที ต่อ token กันยิงซ้ำจากสคริปต์ */
+const orderByToken = createRateLimiter('order-token', { maxRequests: 10, windowMs: 60000 });
 
 /** คำนำหน้ารหัสออเดอร์ รวมกับวันที่และลำดับแล้วยาว 12 ตัวพอดีตามคอลัมน์ order_code */
 const ORDER_CODE_PREFIX = 'OD';
@@ -71,6 +75,8 @@ async function generateOrderCode(conn: PoolConnection): Promise<string> {
  * ดึงชื่อและราคาปัจจุบันของเมนูที่ลูกค้าสั่ง เพื่อคัดลอกลง order_items
  * ต้องทำที่ฝั่งเซิร์ฟเวอร์เสมอ ห้ามเชื่อราคาที่ส่งมาจากเบราว์เซอร์ เพราะแก้ได้
  *
+ * ใช้ WHERE id IN (...) แทนการวนลูปถามทีละจาน ลด query จาก N เหลือ 1
+ *
  * @param conn - connection ที่อยู่ใน transaction เดียวกับการสร้างออเดอร์
  * @param items - รายการที่ลูกค้าสั่ง มีแค่ menuItemId, quantity, note
  * @returns รายการที่เติมชื่อและราคาแล้ว หรือ null เมื่อมีเมนูที่ถูกปิดขายไปแล้ว
@@ -79,23 +85,29 @@ async function priceItems(
   conn: PoolConnection,
   items: { menuItemId: number; quantity: number; note?: string }[],
 ): Promise<PricedItem[] | null> {
-  const priced: PricedItem[] = [];
-  for (const item of items) {
-    const [rows] = await conn.execute<(RowDataPacket & { name: string; price: string })[]>(
-      'SELECT name, price FROM menu_items WHERE id = ? AND is_available = 1 LIMIT 1',
-      [item.menuItemId],
-    );
-    const menu = rows[0];
-    if (!menu) return null;
-    priced.push({
+  const ids = items.map((i) => i.menuItemId);
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await conn.execute<(RowDataPacket & { id: number; name: string; price: string })[]>(
+    `SELECT id, name, price FROM menu_items WHERE id IN (${placeholders}) AND is_available = 1`,
+    ids,
+  );
+
+  // สร้าง map เพื่อจับคู่ id กับชื่อและราคาที่ได้จากฐานข้อมูล
+  const menuMap = new Map(rows.map((r) => [r.id, { name: r.name, price: Number(r.price) }]));
+
+  // ตรวจว่ามีเมนูไหนไม่พบหรือปิดขายไปแล้ว
+  if (menuMap.size !== new Set(ids).size) return null;
+
+  return items.map((item) => {
+    const menu = menuMap.get(item.menuItemId)!;
+    return {
       menuItemId: item.menuItemId,
       itemName: menu.name,
-      unitPrice: Number(menu.price),
+      unitPrice: menu.price,
       quantity: item.quantity,
       note: item.note?.trim() || null,
-    });
-  }
-  return priced;
+    };
+  });
 }
 
 /**
@@ -112,6 +124,17 @@ export async function POST(request: NextRequest) {
     const parsed = createOrderSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
+    }
+
+    // ตรวจ rate limit ก่อนเข้า transaction เพื่อลดภาระฐานข้อมูล
+    const tokenCheck = orderByToken(parsed.data.token);
+    if (!tokenCheck.allowed) {
+      const waitSec = Math.ceil(tokenCheck.retryAfterMs / 1000);
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        `สั่งอาหารถี่เกินไป กรุณารอ ${waitSec} วินาทีแล้วลองใหม่`,
+        429,
+      );
     }
 
     const session = await resolveTableSession(parsed.data.token);
