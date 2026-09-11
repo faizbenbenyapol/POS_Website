@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import type { ResultSetHeader } from 'mysql2/promise';
-import { apiOk, apiError, ERROR_CODES } from '@/lib/api';
+import { apiOk, apiError, serverError, ERROR_CODES } from '@/lib/api';
 import { withTransaction } from '@/lib/db';
 import { findTableSession, sessionErrorMessage } from '@/lib/session';
 import { generateTicketCode } from '@/lib/ticket';
@@ -45,7 +45,6 @@ export async function POST(request: NextRequest) {
 
     return apiOk(created, 201);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
-    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
+    return serverError(err, 'POST /api/public/tickets');
   }
 }

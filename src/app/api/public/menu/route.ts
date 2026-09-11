@@ -1,5 +1,5 @@
 import type { RowDataPacket } from 'mysql2/promise';
-import { apiOk, apiError, ERROR_CODES } from '@/lib/api';
+import { apiOk, apiError, serverError, ERROR_CODES } from '@/lib/api';
 import { query } from '@/lib/db';
 
 type CategoryRow = RowDataPacket & { id: number; name: string };
@@ -31,7 +31,6 @@ export async function GET() {
     ]);
     return apiOk({ categories, items });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
-    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
+    return serverError(err, 'GET /api/public/menu');
   }
 }

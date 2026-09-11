@@ -1,7 +1,7 @@
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import type { NextRequest } from 'next/server';
-import { apiOk, apiError, ERROR_CODES, authFailureResponse } from '@/lib/api';
+import { apiOk, apiError, serverError, ERROR_CODES, authFailureResponse } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
 
 /** ขนาดไฟล์สูงสุดที่อนุญาตให้อัปโหลด (5 MB) */
@@ -74,7 +74,6 @@ export async function POST(request: NextRequest) {
     const publicUrl = `/uploads/${filename}`;
     return apiOk({ url: publicUrl }, 201);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'อัปโหลดรูปภาพไม่สำเร็จ';
-    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
+    return serverError(err, 'POST /api/admin/upload');
   }
 }

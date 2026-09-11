@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { apiOk, apiError, ERROR_CODES } from '@/lib/api';
+import { apiOk, apiError, serverError, ERROR_CODES } from '@/lib/api';
 import { resolveTableSession, sessionErrorMessage } from '@/lib/session';
 
 /** พารามิเตอร์เส้นทางของ Next.js 15 เป็น Promise จึงต้อง await ก่อนใช้ */
@@ -22,7 +22,6 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     }
     return apiOk(result.session);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
-    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
+    return serverError(err, 'GET /api/public/tables/[token]');
   }
 }

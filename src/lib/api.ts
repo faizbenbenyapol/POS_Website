@@ -50,6 +50,27 @@ export function apiError(
 }
 
 /**
+ * บันทึกข้อผิดพลาดฝั่งเซิร์ฟเวอร์พร้อมรหัสอ้างอิง และส่งคืนข้อความภาษาไทยที่ปลอดภัย
+ * เพื่อป้องกันไม่ให้ข้อผิดพลาดดิบ (เช่น SQL Error หรือข้อมูลภายในระบบ) รั่วไหลไปยังผู้ใช้
+ *
+ * @param err - ข้อผิดพลาดที่เกิดขึ้น
+ * @param contextLabel - ข้อความระบุตำแหน่งหรือ Endpoint ที่เกิดข้อผิดพลาด
+ * @returns NextResponse ข้อผิดพลาด 500 รูปแบบมาตรฐาน
+ */
+export function serverError(
+  err: unknown,
+  contextLabel: string,
+): NextResponse<ApiResponse<never>> {
+  const errorId = `ERR-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  console.error(`[${errorId}] ${contextLabel}:`, err);
+  return apiError(
+    ERROR_CODES.SERVER_ERROR,
+    `เกิดข้อผิดพลาดภายในระบบ กรุณาลองใหม่อีกครั้ง หรือติดต่อผู้ดูแลร้าน (รหัสอ้างอิง: ${errorId})`,
+    500,
+  );
+}
+
+/**
  * แปลงผลตรวจสิทธิ์ที่ไม่ผ่านจาก requireStaff ให้เป็นคำตอบ HTTP พร้อมข้อความไทย
  * รวมไว้ที่เดียวเพื่อให้ทุก endpoint ตอบเหมือนกันเวลาสิทธิ์ไม่ถึง
  *
