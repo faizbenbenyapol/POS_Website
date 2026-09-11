@@ -1,4 +1,4 @@
-import type { RowDataPacket } from 'mysql2/promise';
+import type { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { execute, queryOne } from '@/lib/db';
 
 /** ข้อมูลโต๊ะและรอบการนั่งที่ฝั่งลูกค้าต้องใช้ทุกหน้า */
@@ -21,11 +21,12 @@ type SessionRow = RowDataPacket & { id: number };
 /**
  * สาเหตุที่ token ใช้ไม่ได้ แยกเป็นรหัสเพื่อให้หน้าจอบอกวิธีแก้ได้ตรงกรณี
  */
-export type SessionError = 'TABLE_NOT_FOUND' | 'TABLE_INACTIVE';
+export type SessionError = 'TABLE_NOT_FOUND' | 'TABLE_INACTIVE' | 'TABLE_NOT_OPEN';
 
 /**
  * ตรวจ qr_token จากลิงก์ QR แล้วคืนรอบการนั่งที่เปิดอยู่ของโต๊ะนั้น
- * ถ้ายังไม่มีรอบที่เปิดอยู่จะเปิดรอบใหม่ให้เลย เพราะลูกค้ากลุ่มใหม่เพิ่งนั่งลง
+ * ไม่เปิดรอบให้อัตโนมัติอีกแล้ว (Approach A) เพราะพนักงานต้องเป็นคนเปิดโต๊ะ
+ * เพื่อเป็นจุดยืนยันว่ามีลูกค้านั่งจริง
  *
  * นี่คือด่านตรวจสิทธิ์เดียวของฝั่งลูกค้า ทุก API ฝั่งลูกค้าต้องเรียกฟังก์ชันนี้ก่อนเสมอ
  * เพื่อไม่ให้ลูกค้าโต๊ะหนึ่งอ่านหรือแก้ข้อมูลของโต๊ะอื่นได้
@@ -48,16 +49,11 @@ export async function resolveTableSession(
     [table.id],
   );
 
-  const sessionId =
-    open?.id ??
-    (await execute('INSERT INTO table_sessions (table_id, status) VALUES (?, ?)', [
-      table.id,
-      'OPEN',
-    ])).insertId;
+  if (!open) return { ok: false, reason: 'TABLE_NOT_OPEN' };
 
   return {
     ok: true,
-    session: { tableId: table.id, tableNo: table.table_no, sessionId },
+    session: { tableId: table.id, tableNo: table.table_no, sessionId: open.id },
   };
 }
 
@@ -88,6 +84,58 @@ export async function findTableSession(
   return { ok: true, tableId: table.id, tableNo: table.table_no, sessionId: open?.id ?? null };
 }
 
+/** errno ที่ MySQL คืนเมื่อ INSERT ชน unique index */
+const ER_DUP_ENTRY = 1062;
+
+/** จำนวนครั้งที่จะลองอ่าน session ซ้ำหลัง INSERT ชน unique */
+const MAX_RETRY = 2;
+
+/**
+ * เปิดรอบการนั่งใหม่สำหรับโต๊ะ โดยพนักงานเป็นคนกด
+ * ใช้ unique index บน open_table_id กัน race condition —
+ * ถ้าสองพนักงานกดเปิดพร้อมกัน คนที่สองจะได้ session ที่คนแรกสร้าง
+ *
+ * @param tableId - รหัสโต๊ะที่ต้องการเปิด
+ * @param userId - รหัสพนักงานที่กดเปิด (บันทึกลง opened_by)
+ * @returns session id ที่เปิดอยู่
+ */
+export async function openTableSession(
+  tableId: number,
+  userId: number,
+): Promise<{ sessionId: number; created: boolean }> {
+  // ตรวจว่ามี session เปิดอยู่แล้วหรือไม่
+  const existing = await queryOne<SessionRow>(
+    "SELECT id FROM table_sessions WHERE table_id = ? AND status = 'OPEN' LIMIT 1",
+    [tableId],
+  );
+  if (existing) return { sessionId: existing.id, created: false };
+
+  for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
+    try {
+      const result: ResultSetHeader = await execute(
+        "INSERT INTO table_sessions (table_id, status, opened_by) VALUES (?, 'OPEN', ?)",
+        [tableId, userId],
+      );
+      return { sessionId: result.insertId, created: true };
+    } catch (err: unknown) {
+      const mysqlErr = err as { errno?: number };
+      if (mysqlErr.errno === ER_DUP_ENTRY) {
+        // unique index ชน แปลว่ามีคนเปิดไปแล้วพอดี ลองอ่านซ้ำ
+        const retried = await queryOne<SessionRow>(
+          "SELECT id FROM table_sessions WHERE table_id = ? AND status = 'OPEN' LIMIT 1",
+          [tableId],
+        );
+        if (retried) return { sessionId: retried.id, created: false };
+        // ถ้าอ่านไม่เจอ อาจมีคนปิดไปพอดี ลองสร้างใหม่
+        continue;
+      }
+      throw err;
+    }
+  }
+  // ไม่ควรมาถึงจุดนี้ แต่กันไว้เผื่อ edge case ผิดปกติ
+  throw new Error(`Failed to open session for table ${tableId} after ${MAX_RETRY + 1} attempts`);
+}
+
 /**
  * แปลงสาเหตุที่ token ใช้ไม่ได้ให้เป็นข้อความไทยที่บอกลูกค้าว่าต้องทำอะไรต่อ
  * ลูกค้าอยู่หน้าโต๊ะ จึงต้องบอกวิธีแก้ที่ทำได้จริงตรงนั้น ไม่ใช่ศัพท์เทคนิค
@@ -98,6 +146,9 @@ export async function findTableSession(
 export function sessionErrorMessage(reason: SessionError): string {
   if (reason === 'TABLE_INACTIVE') {
     return 'โต๊ะนี้ปิดใช้งานชั่วคราว กรุณาแจ้งพนักงานเพื่อย้ายโต๊ะหรือเปิดโต๊ะให้ใหม่';
+  }
+  if (reason === 'TABLE_NOT_OPEN') {
+    return 'โต๊ะนี้ยังไม่ได้เปิดรอบการนั่ง กรุณาแจ้งพนักงานเพื่อเปิดโต๊ะก่อนสั่งอาหาร';
   }
   return 'ไม่พบโต๊ะนี้ในระบบ กรุณาสแกน QR บนโต๊ะอีกครั้ง หรือแจ้งพนักงานให้ช่วยตรวจสอบ';
 }

@@ -1,12 +1,13 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { EmptyState } from '@/components/DataState';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { formatBaht, formatBahtWithSign } from '@/lib/format';
 import { readCart, writeCart, cartTotal, type CartItem } from '@/lib/cart';
+import QuickTicketButton from '@/components/QuickTicketButton';
 
 /** รายการข้อความด่วนสำหรับระบุหมายเหตุอาหาร */
 const PRESET_NOTES = [
@@ -53,11 +54,22 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
   const [ready, setReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [tableOpen, setTableOpen] = useState(true);
+
+  /** ตรวจว่าโต๊ะเปิดรอบการนั่งอยู่หรือไม่ เพื่อตัดสินใจว่าจะปล่อยให้กดยืนยันได้ไหม */
+  const checkSession = useCallback(async () => {
+    const res = await apiFetch<{ tableNo: string; orders: unknown[]; total: number }>(
+      `/api/public/orders?token=${token}`,
+    );
+    // ถ้า API ตอบสำเร็จ แปลว่า session เปิดอยู่
+    setTableOpen(res.ok);
+  }, [token]);
 
   useEffect(() => {
     setItems(readCart(token));
     setReady(true);
-  }, [token]);
+    checkSession();
+  }, [token, checkSession]);
 
   /**
    * ปรับตะกร้าแล้วบันทึกลง localStorage ทันที
@@ -234,14 +246,32 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
               {formatBahtWithSign(cartTotal(items))}
             </span>
           </div>
+
+          {!tableOpen && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                โต๊ะนี้ยังไม่ได้เปิดรอบการนั่ง กดปุ่มด้านล่างเพื่อเรียกพนักงานมาเปิดโต๊ะ
+              </p>
+              <QuickTicketButton
+                token={token}
+                category="ORDER"
+                subject="ขอเปิดโต๊ะ"
+                detail="ลูกค้ากดปุ่มขอเปิดโต๊ะจากหน้าตะกร้า — กรุณาไปเปิดโต๊ะให้ลูกค้า"
+                idleLabel="แจ้งพนักงานเปิดโต๊ะ"
+                sentLabel="แจ้งแล้ว รอพนักงานมาเปิดโต๊ะ"
+                className="min-h-[46px] rounded-xl bg-amber-500 px-4 font-bold text-sm text-white shadow-xs transition-colors hover:bg-amber-600 disabled:opacity-80 cursor-pointer"
+              />
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || !tableOpen}
             className="min-h-[50px] rounded-xl bg-emerald-600 px-4 font-bold text-sm text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:opacity-80 cursor-pointer"
           >
             {submitting
-              ? 'กำลังส่งไปที่ครัว…'
+              ? 'กำลังส่งไปที่ครัว...'
               : `ยืนยันสั่งอาหาร (${formatBahtWithSign(cartTotal(items))})`}
           </button>
         </div>

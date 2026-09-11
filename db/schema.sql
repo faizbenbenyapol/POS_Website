@@ -12,6 +12,7 @@ USE pos_qr;
 
 -- ลบตารางเดิมก่อน เรียงจากตารางลูกไปตารางแม่ เพื่อไม่ให้ติด foreign key
 DROP TABLE IF EXISTS ticket_replies;
+DROP TABLE IF EXISTS order_counters;
 DROP TABLE IF EXISTS tickets;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS order_items;
@@ -70,15 +71,20 @@ CREATE TABLE menu_items (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- รอบการนั่งของโต๊ะ 1 รอบ = ลูกค้า 1 กลุ่ม (สั่งได้หลายออเดอร์ ปิดบิลครั้งเดียว)
+-- open_table_id เป็น generated column กัน race condition: 1 โต๊ะเปิดได้แค่ 1 session
 CREATE TABLE table_sessions (
-  id         INT AUTO_INCREMENT PRIMARY KEY,
-  table_id   INT      NOT NULL,
-  status     ENUM('OPEN','CLOSED') NOT NULL DEFAULT 'OPEN',
-  opened_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  closed_at  DATETIME NULL,
-  closed_by  INT      NULL,
-  FOREIGN KEY (table_id)  REFERENCES dining_tables(id),
-  FOREIGN KEY (closed_by) REFERENCES users(id)
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  table_id      INT      NOT NULL,
+  status        ENUM('OPEN','CLOSED') NOT NULL DEFAULT 'OPEN',
+  opened_by     INT      NULL,
+  opened_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  closed_at     DATETIME NULL,
+  closed_by     INT      NULL,
+  open_table_id INT GENERATED ALWAYS AS (IF(status = 'OPEN', table_id, NULL)) STORED,
+  UNIQUE KEY uq_open_table (open_table_id),
+  FOREIGN KEY (table_id)   REFERENCES dining_tables(id),
+  FOREIGN KEY (opened_by)  REFERENCES users(id),
+  FOREIGN KEY (closed_by)  REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ออเดอร์ 1 ครั้งที่ลูกค้ากดยืนยันสั่ง
@@ -117,6 +123,12 @@ CREATE TABLE payments (
   paid_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (session_id)  REFERENCES table_sessions(id),
   FOREIGN KEY (received_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ลำดับเลขออเดอร์ต่อวันทำการ ใช้ INSERT ... ON DUPLICATE KEY UPDATE แบบ atomic
+CREATE TABLE order_counters (
+  business_date DATE NOT NULL PRIMARY KEY,
+  last_seq      INT  NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- เรื่องแจ้งปัญหา เปิดได้ทั้งจากลูกค้า (ผูกโต๊ะ) และพนักงาน (ผูก user)

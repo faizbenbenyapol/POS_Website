@@ -43,18 +43,25 @@ type OrderItemRow = RowDataPacket & {
 
 /**
  * สร้างรหัสออเดอร์รูปแบบ OD + YYMMDD + ลำดับ 4 หลักของวันนั้น เช่น OD2609090007
- * นับลำดับภายใน transaction เดียวกับการบันทึกออเดอร์ เพื่อไม่ให้สองโต๊ะที่กดพร้อมกันได้เลขซ้ำ
+ * ใช้ INSERT ... ON DUPLICATE KEY UPDATE เพื่อเพิ่มลำดับแบบ atomic
+ * ไม่ต้องล็อกแถวอื่น จึงไม่กัน concurrency เท่ากับ COUNT(*) FOR UPDATE
  *
  * @param conn - connection ที่อยู่ใน transaction เดียวกับการสร้างออเดอร์
  * @returns รหัสออเดอร์ยาว 12 ตัวอักษร
  */
 async function generateOrderCode(conn: PoolConnection): Promise<string> {
   const todayRange = getBusinessDayRange();
-  const [rows] = await conn.execute<(RowDataPacket & { seq: number })[]>(
-    'SELECT COUNT(*) AS seq FROM orders WHERE created_at >= ? AND created_at < ? FOR UPDATE',
-    [todayRange.startSql, todayRange.endSql],
+  await conn.execute(
+    `INSERT INTO order_counters (business_date, last_seq)
+     VALUES (?, 1)
+     ON DUPLICATE KEY UPDATE last_seq = last_seq + 1`,
+    [todayRange.businessDate],
   );
-  const sequence = String((rows[0]?.seq ?? 0) + 1).padStart(ORDER_SEQUENCE_DIGITS, '0');
+  const [rows] = await conn.execute<(RowDataPacket & { last_seq: number })[]>(
+    'SELECT last_seq FROM order_counters WHERE business_date = ?',
+    [todayRange.businessDate],
+  );
+  const sequence = String(rows[0]?.last_seq ?? 1).padStart(ORDER_SEQUENCE_DIGITS, '0');
   const [y, m, d] = todayRange.businessDate.split('-');
   const datePart = `${y.slice(2)}${m}${d}`;
   return `${ORDER_CODE_PREFIX}${datePart}${sequence}`;
@@ -109,7 +116,8 @@ export async function POST(request: NextRequest) {
 
     const session = await resolveTableSession(parsed.data.token);
     if (!session.ok) {
-      return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(session.reason), 404);
+      const status = session.reason === 'TABLE_NOT_OPEN' ? 409 : 404;
+      return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(session.reason), status);
     }
 
     const created = await withTransaction(async (conn) => {
