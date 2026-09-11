@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import ConfirmModal from '@/components/ConfirmModal';
 import PromptPayQR from '@/components/PromptPayQR';
 import ReceiptPrintModal, { ReceiptData } from '@/components/ReceiptPrintModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { SelectField } from '@/components/Field';
+import { useToast } from '@/components/Toast';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { downloadCsvFile } from '@/lib/exportCsv';
 import { formatBaht, formatBahtWithSign, formatThaiTime } from '@/lib/format';
@@ -138,6 +140,9 @@ export default function OrdersBoardPage() {
   const [printType, setPrintType] = useState<'KITCHEN' | 'RECEIPT'>('KITCHEN');
   const [printData, setPrintData] = useState<ReceiptData | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [currentUser, setCurrentUser] = useState<{ role: string; fullName: string } | null>(null);
+  const [cancelConfirmOrder, setCancelConfirmOrder] = useState<BoardOrder | null>(null);
+  const { warning: toastWarning } = useToast();
   const knownOrderIdsRef = useRef<Set<number> | null>(null);
 
   /**
@@ -209,8 +214,12 @@ export default function OrdersBoardPage() {
   }, [load]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => load(false), POLL_INTERVAL_MS);
-    return () => window.clearInterval(timer);
+    load(true);
+    apiFetch<{ role: string; fullName: string }>('/api/auth/me').then((res) => {
+      if (res.ok) setCurrentUser(res.data);
+    });
+    const interval = window.setInterval(() => load(false), 5000);
+    return () => window.clearInterval(interval);
   }, [load]);
 
   /**
@@ -291,7 +300,9 @@ export default function OrdersBoardPage() {
       })),
       totalAmount: result.data.total,
       paymentMethod: payMethod,
+      orderCode: checkoutOrder.order_code,
       paidAt: new Date().toISOString(),
+      cashierName: currentUser?.fullName,
     });
     setCheckoutOrder(null);
     setPrintModalOpen(true);
@@ -367,27 +378,45 @@ export default function OrdersBoardPage() {
             />
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setSoundEnabled((prev) => !prev)}
-          className={`min-h-[44px] rounded-lg px-4 font-medium transition-colors flex items-center gap-2 ${
-            soundEnabled
-              ? 'bg-flame/10 text-flame hover:bg-flame/20'
-              : 'bg-char text-slip-dim hover:bg-rule'
-          }`}
-        >
-          {soundEnabled ? (
-            <>
-              <BellIcon className="w-5 h-5" />
-              <span>เปิดเสียงเตือนอยู่</span>
-            </>
-          ) : (
-            <>
-              <BellOffIcon className="w-5 h-5" />
-              <span>ปิดเสียงเตือน</span>
-            </>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setSoundEnabled((prev) => {
+                const next = !prev;
+                if (next) playNewOrderSound();
+                return next;
+              });
+            }}
+            className={`min-h-[44px] rounded-lg px-4 font-medium transition-colors flex items-center gap-2 ${
+              soundEnabled
+                ? 'bg-flame/10 text-flame hover:bg-flame/20'
+                : 'bg-char text-slip-dim hover:bg-rule'
+            }`}
+          >
+            {soundEnabled ? (
+              <>
+                <BellIcon className="w-5 h-5" />
+                <span>เปิดเสียงเตือน</span>
+              </>
+            ) : (
+              <>
+                <BellOffIcon className="w-5 h-5" />
+                <span>ปิดเสียงเตือน</span>
+              </>
+            )}
+          </button>
+          {soundEnabled && (
+            <button
+              type="button"
+              onClick={playNewOrderSound}
+              title="ทดสอบระดับเสียงกระดิ่ง"
+              className="min-h-[44px] rounded-lg bg-char px-3 text-xs font-semibold text-slip-dim hover:bg-rule hover:text-slip transition-colors"
+            >
+              ทดสอบเสียง
+            </button>
           )}
-        </button>
+        </div>
         <button
           type="button"
           onClick={handleExportOrdersCsv}
@@ -432,7 +461,7 @@ export default function OrdersBoardPage() {
             <article key={order.id} className="lm-card overflow-hidden">
               <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rule bg-char px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#06C755] font-black text-sm text-white shadow-sm">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 font-bold text-sm text-white shadow-xs">
                     {order.table_no}
                   </span>
                   <div>
@@ -443,7 +472,7 @@ export default function OrdersBoardPage() {
                 <span className={`ml-auto rounded-full px-3 py-1 font-bold text-xs ${status.className}`}>
                   {status.label}
                 </span>
-                <span className="num text-base font-bold text-[#06C755]">
+                <span className="num text-base font-bold text-emerald-700">
                   {formatBaht(order.total_amount)}
                 </span>
               </header>
@@ -498,7 +527,7 @@ export default function OrdersBoardPage() {
                       <button
                         type="button"
                         onClick={() => changeOrderStatus(order, 'PREPARING')}
-                        className="min-h-[42px] rounded-xl bg-[#06C755] px-4 font-bold text-xs text-white shadow-sm hover:bg-[#00A040] transition-colors flex items-center gap-1.5"
+                        className="min-h-[42px] rounded-xl bg-emerald-600 px-4 font-bold text-xs text-white shadow-xs hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
                         <CookingIcon className="w-4 h-4" />
                         <span>ครัวรับแล้ว เริ่มทำ</span>
@@ -508,7 +537,7 @@ export default function OrdersBoardPage() {
                       <button
                         type="button"
                         onClick={() => changeOrderStatus(order, 'SERVED')}
-                        className="min-h-[42px] rounded-xl bg-[#06C755] px-4 font-bold text-xs text-white shadow-sm hover:bg-[#00A040] transition-colors flex items-center gap-1.5"
+                        className="min-h-[42px] rounded-xl bg-emerald-600 px-4 font-bold text-xs text-white shadow-xs hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
                         <CheckIcon className="w-4 h-4" />
                         <span>เสิร์ฟครบทั้งใบแล้ว</span>
@@ -517,8 +546,14 @@ export default function OrdersBoardPage() {
                     {order.status !== 'CANCELLED' && (
                       <button
                         type="button"
-                        onClick={() => changeOrderStatus(order, 'CANCELLED')}
-                        className="min-h-[42px] rounded-xl bg-void/10 px-4 font-bold text-xs text-void hover:bg-void/20 transition-colors flex items-center gap-1.5"
+                        onClick={() => {
+                          if (currentUser?.role !== 'ADMIN') {
+                            toastWarning('สงวนสิทธิ์เฉพาะเจ้าของร้าน (ADMIN)', 'หากจำเป็นต้องยกเลิกออเดอร์ทั้งใบ กรุณาแจ้งผู้จัดการ');
+                            return;
+                          }
+                          setCancelConfirmOrder(order);
+                        }}
+                        className="min-h-[42px] rounded-xl bg-red-50 border border-red-200 px-4 font-bold text-xs text-red-700 hover:bg-red-100 transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
                         <CloseIcon className="w-4 h-4" />
                         <span>ยกเลิกทั้งใบ</span>
@@ -527,7 +562,7 @@ export default function OrdersBoardPage() {
                     <button
                       type="button"
                       onClick={() => handleOpenKitchenPrint(order, orderItems)}
-                      className="min-h-[42px] rounded-xl border border-rule bg-white px-4 font-bold text-xs text-slip hover:bg-char transition-colors flex items-center gap-1.5"
+                      className="min-h-[42px] rounded-xl border border-rule bg-white px-4 font-bold text-xs text-slip hover:bg-slate-50 transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <PrintIcon className="w-4 h-4" />
                       <span>พิมพ์ตั๋วครัว</span>
@@ -538,7 +573,7 @@ export default function OrdersBoardPage() {
                         setCheckoutOrder(order);
                         setPayMethod('CASH');
                       }}
-                      className="min-h-[42px] rounded-xl border border-[#06C755] bg-[#E8F9EE] px-4 font-bold text-xs text-[#00A040] hover:bg-[#06C755] hover:text-white transition-colors flex items-center gap-1.5"
+                      className="min-h-[42px] rounded-xl border border-emerald-600 bg-emerald-50 px-4 font-bold text-xs text-emerald-800 hover:bg-emerald-600 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
                     >
                       <CreditCardIcon className="w-4 h-4" />
                       <span>ปิดบิลโต๊ะ {order.table_no}</span>
@@ -604,6 +639,26 @@ export default function OrdersBoardPage() {
         onClose={() => setPrintModalOpen(false)}
         type={printType}
         data={printData}
+      />
+
+      <ConfirmModal
+        open={cancelConfirmOrder !== null}
+        title="ยืนยันยกเลิกออเดอร์ทั้งใบ"
+        message={
+          cancelConfirmOrder
+            ? `คุณต้องการยกเลิกออเดอร์ ${cancelConfirmOrder.order_code} ของโต๊ะ ${cancelConfirmOrder.table_no} ทั้งใบใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`
+            : ''
+        }
+        confirmText="ยกเลิกออเดอร์นี้"
+        cancelText="กลับไปก่อน"
+        tone="danger"
+        onConfirm={() => {
+          if (cancelConfirmOrder) {
+            changeOrderStatus(cancelConfirmOrder, 'CANCELLED');
+            setCancelConfirmOrder(null);
+          }
+        }}
+        onClose={() => setCancelConfirmOrder(null)}
       />
     </div>
   );

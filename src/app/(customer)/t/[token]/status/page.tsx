@@ -137,7 +137,7 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
                     className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-rule py-2.5 last:border-b-0"
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="num font-bold text-xs text-[#06C755]">×{item.quantity}</span>
+                      <span className="num font-bold text-xs text-emerald-700">×{item.quantity}</span>
                       <span className="min-w-0 flex-1 text-sm font-medium text-slip">{item.item_name}</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -159,10 +159,10 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
       ))}
 
       <div className="fixed inset-x-0 bottom-16 z-20 px-4">
-        <div className="mx-auto flex max-w-md flex-col gap-2 rounded-2xl lm-glass-bar border border-rule p-4 shadow-xl">
+        <div className="mx-auto flex max-w-md flex-col gap-2 rounded-2xl bg-white border border-zinc-200 p-4 shadow-xl">
           <div className="flex items-baseline justify-between">
             <span className="text-xs font-bold text-slip-dim">ยอดสะสมของโต๊ะ (ไม่รวมรายการยกเลิก)</span>
-            <span className="num text-lg font-black text-[#06C755]">{formatBahtWithSign(total)}</span>
+            <span className="num text-lg font-black text-emerald-700">{formatBahtWithSign(total)}</span>
           </div>
           <QuickTicketButton
             token={token}
@@ -171,7 +171,7 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
             detail={`ลูกค้าขอปิดบิลและชำระเงิน ยอดสะสม ${formatBahtWithSign(total)}`}
             idleLabel="ขอเช็คบิล / ชำระเงิน"
             sentLabel="แจ้งพนักงานแล้ว กำลังนำบิลมาให้"
-            className="min-h-[48px] w-full rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-80"
+            className="min-h-[48px] w-full rounded-xl bg-emerald-600 px-4 font-bold text-sm text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:opacity-80 cursor-pointer"
           />
         </div>
       </div>

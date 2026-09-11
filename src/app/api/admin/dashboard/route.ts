@@ -39,6 +39,48 @@ export async function GET(request: NextRequest) {
     const auth = await requireStaff();
     if (!auth.ok) return authFailureResponse(auth.reason);
 
+    // หากเป็นพนักงาน (STAFF) ให้ส่งเฉพาะข้อมูลปฏิบัติการหน้าร้าน (ไม่เปิดเผยตัวเลขรายได้/ยอดขาย)
+    if (auth.user.role === 'STAFF') {
+      const [orderCount, openTables, staleOrders, tickets] = await Promise.all([
+        queryOne<RowDataPacket & { total: number }>(
+          "SELECT COUNT(*) AS total FROM orders WHERE DATE(created_at) = CURDATE() AND status <> 'CANCELLED'",
+        ),
+        queryOne<RowDataPacket & { total: number }>(
+          "SELECT COUNT(*) AS total FROM table_sessions WHERE status = 'OPEN'",
+        ),
+        query<StaleOrderRow>(
+          `SELECT o.id, o.order_code, t.table_no, o.created_at,
+                  TIMESTAMPDIFF(MINUTE, o.created_at, NOW()) AS waiting_minutes
+             FROM orders o
+             JOIN table_sessions s ON s.id = o.session_id
+             JOIN dining_tables t ON t.id = s.table_id
+            WHERE o.status = 'PENDING'
+              AND s.status = 'OPEN'
+              AND o.created_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)
+            ORDER BY o.created_at`,
+          [STALE_PENDING_MINUTES],
+        ),
+        queryOne<TicketSummaryRow>(
+          `SELECT
+             COUNT(*) AS open_count,
+             COALESCE(SUM(CASE WHEN priority = 'URGENT' THEN 1 ELSE 0 END), 0) AS urgent_open_count
+            FROM tickets WHERE status = 'OPEN'`,
+        ),
+      ]);
+
+      return apiOk({
+        isStaff: true,
+        userRole: 'STAFF',
+        userFullName: auth.user.fullName,
+        todayOrderCount: Number(orderCount?.total ?? 0),
+        openTableCount: Number(openTables?.total ?? 0),
+        openTicketCount: Number(tickets?.open_count ?? 0),
+        urgentOpenTicketCount: Number(tickets?.urgent_open_count ?? 0),
+        stalePendingMinutes: STALE_PENDING_MINUTES,
+        staleOrders,
+      });
+    }
+
     const nowStr = new Date().toISOString().slice(0, 7);
     const searchMonth = request.nextUrl.searchParams.get('month');
     const selectedMonth = searchMonth && /^\d{4}-\d{2}$/.test(searchMonth) ? searchMonth : nowStr;
@@ -167,6 +209,8 @@ export async function GET(request: NextRequest) {
     const availableMonths = Array.from(monthSet).sort().reverse();
 
     return apiOk({
+      isStaff: false,
+      userRole: 'ADMIN',
       selectedMonth,
       availableMonths,
       monthlyRevenue,

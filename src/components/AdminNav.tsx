@@ -19,7 +19,7 @@ const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ clas
   { href: '/admin', label: 'ภาพรวมร้าน', icon: ChartIcon, adminOnly: false },
   { href: '/admin/orders', label: 'กระดานออเดอร์', icon: CookingIcon, adminOnly: false },
   { href: '/admin/menu', label: 'เมนูอาหาร', icon: FoodMenuIcon, adminOnly: false },
-  { href: '/admin/categories', label: 'หมวดหมู่', icon: TagIcon, adminOnly: false },
+  { href: '/admin/categories', label: 'หมวดหมู่', icon: TagIcon, adminOnly: true },
   { href: '/admin/tables', label: 'โต๊ะและ QR', icon: TableIcon, adminOnly: false },
   { href: '/admin/tickets', label: 'เรื่องแจ้งปัญหา', icon: TicketIcon, adminOnly: false },
   { href: '/admin/users', label: 'ผู้ใช้ระบบ', icon: UsersIcon, adminOnly: true },
@@ -58,8 +58,8 @@ export default function AdminNav({ user }: { user: SessionUser }) {
           </div>
           <div>
             <p className="font-semibold text-sm leading-tight text-white">{user.fullName}</p>
-            <p className="text-xs text-white/70">
-              {user.role === 'ADMIN' ? 'ผู้ดูแลระบบ' : 'พนักงาน'}
+            <p className="text-xs text-white/80 font-medium">
+              {user.role === 'ADMIN' ? 'เจ้าของร้าน' : 'พนักงาน'}
             </p>
           </div>
         </div>

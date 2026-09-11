@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import Modal from '@/components/Modal';
+import ConfirmModal from '@/components/ConfirmModal';
+import TableQrPrintModal from '@/components/TableQrPrintModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { TextField, NumberField, CheckboxField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
-import { PlusIcon, DownloadIcon, PrintIcon } from '@/components/Icons';
+import { PlusIcon, RefreshIcon, PrintIcon } from '@/components/Icons';
 
 /** โต๊ะ 1 แถวตามที่ GET /api/admin/tables คืนมา */
 type DiningTable = {
@@ -26,14 +28,14 @@ const EMPTY_FORM = { tableNo: '', seats: '4', isActive: true };
 const QR_SIZE = 512;
 
 /**
- * ตัวจัดการโต๊ะทั้งหมด เพิ่ม แก้ไข ลบ และดู/ดาวน์โหลด QR ของแต่ละโต๊ะ
- * สร้างภาพ QR ในเบราว์เซอร์เพื่อไม่ต้องเพิ่ม endpoint นอกเหนือจากที่แผนกำหนด
+ * ตัวจัดการโต๊ะทั้งหมด เพิ่ม แก้ไข ลบ ดู พิมพ์ และสร้าง QR ใหม่ของแต่ละโต๊ะ
  *
  * @param baseUrl - ที่อยู่หลักของระบบ ใช้ประกอบเป็นลิงก์ในภาพ QR
- * @returns หน้าจอตารางโต๊ะพร้อม modal ฟอร์มและ modal แสดง QR
+ * @returns หน้าจอตารางโต๊ะพร้อม modal ฟอร์มและ modal พิมพ์ QR
  */
 export default function TableManager({ baseUrl }: { baseUrl: string }) {
   const [items, setItems] = useState<DiningTable[] | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ role: string; fullName: string } | null>(null);
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string }>({
     tone: 'success',
@@ -46,10 +48,16 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
   const [saving, setSaving] = useState(false);
   const [qrTable, setQrTable] = useState<DiningTable | null>(null);
   const [qrImage, setQrImage] = useState('');
+  const [confirmConfig, setConfirmConfig] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    tone: 'danger' | 'warning';
+    onConfirm: () => void;
+  } | null>(null);
 
   /**
    * ประกอบลิงก์ที่ลูกค้าจะไปถึงเมื่อสแกน QR ของโต๊ะนั้น
-   * ถ้ายังไม่ได้ตั้ง APP_BASE_URL จะถอยไปใช้ที่อยู่ของหน้าปัจจุบันแทน
    *
    * @param token - qr_token ประจำโต๊ะ
    * @returns ลิงก์เต็มรูปแบบ เช่น https://ร้าน.example/t/abc123
@@ -64,8 +72,6 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
 
   /**
    * โหลดรายการโต๊ะทั้งหมดใหม่
-   *
-   * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือปรับ state ของรายการโต๊ะ
    */
   const load = useCallback(async () => {
     setItems(null);
@@ -77,6 +83,9 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
 
   useEffect(() => {
     load();
+    apiFetch<{ role: string; fullName: string }>('/api/auth/me').then((res) => {
+      if (res.ok) setCurrentUser(res.data);
+    });
   }, [load]);
 
   useEffect(() => {
@@ -84,21 +93,17 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
       setQrImage('');
       return;
     }
-    // สร้างภาพ QR เป็น data URL เพื่อให้ทั้งแสดงบนจอและกดดาวน์โหลดได้จากภาพเดียวกัน
     QRCode.toDataURL(buildTableUrl(qrTable.qr_token), {
       width: QR_SIZE,
       margin: 2,
-      color: { dark: '#121110', light: '#EDE7DC' },
+      color: { dark: '#121110', light: '#FFFFFF' },
     })
       .then(setQrImage)
       .catch(() => setQrImage(''));
   }, [qrTable, buildTableUrl]);
 
   /**
-   * เปิด modal ในโหมดเพิ่มใหม่หรือแก้ไข
-   *
-   * @param table - โต๊ะที่จะแก้ไข ถ้าไม่ส่งมาแปลว่าเพิ่มใหม่
-   * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือเปิด modal พร้อมค่าตั้งต้นของฟอร์ม
+   * เปิด modal ในโหมดเพิ่มใหม่หรือแก้ไข (เฉพาะ ADMIN)
    */
   function openForm(table?: DiningTable) {
     setEditing(table ?? null);
@@ -112,10 +117,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
   }
 
   /**
-   * บันทึกฟอร์มโต๊ะ ตอนสร้างใหม่ระบบจะสร้าง qr_token ให้เองที่ฝั่งเซิร์ฟเวอร์
-   *
-   * @param event - เหตุการณ์ submit ใช้ยกเลิกการรีโหลดหน้า
-   * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือเขียนข้อมูลลงฐานข้อมูลและรีโหลดตาราง
+   * บันทึกฟอร์มโต๊ะ
    */
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -140,50 +142,87 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
       tone: 'success',
       message: editing
         ? 'แก้ไขข้อมูลโต๊ะเรียบร้อยแล้ว'
-        : 'เพิ่มโต๊ะใหม่พร้อมสร้าง QR ให้แล้ว กดปุ่ม "ดู QR" เพื่อบันทึกภาพไปติดที่โต๊ะ',
+        : 'เพิ่มโต๊ะใหม่พร้อมสร้าง QR ให้แล้ว กดปุ่ม "ดู/พิมพ์ QR" เพื่อพิมพ์ป้ายตั้งโต๊ะ',
     });
     load();
   }
 
-  /**
-   * ลบโต๊ะ ถามยืนยันก่อน และแสดงเหตุผลเมื่อระบบเปลี่ยนเป็นปิดใช้งานแทน
-   *
-   * @param table - โต๊ะที่จะลบ
-   * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือลบหรือปิดใช้งานแล้วรีโหลดตาราง
-   */
-  async function handleDelete(table: DiningTable) {
-    const confirmed = window.confirm(
-      `ต้องการลบโต๊ะ ${table.table_no} ใช่หรือไม่\nถ้าโต๊ะนี้เคยมีลูกค้านั่งแล้ว ระบบจะเปลี่ยนเป็นปิดใช้งานแทนการลบ`,
-    );
-    if (!confirmed) return;
+  function handleQuickRegenerate(table: DiningTable) {
+    setConfirmConfig({
+      open: true,
+      title: 'ยืนยันสร้าง QR Code ใหม่',
+      message: `ยืนยันสร้าง QR Code ใหม่สำหรับโต๊ะ ${table.table_no} ใช่หรือไม่?\n\n• QR เดิมจะถูกยกเลิกทันที รูปหรือลิงก์เดิมจะไม่สามารถสั่งอาหารได้อีก\n• แนะนำให้กดเมื่อลูกค้าเช็คบิลและเคลียร์โต๊ะเสร็จแล้ว`,
+      tone: 'warning',
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        const result = await apiFetch<{ id: number; tableNo: string; qrToken: string; message: string }>(
+          `/api/admin/tables/${table.id}/regenerate-qr`,
+          { method: 'POST' },
+        );
 
-    const result = await apiFetch<{ mode: string; message: string }>(
-      `/api/admin/tables/${table.id}`,
-      { method: 'DELETE' },
-    );
-    setNotice(
-      result.ok
-        ? { tone: 'success', message: result.data.message }
-        : { tone: 'error', message: result.message },
-    );
-    if (result.ok) load();
+        if (result.ok) {
+          setNotice({
+            tone: 'success',
+            message: result.data.message || `สร้าง QR Code ใหม่สำหรับโต๊ะ ${table.table_no} เรียบร้อยแล้ว`,
+          });
+          load();
+        } else {
+          setNotice({ tone: 'error', message: result.message });
+        }
+      },
+    });
   }
+
+  function handleDelete(table: DiningTable) {
+    setConfirmConfig({
+      open: true,
+      title: 'ยืนยันการลบโต๊ะ',
+      message: `ต้องการลบโต๊ะ ${table.table_no} ใช่หรือไม่?\nถ้าโต๊ะนี้เคยมีลูกค้านั่งแล้ว ระบบจะเปลี่ยนเป็นปิดใช้งานแทนการลบ เพื่อรักษาประวัติการทำงาน`,
+      tone: 'danger',
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        const result = await apiFetch<{ mode: string; message: string }>(
+          `/api/admin/tables/${table.id}`,
+          { method: 'DELETE' },
+        );
+        setNotice(
+          result.ok
+            ? { tone: 'success', message: result.data.message }
+            : { tone: 'error', message: result.message },
+        );
+        if (result.ok) load();
+      },
+    });
+  }
+
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-slip">โต๊ะและ QR</h1>
-          <p className="text-slip-dim">พิมพ์ QR ของแต่ละโต๊ะไปติดไว้ ลูกค้าสแกนแล้วสั่งได้ทันที</p>
+          <h1 className="text-xl font-bold text-slip">โต๊ะและ QR Code</h1>
+          <p className="text-xs text-slip-dim">
+            พิมพ์ QR Code ไปตั้งหรือติดที่โต๊ะ เพื่อให้ลูกค้าสแกนสั่งอาหารผ่านมือถือได้ทันที
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => openForm()}
-          className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
-        >
-          <PlusIcon className="w-4 h-4" />
-          <span>เพิ่มโต๊ะ</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {!isAdmin && currentUser && (
+            <span className="rounded-full bg-zinc-100 border border-rule px-3 py-1 text-xs text-slip-dim font-medium">
+              สิทธิ์พนักงาน: ตรวจสอบโต๊ะ, พิมพ์ QR และสร้าง QR ใหม่ได้
+            </span>
+          )}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => openForm()}
+              className="min-h-[42px] rounded-xl bg-emerald-600 px-4 font-bold text-xs text-white shadow-xs transition-colors hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer"
+            >
+              <PlusIcon className="w-4 h-4" />
+              <span>เพิ่มโต๊ะ</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <Notice
@@ -198,76 +237,114 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         <EmptyState
           message="ยังไม่มีโต๊ะในระบบ — เพิ่มโต๊ะแรกเพื่อสร้าง QR ให้ลูกค้าสแกน"
           action={
-            <button
-              type="button"
-              onClick={() => openForm()}
-              className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
-            >
-              <PlusIcon className="w-4 h-4" />
-              <span>เพิ่มโต๊ะแรก</span>
-            </button>
+            isAdmin ? (
+              <button
+                type="button"
+                onClick={() => openForm()}
+                className="min-h-[44px] rounded-xl bg-emerald-600 px-4 font-bold text-sm text-white shadow-xs transition-colors hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer"
+              >
+                <PlusIcon className="w-4 h-4" />
+                <span>เพิ่มโต๊ะแรก</span>
+              </button>
+            ) : undefined
           }
         />
       )}
 
       {!loadError && items !== null && items.length > 0 && (
-        <div className="overflow-x-auto rounded-lg bg-griddle shadow-sm">
-          <table className="w-full min-w-[42rem] border-collapse">
+        <div className="overflow-x-auto rounded-xl bg-white border border-rule shadow-xs">
+          <table className="w-full min-w-[44rem] border-collapse text-left">
             <thead>
-              <tr className="bg-char text-left text-slip-dim">
-                <th className="px-3 py-2 font-medium">เลขโต๊ะ</th>
-                <th className="px-3 py-2 text-right font-medium">ที่นั่ง</th>
-                <th className="px-3 py-2 font-medium">สถานะโต๊ะ</th>
-                <th className="px-3 py-2 font-medium">การใช้งาน</th>
-                <th className="px-3 py-2 font-medium">จัดการ</th>
+              <tr className="border-b border-rule bg-zinc-50/70 text-xs font-bold text-slip-dim">
+                <th className="px-4 py-3">เลขโต๊ะ</th>
+                <th className="px-4 py-3 text-center">จำนวนที่นั่ง</th>
+                <th className="px-4 py-3">สถานะการเปิดรับ</th>
+                <th className="px-4 py-3">การใช้งานปัจจุบัน</th>
+                <th className="px-4 py-3 text-right">เครื่องมือและการจัดการ</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-rule text-xs">
               {items.map((table) => (
-                <tr key={table.id} className="border-b border-rule last:border-b-0">
-                  <td className="num px-3 py-2 text-lg text-slip">{table.table_no}</td>
-                  <td className="num px-3 py-2 text-right text-slip">{table.seats}</td>
-                  <td className="px-3 py-2">
+                <tr key={table.id} className="hover:bg-zinc-50/50 transition-colors">
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1 font-bold text-sm text-slip">
+                      <span className="rounded-md bg-zinc-100 border border-zinc-200 px-2 py-0.5 num">
+                        {table.table_no}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="num px-4 py-3 text-center text-slip font-medium">
+                    {table.seats} ที่นั่ง
+                  </td>
+                  <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-sm ${
-                        table.is_active === 1 ? 'bg-served/10 text-served' : 'bg-char text-slip-dim'
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                        table.is_active === 1
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-zinc-100 text-zinc-500 border border-zinc-200'
                       }`}
                     >
                       {table.is_active === 1 ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
                     </span>
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-sm ${
-                        table.has_open_session > 0 ? 'bg-waiting/10 text-waiting' : 'bg-char text-slip-dim'
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                        table.has_open_session > 0
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
                       }`}
                     >
-                      {table.has_open_session > 0 ? 'มีลูกค้านั่งอยู่' : 'ว่าง'}
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          table.has_open_session > 0 ? 'bg-amber-500' : 'bg-slate-400'
+                        }`}
+                      />
+                      <span>{table.has_open_session > 0 ? 'มีลูกค้านั่ง' : 'ว่าง'}</span>
                     </span>
                   </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {/* ปุ่มดูและพิมพ์ QR Code — มีทั้งป้าย A4/A5 และสลิป 80mm */}
                       <button
                         type="button"
                         onClick={() => setQrTable(table)}
-                        className="rounded-lg border border-rule bg-paper px-3 py-1 text-xs font-semibold text-slip transition-all hover:border-[#06C755] hover:text-[#06C755]"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900 cursor-pointer shadow-xs"
                       >
-                        ดู QR
+                        <PrintIcon className="w-3.5 h-3.5 text-slate-500" />
+                        <span>ดู / พิมพ์ QR</span>
                       </button>
+
+                      {/* ปุ่มสร้าง QR ใหม่ประจำโต๊ะ (ทั้ง ADMIN และ STAFF ใช้ได้) */}
                       <button
                         type="button"
-                        onClick={() => openForm(table)}
-                        className="rounded-lg border border-rule bg-paper px-3 py-1 text-xs font-semibold text-slip transition-all hover:border-[#06C755] hover:text-[#06C755]"
+                        onClick={() => handleQuickRegenerate(table)}
+                        title="สร้าง QR Token ใหม่ ตัดสิทธิ์รูปเดิม ป้องกันแอบสแกนจากนอกร้าน"
+                        className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-800 transition-all hover:bg-amber-100 active:scale-95 flex items-center gap-1"
                       >
-                        แก้ไข
+                        <RefreshIcon className="w-3.5 h-3.5" />
+                        <span>สร้างใหม่</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(table)}
-                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 transition-all hover:bg-red-100"
-                      >
-                        ลบ
-                      </button>
+
+                      {/* ปุ่มแก้ไข & ลบ — เฉพาะเจ้าของร้าน (ADMIN) */}
+                      {isAdmin && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openForm(table)}
+                            className="rounded-lg border border-rule bg-white px-2.5 py-1.5 text-xs font-semibold text-slip transition-all hover:border-zinc-300 hover:bg-zinc-50 active:scale-95"
+                          >
+                            แก้ไข
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(table)}
+                            className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 transition-all hover:bg-red-100 active:scale-95"
+                          >
+                            ลบ
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -277,6 +354,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         </div>
       )}
 
+      {/* Modal เพิ่ม / แก้ไขโต๊ะ (เฉพาะ ADMIN) */}
       <Modal
         title={editing ? `แก้ไขโต๊ะ ${editing.table_no}` : 'เพิ่มโต๊ะใหม่'}
         open={modalOpen}
@@ -307,70 +385,28 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         </form>
       </Modal>
 
-      <Modal
-        title={qrTable ? `QR ของโต๊ะ ${qrTable.table_no}` : 'QR ของโต๊ะ'}
-        open={qrTable !== null}
+      {/* Modal พิมพ์ป้าย QR Code ระดับมืออาชีพ (ไม่มีหลุดขอบ) พร้อมสร้าง QR ใหม่ */}
+      <TableQrPrintModal
+        table={qrTable}
+        qrImage={qrImage}
+        tableUrl={qrTable ? buildTableUrl(qrTable.qr_token) : ''}
         onClose={() => setQrTable(null)}
-      >
-        {qrTable && (
-          <div className="flex flex-col gap-4">
-            <div className="printable-receipt hidden print:block text-center p-6 bg-white border border-gray-300 rounded-xl shadow-lg">
-              <h2 className="text-2xl font-black text-gray-900">ยินดีต้อนรับ</h2>
-              <p className="text-lg font-bold text-[#06C755] mt-1">โต๊ะ {qrTable.table_no}</p>
-              {qrImage && (
-                <img
-                  src={qrImage}
-                  alt={`QR สำหรับโต๊ะ ${qrTable.table_no}`}
-                  className="mx-auto my-4 w-64 h-64 border border-gray-200 rounded-xl p-3"
-                />
-              )}
-              <p className="text-sm font-semibold text-gray-700">สแกน QR Code เพื่อดูเมนูและสั่งอาหารได้ทันที</p>
-              <p className="text-xs text-gray-500 mt-1">ขอบคุณที่มาอุดหนุนครับ/ค่ะ</p>
-            </div>
+        onRegenerateSuccess={(updated) => {
+          setQrTable((prev) => (prev ? { ...prev, qr_token: updated.qr_token } : null));
+          load();
+        }}
+      />
 
-            {qrImage ? (
-              <img
-                src={qrImage}
-                alt={`QR สำหรับโต๊ะ ${qrTable.table_no}`}
-                className="mx-auto w-full max-w-[16rem] rounded-lg bg-char p-2 no-print"
-              />
-            ) : (
-              <div className="mx-auto h-64 w-64 animate-pulse rounded-lg bg-char no-print" />
-            )}
-
-            <div className="no-print">
-              <p className="text-sm text-slip-dim">ลิงก์ที่อยู่ใน QR</p>
-              <p className="num text-sm break-all text-slip">{buildTableUrl(qrTable.qr_token)}</p>
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-2 no-print">
-              <button
-                type="button"
-                onClick={() => setQrTable(null)}
-                className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
-              >
-                ปิด
-              </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="flex min-h-[44px] items-center gap-1.5 rounded-xl border border-rule bg-white px-4 font-bold text-sm text-slip shadow-sm hover:bg-char transition-colors"
-              >
-                <PrintIcon className="w-4 h-4" />
-                <span>พิมพ์ป้ายตั้งโต๊ะ</span>
-              </button>
-              <a
-                href={qrImage || '#'}
-                download={`qr-table-${qrTable.table_no}.png`}
-                className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 hover:bg-[#00A040] transition-colors"
-              >
-                <DownloadIcon className="w-4 h-4" />
-                <span>ดาวน์โหลด QR</span>
-              </a>
-            </div>
-          </div>
-        )}
-      </Modal>
+      {confirmConfig && (
+        <ConfirmModal
+          open={confirmConfig.open}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          tone={confirmConfig.tone}
+          onConfirm={confirmConfig.onConfirm}
+          onClose={() => setConfirmConfig(null)}
+        />
+      )}
     </div>
   );
 }

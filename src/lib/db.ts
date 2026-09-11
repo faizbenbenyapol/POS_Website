@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import type { Pool, PoolOptions, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 
 /**
  * เก็บ pool ไว้บน globalThis เพราะตอน `next dev` ไฟล์นี้จะถูกโหลดใหม่ทุกครั้งที่แก้โค้ด
@@ -7,29 +7,53 @@ import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
  */
 const globalForDb = globalThis as unknown as { posPool?: Pool };
 
-/** จำนวน connection สูงสุดที่เปิดค้างไว้พร้อมกัน — ร้านเดียวจอไม่กี่เครื่อง 10 พอ */
-const CONNECTION_LIMIT = 10;
+/**
+ * กำหนดขนาด connection pool เพื่อรองรับ concurrent queries
+ */
+const DEFAULT_CONNECTION_LIMIT = 20;
 
 /**
- * คืน connection pool ของ MySQL โดยสร้างครั้งเดียวแล้วใช้ซ้ำตลอดอายุโปรเซส
- * แยกเป็นฟังก์ชันแทนการสร้างตอน import เพื่อให้ error เรื่อง DATABASE_URL
- * เด้งตอนมีคนเรียกใช้จริง ไม่ใช่ตอน build
- *
- * @returns pool ที่พร้อมรับคำสั่ง query
- * @throws โยน error เมื่อไม่ได้ตั้งค่า DATABASE_URL ใน .env.local
+ * สร้างค่าคอนฟิกสำหรับ Connection Pool โดยรองรับทั้ง Local Environment และ Docker Container Network
  */
+function getPoolConfig(): PoolOptions {
+  const limit = Number(process.env.DB_CONNECTION_LIMIT) || DEFAULT_CONNECTION_LIMIT;
+
+  const baseConfig: PoolOptions = {
+    waitForConnections: true,
+    connectionLimit: limit,
+    maxIdle: Math.min(10, limit),
+    idleTimeout: 60000,
+    connectTimeout: 10000,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
+    charset: 'utf8mb4_unicode_ci',
+    timezone: 'local',
+    // ป้องกันปัญหาความคลาดเคลื่อนของทศนิยมเงิน
+    decimalNumbers: false,
+  };
+
+  // หากมีการกำหนด DATABASE_URL เต็มรูปแบบ ให้ใช้งานเป็นลำดับแรก
+  if (process.env.DATABASE_URL) {
+    return {
+      ...baseConfig,
+      uri: process.env.DATABASE_URL,
+    };
+  }
+
+  // อ่านค่าแยกตามตัวแปรสภาพแวดล้อม พร้อมค่า Fallback สำหรับ Local Development
+  return {
+    ...baseConfig,
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD ?? '',
+    database: process.env.DB_NAME || 'pos_qr',
+  };
+}
+
 export function getPool(): Pool {
   if (!globalForDb.posPool) {
-    const url = process.env.DATABASE_URL || 'mysql://root@127.0.0.1:3306/pos_qr';
-    globalForDb.posPool = mysql.createPool({
-      uri: url,
-      waitForConnections: true,
-      connectionLimit: CONNECTION_LIMIT,
-      charset: 'utf8mb4_unicode_ci',
-      timezone: 'local',
-      // ให้ DECIMAL คืนเป็น string เพื่อไม่ให้ทศนิยมเงินเพี้ยนจาก floating point
-      decimalNumbers: false,
-    });
+    globalForDb.posPool = mysql.createPool(getPoolConfig());
   }
   return globalForDb.posPool;
 }

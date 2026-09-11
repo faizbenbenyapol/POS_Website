@@ -50,6 +50,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   const { status } = parsed.data;
+
+  // การยกเลิกออเดอร์ทั้งใบ (Void Order) ต้องทำโดยเจ้าของร้าน/ผู้จัดการเท่านั้น เพื่อป้องกันการทุจริต
+  if (status === 'CANCELLED' && auth.user.role !== 'ADMIN') {
+    return apiError(
+      ERROR_CODES.FORBIDDEN,
+      'การยกเลิกออเดอร์ทั้งใบสงวนสิทธิ์เฉพาะเจ้าของร้าน (ADMIN) หากมีข้อผิดพลาดกรุณาแจ้งผู้จัดการ',
+      403,
+    );
+  }
   await execute(
     "UPDATE order_items SET status = ? WHERE order_id = ? AND status <> 'CANCELLED'",
     [status, id],

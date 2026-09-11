@@ -252,7 +252,7 @@ export default function TicketsPage() {
             setFormError('');
             setCreateOpen(true);
           }}
-          className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
+          className="min-h-[42px] rounded-xl bg-emerald-600 px-4 font-bold text-xs text-white shadow-xs transition-colors hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer"
         >
           <PlusIcon className="w-4 h-4" />
           <span>เปิดเรื่องใหม่</span>
@@ -422,7 +422,7 @@ export default function TicketsPage() {
                 <button
                   type="submit"
                   disabled={working}
-                  className="min-h-[44px] self-end rounded-xl bg-[#06C755] px-5 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-60"
+                  className="min-h-[42px] self-end rounded-xl bg-emerald-600 px-5 font-bold text-xs text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
                 >
                   {working ? 'กำลังส่ง…' : 'ส่งคำตอบ'}
                 </button>

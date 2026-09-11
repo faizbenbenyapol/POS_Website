@@ -90,3 +90,38 @@ export function addToCart(
   }
   return [...items, { ...addition, quantity: 1, note: '' }];
 }
+
+/**
+ * เพิ่มเมนูลงตะกร้าพร้อมระบุจำนวนและข้อความหมายเหตุพิเศษ (สไตล์ LINE MAN)
+ * หากมีเมนูเดียวกันและหมายเหตุเดียวกันเป๊ะ ให้บวกจำนวนเพิ่ม
+ *
+ * @param items - ตะกร้าปัจจุบัน
+ * @param addition - รายละเอียดเมนู พร้อมจำนวนและข้อความหมายเหตุ
+ * @returns ตะกร้าชุดใหม่
+ */
+export function addCustomizedToCart(
+  items: CartItem[],
+  addition: {
+    menuItemId: number;
+    name: string;
+    price: number;
+    quantity?: number;
+    note?: string;
+  },
+): CartItem[] {
+  const qty = Math.max(1, addition.quantity ?? 1);
+  const note = (addition.note ?? '').trim();
+
+  const existing = items.find(
+    (item) => item.menuItemId === addition.menuItemId && item.note.trim() === note,
+  );
+
+  if (existing) {
+    return items.map((item) =>
+      item === existing ? { ...item, quantity: item.quantity + qty } : item,
+    );
+  }
+
+  return [...items, { ...addition, quantity: qty, note }];
+}
+

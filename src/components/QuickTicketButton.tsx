@@ -33,8 +33,8 @@ export default function QuickTicketButton({
   category: 'ORDER' | 'FOOD' | 'PAYMENT' | 'SYSTEM' | 'OTHER';
   subject: string;
   detail: string;
-  idleLabel: string;
-  sentLabel: string;
+  idleLabel: React.ReactNode;
+  sentLabel: React.ReactNode;
   className: string;
 }) {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');

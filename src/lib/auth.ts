@@ -1,27 +1,18 @@
 import bcrypt from 'bcryptjs';
-import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import type { RowDataPacket } from 'mysql2/promise';
+import {
+  AUTH_COOKIE,
+  TOKEN_MAX_AGE_SECONDS,
+  readToken,
+  type UserRole,
+  type SessionUser,
+} from './auth/token';
 
-/** ชื่อ cookie ที่เก็บ JWT — เก็บแบบ httpOnly เพื่อให้ JavaScript ฝั่งเบราว์เซอร์อ่านไม่ได้ */
-export const AUTH_COOKIE = 'pos_session';
+export * from './auth/token';
 
-/** อายุ token 8 ชั่วโมง เท่ากับกะทำงาน 1 กะ หมดกะแล้วต้องล็อกอินใหม่ */
-const TOKEN_MAX_AGE_SECONDS = 8 * 60 * 60;
-
-/** ความแรงของ bcrypt — 10 รอบ เป็นค่าที่ปลอดภัยพอและยังล็อกอินไม่หน่วง */
+/** ความแรงของ bcrypt — 10 รอบ เพื่อความสมดุลระหว่างความปลอดภัยและ latency ตอนล็อกอิน */
 const BCRYPT_ROUNDS = 10;
-
-/** บทบาทผู้ใช้ฝั่งร้าน ตรงกับ ENUM ในตาราง users */
-export type UserRole = 'ADMIN' | 'STAFF';
-
-/** ข้อมูลผู้ใช้ที่ฝังอยู่ใน JWT — เก็บเท่าที่จำเป็น ไม่ใส่ข้อมูลอ่อนไหว */
-export type SessionUser = {
-  id: number;
-  username: string;
-  fullName: string;
-  role: UserRole;
-};
 
 /** แถวผู้ใช้ที่อ่านจากตาราง users ตอนตรวจรหัสผ่าน */
 type UserRow = RowDataPacket & {
@@ -33,17 +24,7 @@ type UserRow = RowDataPacket & {
   is_active: number;
 };
 
-/**
- * แปลง JWT_SECRET จาก .env.local เป็นคีย์ไบต์ที่ jose ใช้เซ็นและตรวจลายเซ็น
- * แยกเป็นฟังก์ชันเพื่อให้ error เด้งตอนเรียกใช้จริง ไม่ใช่ตอน build
- *
- * @returns คีย์ลับในรูป Uint8Array
- * @throws โยน error เมื่อยังไม่ได้ตั้งค่า JWT_SECRET
- */
-function getSecretKey(): Uint8Array {
-  const secret = process.env.JWT_SECRET || '8f3c1a94d27be5061fa9c8d43e27b105a6f0dc9e4b3812577ae6c0d9f41b2e83';
-  return new TextEncoder().encode(secret);
-}
+
 
 /**
  * เข้ารหัสรหัสผ่านด้วย bcrypt ก่อนบันทึกลงฐานข้อมูล
@@ -70,49 +51,7 @@ export async function verifyPassword(
   return bcrypt.compare(plainPassword, passwordHash);
 }
 
-/**
- * สร้าง JWT ที่ฝังข้อมูลผู้ใช้ไว้ ใช้เป็นบัตรผ่านสำหรับเส้นทาง /admin
- *
- * @param user - ข้อมูลผู้ใช้ที่ล็อกอินสำเร็จแล้ว
- * @returns ข้อความ token ที่เซ็นแล้ว
- */
-export async function createToken(user: SessionUser): Promise<string> {
-  return new SignJWT({ ...user })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setSubject(String(user.id))
-    .setIssuedAt()
-    .setExpirationTime(`${TOKEN_MAX_AGE_SECONDS}s`)
-    .sign(getSecretKey());
-}
 
-/**
- * ตรวจลายเซ็นและวันหมดอายุของ token แล้วถอดข้อมูลผู้ใช้ออกมา
- * ใช้ได้ทั้งใน middleware (Edge) และใน route handler เพราะ jose ไม่พึ่ง Node API
- *
- * @param token - ข้อความ JWT จาก cookie
- * @returns ข้อมูลผู้ใช้ หรือ null เมื่อ token ปลอม หมดอายุ หรือรูปแบบผิด
- */
-export async function readToken(token: string): Promise<SessionUser | null> {
-  try {
-    const { payload } = await jwtVerify(token, getSecretKey());
-    if (
-      typeof payload.id !== 'number' ||
-      typeof payload.username !== 'string' ||
-      typeof payload.fullName !== 'string' ||
-      (payload.role !== 'ADMIN' && payload.role !== 'STAFF')
-    ) {
-      return null;
-    }
-    return {
-      id: payload.id,
-      username: payload.username,
-      fullName: payload.fullName,
-      role: payload.role,
-    };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * อ่านผู้ใช้ที่ล็อกอินอยู่จาก cookie ของคำขอปัจจุบัน

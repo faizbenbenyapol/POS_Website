@@ -1,105 +1,28 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { TableSkeleton, EmptyState, ErrorState } from '@/components/DataState';
+import { TableSkeleton, ErrorState } from '@/components/DataState';
 import SalesTrend from '@/components/SalesTrend';
+import CustomSelect from '@/components/Select';
 import { apiFetch } from '@/lib/client';
 import { downloadCsvFile } from '@/lib/exportCsv';
-import { formatBaht, formatBahtWithSign, formatThaiTime } from '@/lib/format';
+import { CalendarIcon, RefreshIcon, DownloadIcon } from '@/components/Icons';
 
-import CustomSelect from '@/components/Select';
-
+import StaffOperationalView from '@/components/admin/dashboard/StaffOperationalView';
+import DashboardAlertBanners from '@/components/admin/dashboard/DashboardAlertBanners';
+import AdminKpiStrip from '@/components/admin/dashboard/AdminKpiStrip';
+import TopMenuLeaderboard from '@/components/admin/dashboard/TopMenuLeaderboard';
+import DashboardQuickNav from '@/components/admin/dashboard/DashboardQuickNav';
 import {
-  DownloadIcon,
-  MoneyIcon,
-  CheckIcon,
-  CalendarIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
-  RefreshIcon,
-  TableIcon,
-  CartIcon,
-  FoodMenuIcon,
-  TicketIcon,
-} from '@/components/Icons';
+  formatThaiMonthYear,
+  type DashboardData,
+} from '@/components/admin/dashboard/types';
 
-
-/** ออเดอร์ที่ค้างรอครัวรับนานเกินเกณฑ์ */
-type StaleOrder = {
-  id: number;
-  order_code: string;
-  table_no: string;
-  created_at: string;
-  waiting_minutes: number;
-};
-
-/** เมนูขายดีประจำเดือน ใช้วาดแท่งแนวนอน */
-type TopMenu = { item_name: string; quantity: number; amount: string };
-
-/** ยอดขาย 1 วันสำหรับกราฟเส้น */
-type TrendPoint = { sale_date: string; total: string };
-
-/** ข้อมูลทั้งชุดที่ GET /api/admin/dashboard คืนมา */
-type DashboardData = {
-  selectedMonth: string;
-  availableMonths: string[];
-  monthlyRevenue: number;
-  monthlyBillCount: number;
-  monthlyAvgBill: number;
-  prevMonth: string;
-  prevMonthlyRevenue: number;
-  prevMonthlyBillCount: number;
-  monthGrowthPercent: number;
-  todayRevenue: number;
-  todayBillCount: number;
-  yesterdayRevenue: number;
-  yesterdayBillCount: number;
-  todayOrderCount: number;
-  openTableCount: number;
-  unpaidAmount: number;
-  stalePendingMinutes: number;
-  staleOrders: StaleOrder[];
-  topMenus: TopMenu[];
-  salesTrend: TrendPoint[];
-  openTicketCount: number;
-  urgentOpenTicketCount: number;
-};
-
-/** ระยะเวลาระหว่างการดึงข้อมูลใหม่อัตโนมัติ */
+/** ระยะเวลาระหว่างการดึงข้อมูลใหม่อัตโนมัติ (30 วินาที) */
 const POLL_INTERVAL_MS = 30000;
 
 /**
- * แปลงข้อความรูปแบบ YYYY-MM เป็นชื่อเดือนภาษาไทยพร้อม พ.ศ.
- * เช่น 2026-09 -> กันยายน 2569
- */
-function formatThaiMonthYear(yearMonth: string): string {
-  if (!yearMonth || !/^\d{4}-\d{2}$/.test(yearMonth)) return yearMonth;
-  const [y, m] = yearMonth.split('-').map(Number);
-  const date = new Date(y, m - 1, 1);
-  return new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' }).format(date);
-}
-
-/**
- * เขียนประโยคเปรียบเทียบยอดขายวันนี้กับเมื่อวานเป็นภาษาคน
- */
-function compareWithYesterday(today: number, yesterday: number): string {
-  if (yesterday === 0 && today === 0) {
-    return 'ยังไม่มียอดขายทั้งวันนี้และเมื่อวาน';
-  }
-  if (yesterday === 0) {
-    return `เมื่อวานยังไม่มีบิลปิด วันนี้เก็บได้แล้ว ${formatBahtWithSign(today)}`;
-  }
-  const diff = today - yesterday;
-  if (diff === 0) {
-    return `เท่ากับเมื่อวานพอดี (เมื่อวาน ${formatBahtWithSign(yesterday)})`;
-  }
-  const direction = diff > 0 ? 'มากกว่า' : 'น้อยกว่า';
-  return `${direction}เมื่อวาน ${formatBahtWithSign(Math.abs(diff))} (เมื่อวาน ${formatBahtWithSign(yesterday)})`;
-}
-
-/**
- * หน้า Dashboard สรุปผลการดำเนินงานและยอดขายประจำเดือน
+ * แดชบอร์ดศูนย์กลางของระบบ POS รองรับทั้งมุมมองพนักงาน (STAFF) และเจ้าของร้าน (ADMIN)
  */
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -107,9 +30,7 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  /**
-   * ดึงข้อมูลสรุปทั้งชุดจากเซิร์ฟเวอร์
-   */
+  /** ดึงข้อมูลสรุป Dashboard จากเซิร์ฟเวอร์ */
   const load = useCallback(async (targetMonth: string, showSkeleton: boolean) => {
     if (showSkeleton) {
       setData(null);
@@ -123,7 +44,7 @@ export default function DashboardPage() {
       const result = await apiFetch<DashboardData>(url);
       if (result.ok) {
         setData(result.data);
-        if (!targetMonth) {
+        if (!result.data.isStaff && !targetMonth) {
           setSelectedMonth(result.data.selectedMonth);
         }
         setLoadError('');
@@ -144,15 +65,14 @@ export default function DashboardPage() {
   }, [load, selectedMonth]);
 
   const handleMonthChange = (newMonth: string) => {
+    if (data?.isStaff) return;
     setSelectedMonth(newMonth);
     load(newMonth, true);
   };
 
-  /**
-   * สร้างและดาวน์โหลดรายงานสรุปยอดขายของ Dashboard เป็นไฟล์ CSV
-   */
+  /** สร้างและดาวน์โหลดรายงานสรุปยอดขายของ Dashboard เป็นไฟล์ CSV */
   function handleExportCsv() {
-    if (!data) return;
+    if (!data || data.isStaff) return;
     const filename = `sales-report-${data.selectedMonth}.csv`;
     const thaiMonthStr = formatThaiMonthYear(data.selectedMonth);
 
@@ -195,7 +115,9 @@ export default function DashboardPage() {
     );
   }
 
-  const maxQuantity = Math.max(1, ...data.topMenus.map((menu) => menu.quantity));
+  if (data.isStaff) {
+    return <StaffOperationalView data={data} />;
+  }
 
   return (
     <div className="flex flex-col gap-5 pb-8">
@@ -244,210 +166,40 @@ export default function DashboardPage() {
       </div>
 
       {/* Alert Banners */}
-      {data.urgentOpenTicketCount > 0 && (
-        <div role="alert" className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-xs">
-          <div className="flex items-center gap-2 text-red-700">
-            <TicketIcon className="w-3.5 h-3.5 shrink-0" />
-            <span>
-              มีเรื่องแจ้งปัญหาเร่งด่วนที่ยังไม่มีใครรับ{' '}
-              <strong>{data.urgentOpenTicketCount}</strong> เรื่อง
-            </span>
-          </div>
-          <Link href="/admin/tickets" className="font-semibold text-red-700 underline underline-offset-2 hover:text-red-800">
-            ดูเรื่องแจ้ง
-          </Link>
-        </div>
-      )}
+      <DashboardAlertBanners
+        urgentOpenTicketCount={data.urgentOpenTicketCount}
+        staleOrders={data.staleOrders}
+        stalePendingMinutes={data.stalePendingMinutes}
+      />
 
-      {data.staleOrders.length > 0 && (
-        <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs">
-          <p className="font-semibold text-amber-800">
-            ออเดอร์รอครัวรับเกิน {data.stalePendingMinutes} นาที:{' '}
-            {data.staleOrders.map((o) => (
-              <span key={o.id} className="ml-2 font-normal text-amber-700">
-                โต๊ะ <strong>{o.table_no}</strong> ({o.waiting_minutes} นาที)
-              </span>
-            ))}
-          </p>
-          <Link href="/admin/orders" className="mt-1 block font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-900">
-            ไปกระดานออเดอร์
-          </Link>
-        </div>
-      )}
+      {/* KPI Metric Strip */}
+      <AdminKpiStrip data={data} />
 
-      {/* KPI Strip */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {/* Monthly Revenue — hero stat */}
-        <div className="col-span-2 rounded-lg border border-zinc-200 bg-white p-5">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">
-            ยอดขายประจำเดือน · {formatThaiMonthYear(data.selectedMonth)}
-          </p>
-          <p className="num mt-1.5 text-3xl font-bold text-zinc-900 tracking-tight">
-            {formatBahtWithSign(data.monthlyRevenue)}
-          </p>
-          <div className="mt-2 flex items-center gap-3">
-            <span className={`inline-flex items-center gap-1 rounded text-xs font-semibold px-1.5 py-0.5 ${
-              data.monthGrowthPercent >= 0
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-700'
-            }`}>
-              {data.monthGrowthPercent >= 0 ? (
-                <TrendingUpIcon className="w-3 h-3" />
-              ) : (
-                <TrendingDownIcon className="w-3 h-3" />
-              )}
-              {data.monthGrowthPercent >= 0 ? '+' : ''}{data.monthGrowthPercent.toFixed(1)}%
-            </span>
-            <span className="text-xs text-zinc-400">จากเดือนก่อน ({formatBaht(data.prevMonthlyRevenue)})</span>
-          </div>
-          <div className="mt-3 flex gap-5 border-t border-zinc-100 pt-3">
+      {/* Sales Trend Chart + Top 5 Menus Leaderboard */}
+      <div className="grid gap-5 lg:grid-cols-12">
+        <section className="col-span-12 lg:col-span-8 flex flex-col gap-3">
+          <div className="flex items-center justify-between px-0.5">
             <div>
-              <p className="text-[11px] text-zinc-400">จำนวนบิล</p>
-              <p className="num text-sm font-semibold text-zinc-800">{data.monthlyBillCount} บิล</p>
+              <h2 className="text-sm font-bold text-zinc-900">วิเคราะห์ยอดขายรายวัน</h2>
+              <p className="text-xs text-zinc-400">
+                {formatThaiMonthYear(data.selectedMonth)} · ข้อมูลเรียลไทม์
+              </p>
             </div>
-            <div>
-              <p className="text-[11px] text-zinc-400">เฉลี่ยต่อบิล</p>
-              <p className="num text-sm font-semibold text-zinc-800">{formatBaht(data.monthlyAvgBill)}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Today Revenue */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-4">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">ยอดวันนี้</p>
-          <p className="num mt-1.5 text-2xl font-bold text-zinc-900">{formatBahtWithSign(data.todayRevenue)}</p>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">
-            {compareWithYesterday(data.todayRevenue, data.yesterdayRevenue)}
-          </p>
-          <div className="mt-2 flex items-center justify-between border-t border-zinc-100 pt-2">
-            <span className="text-[11px] text-zinc-400">บิลวันนี้</span>
-            <span className="num text-xs font-semibold text-zinc-700">{data.todayBillCount} บิล</span>
-          </div>
-        </div>
-
-        {/* Live operational stats */}
-        <div className="rounded-lg border border-zinc-200 bg-white p-4">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">สถานะตอนนี้</p>
-          <div className="mt-2 flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-                <CartIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>ออเดอร์วันนี้</span>
-              </div>
-              <span className="num text-xs font-semibold text-zinc-800">{data.todayOrderCount} ใบ</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-                <TableIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>โต๊ะเปิดอยู่</span>
-              </div>
-              <span className="num text-xs font-semibold text-zinc-800">{data.openTableCount} โต๊ะ</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-                <MoneyIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>ค้างชำระ</span>
-              </div>
-              <span className={`num text-xs font-semibold ${data.unpaidAmount > 0 ? 'text-amber-700' : 'text-zinc-800'}`}>
-                {formatBahtWithSign(data.unpaidAmount)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-                <TicketIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>แจ้งปัญหา</span>
-              </div>
-              <span className={`num text-xs font-semibold ${data.openTicketCount > 0 ? 'text-red-600' : 'text-zinc-800'}`}>
-                {data.openTicketCount} เรื่อง
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Chart + Top Menu */}
-      <div className="grid gap-4 md:grid-cols-12">
-        {/* Sales Trend */}
-        <section className="rounded-lg border border-zinc-200 bg-white p-5 md:col-span-8">
-          <div className="mb-4 flex items-start justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-zinc-800">ยอดขายรายวัน</h2>
-              <p className="text-xs text-zinc-400">{formatThaiMonthYear(data.selectedMonth)}</p>
-            </div>
-            <span className="rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-500">
-              {data.salesTrend.length} วันมียอด
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+              {data.salesTrend.length} วันมียอดเข้า
             </span>
           </div>
           <SalesTrend points={data.salesTrend} selectedMonth={data.selectedMonth} />
         </section>
 
-        {/* Top 5 Menus */}
-        <section className="rounded-lg border border-zinc-200 bg-white p-5 md:col-span-4 flex flex-col">
-          <div className="mb-4">
-            <h2 className="text-sm font-semibold text-zinc-800">5 เมนูขายดี</h2>
-            <p className="text-xs text-zinc-400">{formatThaiMonthYear(data.selectedMonth)}</p>
-          </div>
-
-          {data.topMenus.length === 0 ? (
-            <EmptyState message="ยังไม่มีรายการอาหารที่สั่งในเดือนนี้" />
-          ) : (
-            <ol className="flex flex-col gap-3">
-              {data.topMenus.map((menu, index) => (
-                <li key={menu.item_name} className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-4 shrink-0 text-xs font-semibold text-zinc-400">{index + 1}</span>
-                      <span className="truncate text-xs font-medium text-zinc-800">{menu.item_name}</span>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 text-xs">
-                      <span className="num font-semibold text-zinc-800">{menu.quantity}</span>
-                      <span className="text-zinc-400">จาน</span>
-                    </div>
-                  </div>
-                  <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-100">
-                    <div
-                      className="h-full rounded-full bg-green-600"
-                      style={{ width: `${(menu.quantity / maxQuantity) * 100}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-
-          <div className="mt-auto pt-5 border-t border-zinc-100">
-            <Link
-              href="/pos"
-              className="flex w-full h-9 items-center justify-center gap-1.5 rounded-md bg-green-600 text-xs font-semibold text-white transition-colors hover:bg-green-700"
-            >
-              <CheckIcon className="w-3.5 h-3.5" />
-              หน้าขายหน้าร้าน (POS)
-            </Link>
-          </div>
-        </section>
+        <TopMenuLeaderboard
+          topMenus={data.topMenus}
+          selectedMonth={data.selectedMonth}
+        />
       </div>
 
       {/* Quick Navigation */}
-      <section className="grid gap-2 sm:grid-cols-2 md:grid-cols-4">
-        {[
-          { href: '/admin/orders', icon: CartIcon, label: 'กระดานออเดอร์', sub: 'ติดตามสถานะอาหาร' },
-          { href: '/admin/tables', icon: TableIcon, label: 'จัดการโต๊ะ', sub: 'เปิดโต๊ะ พิมพ์ QR code' },
-          { href: '/admin/menu', icon: FoodMenuIcon, label: 'เมนูอาหาร', sub: 'เพิ่มเมนู ปรับราคา' },
-          { href: '/admin/tickets', icon: TicketIcon, label: 'แจ้งปัญหา', sub: 'เรื่องร้องเรียน' },
-        ].map(({ href, icon: Icon, label, sub }) => (
-          <Link
-            key={href}
-            href={href}
-            className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-4 py-3 transition-colors hover:bg-zinc-50 hover:border-zinc-300"
-          >
-            <Icon className="w-4 h-4 shrink-0 text-zinc-400" />
-            <div>
-              <p className="text-xs font-medium text-zinc-800">{label}</p>
-              <p className="text-[11px] text-zinc-400">{sub}</p>
-            </div>
-          </Link>
-        ))}
-      </section>
+      <DashboardQuickNav />
     </div>
   );
 }

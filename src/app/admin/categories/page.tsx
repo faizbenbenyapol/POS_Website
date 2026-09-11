@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import Modal from '@/components/Modal';
+import ConfirmModal from '@/components/ConfirmModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { TextField, NumberField, CheckboxField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
@@ -38,6 +40,8 @@ export default function CategoriesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ role: string; fullName: string } | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
 
   /**
    * โหลดรายการหมวดหมู่จากเซิร์ฟเวอร์ใหม่ทั้งชุด
@@ -55,6 +59,9 @@ export default function CategoriesPage() {
 
   useEffect(() => {
     load();
+    apiFetch<{ role: string; fullName: string }>('/api/auth/me').then((res) => {
+      if (res.ok) setCurrentUser(res.data);
+    });
   }, [load]);
 
   /**
@@ -113,21 +120,20 @@ export default function CategoriesPage() {
     load();
   }
 
+  function handleDelete(category: Category) {
+    setDeletingCategory(category);
+  }
+
   /**
-   * ลบหมวดหมู่ ถามยืนยันก่อนเสมอเพราะเป็นการกระทำที่ย้อนกลับไม่ได้
-   * ถ้าเซิร์ฟเวอร์เปลี่ยนเป็นปิดใช้งาน จะแสดงเหตุผลที่ได้กลับมาให้ผู้ใช้อ่าน
-   *
-   * @param category - หมวดหมู่ที่จะลบ
-   * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือลบหรือปิดใช้งานแล้วรีโหลดตาราง
+   * ดำเนินการลบหมวดหมู่จริงหลังจากยืนยันใน ConfirmModal
    */
-  async function handleDelete(category: Category) {
-    const confirmed = window.confirm(
-      `ต้องการลบหมวดหมู่ "${category.name}" ใช่หรือไม่\nถ้าหมวดนี้มีเมนูอยู่ ระบบจะเปลี่ยนเป็นปิดใช้งานแทนการลบ`,
-    );
-    if (!confirmed) return;
+  async function executeDelete() {
+    if (!deletingCategory) return;
+    const target = deletingCategory;
+    setDeletingCategory(null);
 
     const result = await apiFetch<{ mode: string; message: string }>(
-      `/api/admin/categories/${category.id}`,
+      `/api/admin/categories/${target.id}`,
       { method: 'DELETE' },
     );
     setNotice(
@@ -136,6 +142,31 @@ export default function CategoriesPage() {
         : { tone: 'error', message: result.message },
     );
     if (result.ok) load();
+  }
+
+  if (currentUser && currentUser.role !== 'ADMIN') {
+    return (
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center shadow-xs">
+        <h2 className="text-base font-bold text-amber-900">หน้านี้สงวนสิทธิ์เฉพาะเจ้าของร้าน (ADMIN)</h2>
+        <p className="mt-1 text-xs text-amber-700">
+          พนักงานไม่มีสิทธิ์จัดการโครงสร้างหมวดหมู่ กรุณาใช้งานผ่านเมนูปฏิบัติการ
+        </p>
+        <div className="mt-4 flex justify-center gap-2">
+          <Link
+            href="/admin/orders"
+            className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-colors cursor-pointer"
+          >
+            ไปกระดานออเดอร์
+          </Link>
+          <Link
+            href="/admin/tables"
+            className="rounded-xl border border-rule bg-white px-4 py-2 text-xs font-bold text-slip shadow-xs hover:bg-zinc-50"
+          >
+            ไปโต๊ะและ QR
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -148,7 +179,7 @@ export default function CategoriesPage() {
         <button
           type="button"
           onClick={() => openForm()}
-          className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
+          className="min-h-[42px] rounded-xl bg-emerald-600 px-4 font-bold text-xs text-white shadow-xs transition-colors hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer"
         >
           <PlusIcon className="w-4 h-4" />
           <span>เพิ่มหมวดหมู่</span>
@@ -170,7 +201,7 @@ export default function CategoriesPage() {
             <button
               type="button"
               onClick={() => openForm()}
-              className="min-h-[44px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] flex items-center gap-1.5"
+              className="min-h-[44px] rounded-xl bg-emerald-600 px-4 font-bold text-sm text-white shadow-xs transition-colors hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer"
             >
               <PlusIcon className="w-4 h-4" />
               <span>เพิ่มหมวดหมู่แรก</span>
@@ -211,7 +242,7 @@ export default function CategoriesPage() {
                       <button
                         type="button"
                         onClick={() => openForm(category)}
-                        className="rounded-lg border border-rule bg-paper px-3 py-1 text-xs font-semibold text-slip transition-all hover:border-[#06C755] hover:text-[#06C755]"
+                        className="rounded-lg border border-rule bg-paper px-3 py-1 text-xs font-semibold text-slip transition-colors hover:border-slate-400 hover:text-slate-900 cursor-pointer"
                       >
                         แก้ไข
                       </button>
@@ -262,6 +293,16 @@ export default function CategoriesPage() {
           />
         </form>
       </Modal>
+
+      <ConfirmModal
+        open={deletingCategory !== null}
+        title="ยืนยันการลบหมวดหมู่"
+        message={`ต้องการลบหมวดหมู่ "${deletingCategory?.name}" ใช่หรือไม่?\nถ้าหมวดนี้มีเมนูอยู่ ระบบจะเปลี่ยนเป็นปิดใช้งานแทนการลบ เพื่อรักษาประวัติการสั่งซื้อ`}
+        confirmText="ยืนยันลบ"
+        tone="danger"
+        onConfirm={executeDelete}
+        onClose={() => setDeletingCategory(null)}
+      />
     </div>
   );
 }

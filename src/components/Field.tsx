@@ -188,18 +188,18 @@ export function FormActions({
           {error}
         </p>
       )}
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2.5 pt-2">
         <button
           type="button"
           onClick={onCancel}
-          className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
+          className="min-h-[42px] rounded-xl border border-rule bg-white px-4 py-2 text-xs font-semibold text-slip-dim hover:bg-slate-50 hover:text-slip transition-colors cursor-pointer"
         >
           ยกเลิก
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="min-h-[44px] rounded-xl bg-[#06C755] px-5 font-bold text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-60"
+          className="min-h-[42px] rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white transition-colors hover:bg-emerald-700 disabled:opacity-60 cursor-pointer shadow-xs"
         >
           {saving ? 'กำลังบันทึก…' : submitLabel}
         </button>

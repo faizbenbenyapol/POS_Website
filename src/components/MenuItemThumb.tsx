@@ -1,7 +1,11 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+
 /**
  * รูปย่อของเมนู 1 รายการ ใช้ทั้งฝั่งลูกค้าและฝั่งแอดมิน
- * ถ้าไม่มี image_url จะโชว์กล่องสีพื้นพร้อมตัวอักษรแรกของชื่อเมนูแทน
- * เพื่อไม่ให้จอว่างเปล่าหรือขึ้นไอคอนรูปหักเวลาโหลดรูปไม่ได้
+ * ถ้าไม่มี image_url หรือโหลดรูปไม่สำเร็จ (onError) จะโชว์กล่องสีพื้นพร้อมตัวอักษรแรกของชื่อเมนูแทน
+ * เพื่อไม่ให้จอว่างเปล่าหรือขึ้นไอคอนรูปหักเวลาลิงก์รูปมีปัญหา
  *
  * @param name - ชื่อเมนู ใช้ทำ alt text และตัวอักษรสำรอง
  * @param imageUrl - ลิงก์รูปภาพ ถ้าไม่มีให้ส่ง null
@@ -21,14 +25,22 @@ export default function MenuItemThumb({
   size?: string;
   rounded?: string;
 }) {
-  if (imageUrl) {
+  const [hasError, setHasError] = useState(false);
+
+  // รีเซ็ตสถานะเมื่อ URL มีการเปลี่ยนแปลง
+  useEffect(() => {
+    setHasError(false);
+  }, [imageUrl]);
+
+  if (imageUrl && !hasError) {
     return (
-      // ใช้ <img> ธรรมดาเพราะเป็นลิงก์ที่แอดมินกรอกเองจากภายนอก next/image กำหนดโดเมนล่วงหน้าไม่ได้
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={imageUrl}
         alt={name}
-        className={`${size} ${rounded} shrink-0 bg-char object-cover`}
+        onError={() => setHasError(true)}
+        className={`${size} ${rounded} shrink-0 bg-char object-cover transition-opacity duration-200`}
+        loading="lazy"
       />
     );
   }
@@ -36,7 +48,7 @@ export default function MenuItemThumb({
   return (
     <div
       aria-hidden="true"
-      className={`${size} ${rounded} flex shrink-0 items-center justify-center bg-flame/10 text-lg font-semibold text-flame`}
+      className={`${size} ${rounded} flex shrink-0 items-center justify-center bg-emerald-50/80 text-lg font-bold text-emerald-700 border border-emerald-100 select-none`}
     >
       {name.trim().charAt(0) || '?'}
     </div>

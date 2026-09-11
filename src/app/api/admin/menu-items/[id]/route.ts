@@ -44,6 +44,36 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 
 /**
+ * สลับสถานะ มีขาย / หมด ของเมนูอาหาร
+ * ทั้ง ADMIN และ STAFF สามารถกดสลับได้ เพื่อให้พนักงานหน้าร้านและครัวแจ้งของหมดได้ทันที
+ */
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  const auth = await requireStaff();
+  if (!auth.ok) return authFailureResponse(auth.reason);
+
+  const id = parseId((await context.params).id);
+  if (!id) {
+    return apiError(ERROR_CODES.VALIDATION_ERROR, 'รหัสเมนูไม่ถูกต้อง กรุณากลับไปเลือกใหม่');
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { isAvailable?: boolean };
+  if (typeof body.isAvailable !== 'boolean') {
+    return apiError(ERROR_CODES.VALIDATION_ERROR, 'สถานะความพร้อมจำหน่ายไม่ถูกต้อง');
+  }
+
+  const result = await execute('UPDATE menu_items SET is_available = ? WHERE id = ?', [
+    body.isAvailable ? 1 : 0,
+    id,
+  ]);
+
+  if (result.affectedRows === 0) {
+    return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบเมนูนี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
+  }
+
+  return apiOk({ id, isAvailable: body.isAvailable });
+}
+
+/**
  * ลบเมนู ถ้าเคยถูกสั่งแล้วจะเปลี่ยนเป็นปิดขาย (is_available = 0) แทนการลบจริง
  * เพราะ order_items อ้างถึงเมนูนี้อยู่ ถ้าลบจริงบิลเก่าจะพัง
  *

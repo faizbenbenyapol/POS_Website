@@ -47,7 +47,7 @@ export const menuItemSchema = z.object({
   name: z.string().trim().min(1, MESSAGES.required).max(120, 'ชื่อเมนูยาวเกิน 120 ตัวอักษร'),
   description: z.string().trim().max(255, 'คำอธิบายยาวเกิน 255 ตัวอักษร').optional().or(z.literal('')),
   price: z.coerce.number().min(0, 'ราคาต้องไม่ติดลบ').max(99999999, 'ราคาสูงเกินกว่าที่ระบบรองรับ'),
-  imageUrl: z.string().trim().max(255).optional().or(z.literal('')),
+  imageUrl: z.string().trim().max(1000, 'ลิงก์รูปภาพยาวเกิน 1,000 ตัวอักษร').optional().or(z.literal('')),
   isAvailable: z.boolean().default(true),
 });
 

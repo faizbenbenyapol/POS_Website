@@ -62,7 +62,7 @@ function LoginForm() {
           onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
           autoCapitalize="none"
-          className="min-h-[46px] rounded-xl border border-rule bg-char px-4 text-sm text-slip placeholder:text-slip-dim focus:border-[#06C755]"
+          className="min-h-[46px] rounded-xl border border-rule bg-char px-4 text-sm text-slip placeholder:text-slip-dim focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 transition-all"
           placeholder="เช่น admin หรือ staff01"
         />
       </div>
@@ -78,7 +78,7 @@ function LoginForm() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
-          className="min-h-[46px] rounded-xl border border-rule bg-char px-4 text-sm text-slip focus:border-[#06C755]"
+          className="min-h-[46px] rounded-xl border border-rule bg-char px-4 text-sm text-slip focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 transition-all"
           placeholder="••••••••"
         />
       </div>
@@ -92,7 +92,7 @@ function LoginForm() {
       <button
         type="submit"
         disabled={submitting}
-        className="mt-2 min-h-[48px] rounded-xl bg-[#06C755] px-4 font-bold text-sm text-white shadow-md shadow-[#06C755]/20 transition-all hover:bg-[#00A040] disabled:opacity-60"
+        className="mt-2 min-h-[48px] rounded-xl bg-emerald-600 px-4 font-bold text-sm text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
       >
         {submitting ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
       </button>
@@ -109,13 +109,13 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-8 px-6 py-10">
-      <div className="lm-card overflow-hidden p-0 shadow-xl">
-        <div className="lm-header-gradient p-6 text-white text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-2xl shadow-inner">
-            <LockIcon className="w-7 h-7 text-white" />
+      <div className="lm-card overflow-hidden p-0 shadow-xl border border-slate-200">
+        <div className="bg-slate-900 p-6 text-white text-center border-b border-slate-800">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 shadow-inner">
+            <LockIcon className="w-7 h-7 text-emerald-400" />
           </div>
           <h1 className="mt-3 text-xl font-bold text-white">เข้าสู่ระบบหลังบ้าน</h1>
-          <p className="mt-1 text-xs text-white/80">สำหรับพนักงานและผู้ดูแลร้านเท่านั้น</p>
+          <p className="mt-1 text-xs text-slate-400">สำหรับพนักงานและผู้ดูแลร้านเท่านั้น</p>
         </div>
 
         <div className="p-6">

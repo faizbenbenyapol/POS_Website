@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { AUTH_COOKIE, readToken } from '@/lib/auth';
+import { AUTH_COOKIE, readToken } from '@/lib/auth/token';
 
 /**
  * กันเส้นทาง /admin ไม่ให้เข้าถึงได้ถ้ายังไม่ได้ล็อกอิน และเด้งคนที่ล็อกอินแล้ว
@@ -23,9 +23,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // ล็อกอินอยู่แล้วแต่เปิดหน้า login → พาเข้าหลังบ้านเลย
+  // ล็อกอินอยู่แล้วแต่เปิดหน้า login → พาเข้าหลังบ้านตามบทบาท
   if (pathname === '/login' && user) {
-    return NextResponse.redirect(new URL('/admin', request.url));
+    const target = user.role === 'ADMIN' ? '/admin' : '/admin/orders';
+    return NextResponse.redirect(new URL(target, request.url));
+  }
+
+  // พนักงาน (STAFF) พยายามเข้าหน้าจัดการผู้ใช้ระบบ → ส่งไปกระดานออเดอร์
+  if (pathname.startsWith('/admin/users') && user?.role === 'STAFF') {
+    return NextResponse.redirect(new URL('/admin/orders', request.url));
   }
 
   return NextResponse.next();

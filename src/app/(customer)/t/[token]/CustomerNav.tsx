@@ -23,7 +23,7 @@ export default function CustomerNav({ token }: { token: string }) {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 lm-glass-bar border-t border-rule/80 px-2 py-1 shadow-lg">
+    <nav className="fixed inset-x-0 bottom-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-1.5 shadow-[0_-2px_10px_rgba(15,23,42,0.05)]">
       <ul className="mx-auto flex max-w-md items-center justify-around">
         {CUSTOMER_TABS.map((tab) => {
           const href = `/t/${token}${tab.suffix}`;
@@ -34,14 +34,14 @@ export default function CustomerNav({ token }: { token: string }) {
               <Link
                 href={href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl text-xs transition-all ${
+                className={`flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl text-xs transition-colors cursor-pointer ${
                   active
-                    ? 'font-bold text-[#06C755] bg-[#E8F9EE]'
-                    : 'text-slip-dim hover:text-slip hover:bg-char'
+                    ? 'font-bold text-emerald-800 bg-emerald-50'
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
-                <IconComponent className="w-5 h-5" />
-                <span>{tab.label}</span>
+                <IconComponent className={`w-5 h-5 ${active ? 'text-emerald-700' : 'text-slate-400'}`} />
+                <span className="leading-none">{tab.label}</span>
               </Link>
             </li>
           );

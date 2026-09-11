@@ -1,31 +1,34 @@
 @import 'tailwindcss';
 
 /* =============================================================
-   Design tokens — Flat, Data-Dense, No-AI
-   เน้นความชัดเจน ไม่มี gradient ไม่มี glow ไม่มี blur
-   ตัวเลขโดด ข้อมูลอ่านง่ายก่อน สวยงามเป็นผลพลอยได้
-   สไตล์อ้างอิง: Stripe Dashboard, Linear, Vercel
+   Design Tokens — Commercial-Grade Flat & High-Contrast
+   เน้นความชัดเจน คอนทราสต์สูง อ่านง่ายแม้มองจากระยะ 1 เมตร
+   สไตล์อ้างอิง: Stripe Dashboard, Linear, Toast POS
    ============================================================= */
 @theme static {
-  --color-char: #f5f5f5;       /* พื้นหลังหน้า app */
-  --color-griddle: #fafafa;    /* พื้นหลัง sidebar/secondary */
-  --color-paper: #ffffff;      /* พื้นหลัง card / panel */
-  --color-rule: #e4e4e7;       /* เส้นคั่น / ขอบ */
-  --color-slip: #18181b;       /* ตัวอักษรหลัก */
-  --color-slip-dim: #71717a;   /* ตัวอักษรรอง label */
-  --color-flame: #16a34a;      /* green-600 สีหลักของระบบ */
-  --color-served: #16a34a;     /* สถานะเสิร์ฟแล้ว */
+  --color-char: #f8fafc;       /* พื้นหลังหลัก slate-50 */
+  --color-griddle: #f1f5f9;    /* พื้นหลัง secondary/sidebar slate-100 */
+  --color-paper: #ffffff;      /* พื้นหลัง card / modal / panel */
+  --color-rule: #e2e8f0;       /* เส้นขอบ slate-200 คมชัด */
+  --color-rule-dark: #cbd5e1;  /* เส้นขอบเข้ม slate-300 */
+  --color-slip: #0f172a;       /* ตัวหนังสือหลัก slate-900 */
+  --color-slip-dim: #64748b;   /* ตัวหนังสือรอง slate-500 */
+  --color-flame: #059669;      /* สีหลัก emerald-600 คมชัดแบบเชิงพาณิชย์ */
+  --color-flame-hover: #047857;/* emerald-700 */
+  --color-served: #059669;     /* สถานะเสิร์ฟแล้ว */
   --color-waiting: #d97706;    /* สถานะกำลังทำ amber-600 */
-  --color-void: #dc2626;       /* ยกเลิก/ผิดพลาด red-600 */
+  --color-void: #dc2626;       /* สถานะยกเลิก red-600 */
+  --color-brand-dark: #0f172a; /* สีกรมท่าเข้มสำหรับ Admin Header */
 
-  /* ฟอนต์: IBM Plex Sans Thai ทุกข้อความ, IBM Plex Mono เฉพาะตัวเลขเงิน/เวลา/รหัส */
+  /* ฟอนต์: สากลและรองรับภาษาไทยคมชัด ตัวเลขเงิน/เวลา/รหัสใช้ Tabular Mono */
   --font-sans: 'IBM Plex Sans Thai', 'Sukhumvit Set', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  /* มุมโค้งแบบ product-grade — โค้งน้อย ดูเป็นธุรกิจ ไม่ใช่ marketing page */
-  --radius-sm: 6px;   /* ปุ่มเล็ก badge tag */
-  --radius-md: 8px;   /* ปุ่มมาตรฐาน input dropdown */
-  --radius-lg: 10px;  /* card panel */
+  /* มุมโค้งระดับพาณิชย์ — ไม่กลมมนจนเป็นของเล่น */
+  --radius-sm: 6px;   /* Tag, Badge, ปุ่มขนาดเล็ก */
+  --radius-md: 8px;   /* ปุ่มมาตรฐาน, Dropdown, ช่องกรอก */
+  --radius-lg: 12px;  /* การ์ด, คอนเทนเนอร์ */
+  --radius-xl: 16px;  /* หน้าต่าง Modal */
 }
 
 /* รีเซ็ตพื้นฐาน */
@@ -37,29 +40,32 @@ body {
   background-color: var(--color-char);
   color: var(--color-slip);
   font-family: var(--font-sans);
-  line-height: 1.6;
-  letter-spacing: 0;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Tailwind reset ล้าง margin:auto ของ dialog ออก — ต้องกู้คืนให้ browser center dialog ให้อัตโนมัติ */
+/* Tailwind reset ล้าง margin:auto ของ dialog ออก — คืนค่าให้เบราว์เซอร์จัดกึ่งกลาง */
 dialog {
   margin: auto;
 }
 
-/* หัวข้อไม่ต้องการ line-height สูง */
+/* Typography Hierarchy คมชัด */
 h1, h2, h3, h4 {
-  line-height: 1.3;
-  letter-spacing: -0.01em;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--color-slip);
+  font-weight: 700;
 }
 
-/* ตัวเลขเงิน เวลา และรหัสต่าง ๆ ใช้ความกว้างตัวเลขเท่ากันเพื่อให้คอลัมน์ตรงกัน */
+/* ตัวเลขเงิน เวลา และรหัส ใช้ความกว้างตัวเลขเท่ากันเพื่อคอลัมน์ที่ตรงกัน */
 .num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
-/* focus ring มองเห็นชัด */
+/* Focus Ring ชัดเจนเพื่อการเข้าถึง (Accessibility) */
 :focus-visible {
   outline: 2px solid var(--color-flame);
   outline-offset: 2px;
@@ -77,35 +83,68 @@ h1, h2, h3, h4 {
 }
 
 /* =============================================================
-   App-wide utility classes — ไม่มี gradient ไม่มี blur ไม่มี glow
+   App-wide Utility Classes — สะอาดตา ไร้แสงฟุ้งกระจาย ไร้สีลูกกวาด
    ============================================================= */
 
-/* Header ของ sidebar admin — solid color ไม่มี gradient */
+/* Header หลังบ้าน Admin — สีกรมท่าเข้ม Slate มั่นคง ดูจริงจัง */
 .lm-header-solid {
-  background-color: #16a34a;
+  background-color: var(--color-brand-dark);
 }
 
-/* Header ของหน้าลูกค้า (ฝั่ง /t/[token]) — ยังคง gradient เพราะใช้กับมือถือ */
+/* Header หน้าสั่งอาหารลูกค้า — สีกรมท่าเข้มพร้อมขอบล่าง Emerald สุภาพ */
 .lm-header-gradient {
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  background-color: #0f172a;
 }
 
 /* Card มาตรฐาน */
 .lm-card {
   background-color: #ffffff;
   border: 1px solid var(--color-rule);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04);
 }
 
 /* =============================================================
-   Print styles — สำหรับสลิปใบเสร็จ 80mm
+   Print styles — สำหรับสลิปใบเสร็จ 80mm และป้ายตั้งโต๊ะ
    ============================================================= */
 @media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
   body * {
     visibility: hidden;
   }
+  /* ปลดล็อค HTML5 <dialog> ให้ไม่ถูก transform ตัดขอบตอนพิมพ์ */
+  dialog {
+    position: static !important;
+    transform: none !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+  dialog::backdrop {
+    display: none !important;
+  }
   .printable-receipt,
-  .printable-receipt * {
+  .printable-receipt *,
+  .printable-tent-card,
+  .printable-tent-card * {
     visibility: visible;
   }
   .printable-receipt {
@@ -118,6 +157,16 @@ h1, h2, h3, h4 {
     background: #ffffff !important;
     color: #000000 !important;
     font-size: 12px;
+    box-shadow: none !important;
+  }
+  .printable-tent-card {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0 auto;
+    background: #ffffff !important;
+    color: #000000 !important;
     box-shadow: none !important;
   }
   .no-print {
