@@ -1,9 +1,10 @@
 import type { NextRequest } from 'next/server';
 import type { PoolConnection, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
-import { apiOk, apiError, ERROR_CODES } from '@/lib/api';
+import { apiOk, apiError, serverError, ERROR_CODES } from '@/lib/api';
 import { query, withTransaction } from '@/lib/db';
 import { findTableSession, resolveTableSession, sessionErrorMessage } from '@/lib/session';
 import { createOrderSchema, firstErrorMessage } from '@/lib/validation';
+import { getBusinessDayRange } from '@/lib/format';
 
 /** คำนำหน้ารหัสออเดอร์ รวมกับวันที่และลำดับแล้วยาว 12 ตัวพอดีตามคอลัมน์ order_code */
 const ORDER_CODE_PREFIX = 'OD';
@@ -48,16 +49,14 @@ type OrderItemRow = RowDataPacket & {
  * @returns รหัสออเดอร์ยาว 12 ตัวอักษร
  */
 async function generateOrderCode(conn: PoolConnection): Promise<string> {
+  const todayRange = getBusinessDayRange();
   const [rows] = await conn.execute<(RowDataPacket & { seq: number })[]>(
-    'SELECT COUNT(*) AS seq FROM orders WHERE DATE(created_at) = CURDATE() FOR UPDATE',
+    'SELECT COUNT(*) AS seq FROM orders WHERE created_at >= ? AND created_at < ? FOR UPDATE',
+    [todayRange.startSql, todayRange.endSql],
   );
   const sequence = String((rows[0]?.seq ?? 0) + 1).padStart(ORDER_SEQUENCE_DIGITS, '0');
-  const today = new Date();
-  const datePart = [
-    String(today.getFullYear()).slice(2),
-    String(today.getMonth() + 1).padStart(2, '0'),
-    String(today.getDate()).padStart(2, '0'),
-  ].join('');
+  const [y, m, d] = todayRange.businessDate.split('-');
+  const datePart = `${y.slice(2)}${m}${d}`;
   return `${ORDER_CODE_PREFIX}${datePart}${sequence}`;
 }
 
@@ -152,8 +151,7 @@ export async function POST(request: NextRequest) {
     }
     return apiOk(created, 201);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
-    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
+    return serverError(err, 'POST /api/public/orders');
   }
 }
 
@@ -198,7 +196,6 @@ export async function GET(request: NextRequest) {
 
     return apiOk({ tableNo: found.tableNo, orders, items, total });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
-    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
+    return serverError(err, 'GET /api/public/orders');
   }
 }

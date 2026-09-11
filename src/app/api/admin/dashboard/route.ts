@@ -1,8 +1,9 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import type { NextRequest } from 'next/server';
-import { apiOk, apiError, ERROR_CODES, authFailureResponse } from '@/lib/api';
+import { apiOk, apiError, serverError, ERROR_CODES, authFailureResponse } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
+import { getBusinessDayRange, getYesterdayBusinessDayRange } from '@/lib/format';
 
 /** ออเดอร์ที่ค้างสถานะรอครัวรับนานเกินกี่นาทีถึงจะขึ้นแถบเตือน */
 const STALE_PENDING_MINUTES = 10;
@@ -39,11 +40,15 @@ export async function GET(request: NextRequest) {
     const auth = await requireStaff();
     if (!auth.ok) return authFailureResponse(auth.reason);
 
+    const todayRange = getBusinessDayRange();
+    const yesterdayRange = getYesterdayBusinessDayRange();
+
     // หากเป็นพนักงาน (STAFF) ให้ส่งเฉพาะข้อมูลปฏิบัติการหน้าร้าน (ไม่เปิดเผยตัวเลขรายได้/ยอดขาย)
     if (auth.user.role === 'STAFF') {
       const [orderCount, openTables, staleOrders, tickets] = await Promise.all([
         queryOne<RowDataPacket & { total: number }>(
-          "SELECT COUNT(*) AS total FROM orders WHERE DATE(created_at) = CURDATE() AND status <> 'CANCELLED'",
+          "SELECT COUNT(*) AS total FROM orders WHERE created_at >= ? AND created_at < ? AND status <> 'CANCELLED'",
+          [todayRange.startSql, todayRange.endSql],
         ),
         queryOne<RowDataPacket & { total: number }>(
           "SELECT COUNT(*) AS total FROM table_sessions WHERE status = 'OPEN'",
@@ -120,19 +125,22 @@ export async function GET(request: NextRequest) {
          SELECT DISTINCT DATE_FORMAT(created_at, '%Y-%m') AS month FROM orders
          ORDER BY month DESC`,
       ),
-      // 4. ยอดขายวันนี้
+      // 4. ยอดขายวันนี้ (ตามวันทำการ 04:00 - 03:59 น.)
       queryOne<RevenueRow>(
         `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
-           FROM payments WHERE DATE(paid_at) = CURDATE()`,
+           FROM payments WHERE paid_at >= ? AND paid_at < ?`,
+        [todayRange.startSql, todayRange.endSql],
       ),
-      // 5. ยอดขายเมื่อวาน
+      // 5. ยอดขายเมื่อวาน (ตามวันทำการก่อนหน้า)
       queryOne<RevenueRow>(
         `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
-           FROM payments WHERE DATE(paid_at) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)`,
+           FROM payments WHERE paid_at >= ? AND paid_at < ?`,
+        [yesterdayRange.startSql, yesterdayRange.endSql],
       ),
       // 6. จำนวนออเดอร์วันนี้
       queryOne<RowDataPacket & { total: number }>(
-        "SELECT COUNT(*) AS total FROM orders WHERE DATE(created_at) = CURDATE() AND status <> 'CANCELLED'",
+        "SELECT COUNT(*) AS total FROM orders WHERE created_at >= ? AND created_at < ? AND status <> 'CANCELLED'",
+        [todayRange.startSql, todayRange.endSql],
       ),
       // 7. โต๊ะที่เปิดอยู่
       queryOne<RowDataPacket & { total: number }>(
@@ -235,7 +243,6 @@ export async function GET(request: NextRequest) {
       urgentOpenTicketCount: Number(tickets?.urgent_open_count ?? 0),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดภายในระบบ';
-    return apiError(ERROR_CODES.SERVER_ERROR, message, 500);
+    return serverError(err, 'GET /api/admin/dashboard');
   }
 }

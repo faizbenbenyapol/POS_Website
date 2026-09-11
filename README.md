@@ -44,10 +44,17 @@ DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=
 DB_NAME=pos_qr
-JWT_SECRET=8f3c1a94d27be5061fa9c8d43e27b105a6f0dc9e4b3812577ae6c0d9f41b2e83
+# สร้าง Secret ใหม่ด้วยคำสั่ง: openssl rand -hex 32
+JWT_SECRET=your_generated_secret_key_here
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 APP_BASE_URL=http://localhost:3000
+# เวลาตัดรอบวันทำการ (0-23 นาฬิกา, ค่าเริ่มต้น 4 คือ 04:00 น.)
+BUSINESS_DAY_CUTOFF_HOUR=4
 ```
+
+> [!NOTE]
+> **รอบวันทำการ (Business Day)**: ระบบใช้เวลาตัดรอบวันทำการตาม `BUSINESS_DAY_CUTOFF_HOUR` (ค่าเริ่มต้น 04:00 น.) ดังนั้น ออเดอร์และสลิปที่สร้างหลังเที่ยงคืนแต่ยังไม่ถึงเวลาตัดรอบ (เช่น เวลา 01:00 น.) จะแสดงรหัสออเดอร์และสรุปยอดเป็นของวันทำการก่อนหน้า ซึ่งเป็นพฤติกรรมการทำงานที่ถูกต้องและตั้งใจของระบบร้านอาหาร เพื่อให้ยอดขายและลำดับบิลสอดคล้องกับรอบบัญชีเดียวกัน
+
 
 #### 3. ติดตั้ง Dependencies และรัน Development Server
 ```bash

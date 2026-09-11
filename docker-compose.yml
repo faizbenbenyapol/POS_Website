@@ -10,13 +10,15 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      TZ: Asia/Bangkok
       DB_HOST: db
       DB_PORT: 3306
       DB_USER: ${DB_USER:-pos_user}
       DB_PASSWORD: ${DB_PASSWORD:-pos_secret_password}
       DB_NAME: ${DB_NAME:-pos_qr}
       DB_CONNECTION_LIMIT: ${DB_CONNECTION_LIMIT:-20}
-      JWT_SECRET: ${JWT_SECRET:-8f3c1a94d27be5061fa9c8d43e27b105a6f0dc9e4b3812577ae6c0d9f41b2e83}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      BUSINESS_DAY_CUTOFF_HOUR: ${BUSINESS_DAY_CUTOFF_HOUR:-4}
       NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-http://localhost:3000}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
     depends_on:
@@ -33,7 +35,9 @@ services:
       - --default-authentication-plugin=mysql_native_password
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+07:00
     environment:
+      TZ: Asia/Bangkok
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secret_password}
       MYSQL_DATABASE: ${DB_NAME:-pos_qr}
       MYSQL_USER: ${DB_USER:-pos_user}
