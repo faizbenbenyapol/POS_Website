@@ -42,6 +42,8 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # คัดลอกเฉพาะ Standalone Artifacts ที่จำเป็นสำหรับ Production
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/db ./db
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -49,4 +51,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "node scripts/migrate.js && node server.js"]

@@ -91,11 +91,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   }
 
   const usage = await queryOne<RowDataPacket & { activity_count: number }>(
-    `SELECT (SELECT COUNT(*) FROM table_sessions s WHERE s.closed_by = ?)
+    `SELECT (SELECT COUNT(*) FROM table_sessions s WHERE s.closed_by = ? OR s.opened_by = ?)
           + (SELECT COUNT(*) FROM payments p WHERE p.received_by = ?)
           + (SELECT COUNT(*) FROM tickets k WHERE k.created_by = ? OR k.assigned_to = ?)
           + (SELECT COUNT(*) FROM ticket_replies r WHERE r.user_id = ?) AS activity_count`,
-    [id, id, id, id, id],
+    [id, id, id, id, id, id],
   );
 
   if (Number(usage?.activity_count ?? 0) > 0) {

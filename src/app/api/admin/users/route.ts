@@ -28,7 +28,7 @@ export async function GET() {
 
   const rows = await query<UserListRow>(
     `SELECT u.id, u.username, u.full_name, u.role, u.is_active, u.created_at,
-            (SELECT COUNT(*) FROM table_sessions s WHERE s.closed_by = u.id)
+            (SELECT COUNT(*) FROM table_sessions s WHERE s.closed_by = u.id OR s.opened_by = u.id)
           + (SELECT COUNT(*) FROM payments p WHERE p.received_by = u.id)
           + (SELECT COUNT(*) FROM tickets k WHERE k.created_by = u.id OR k.assigned_to = u.id)
           + (SELECT COUNT(*) FROM ticket_replies r WHERE r.user_id = u.id) AS activity_count
