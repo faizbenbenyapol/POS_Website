@@ -26,6 +26,8 @@ export type ReceiptData = {
   items: PrintItem[];
   totalAmount?: string | number;
   paymentMethod?: string;
+  cashTendered?: number;
+  changeDue?: number;
   paidAt?: string;
   cashierName?: string;
 };
@@ -219,10 +221,24 @@ export default function ReceiptPrintModal({
             ${
               data.paymentMethod
                 ? `
-              <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 4px;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 2px;">
                 <span>วิธีชำระเงิน:</span>
                 <span>${PAYMENT_METHOD_NAMES[data.paymentMethod] || data.paymentMethod}</span>
               </div>
+              ${
+                data.paymentMethod === 'CASH' && data.cashTendered !== undefined
+                  ? `
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 2px;">
+                  <span>รับเงินสด (Cash Tendered):</span>
+                  <span style="font-family: monospace; font-weight: 700;">฿${formatBaht(data.cashTendered)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 4px;">
+                  <span>เงินทอน (Change Due):</span>
+                  <span style="font-family: monospace; font-weight: 700;">฿${formatBaht(data.changeDue ?? 0)}</span>
+                </div>
+              `
+                  : ''
+              }
             `
                 : ''
             }
@@ -279,7 +295,7 @@ export default function ReceiptPrintModal({
                   : 'text-zinc-600 hover:text-zinc-900'
               }`}
             >
-              <span>📋 ทั้งหมด</span>
+              <span>ทั้งหมด</span>
               <span className="rounded-full bg-zinc-200 px-1.5 py-0.2 text-[10px] text-zinc-700">
                 {data.items.length}
               </span>
@@ -447,12 +463,26 @@ export default function ReceiptPrintModal({
                 </>
               )}
               {data.paymentMethod && (
-                <div className="flex justify-between text-[11px] text-slip-dim pt-1 border-t border-dashed border-rule">
-                  <span>ชำระด้วย:</span>
-                  <span className="font-semibold text-slip">
-                    {PAYMENT_METHOD_NAMES[data.paymentMethod] || data.paymentMethod}
-                  </span>
-                </div>
+                <>
+                  <div className="flex justify-between text-[11px] text-slip-dim pt-1 border-t border-dashed border-rule">
+                    <span>ชำระด้วย:</span>
+                    <span className="font-semibold text-slip">
+                      {PAYMENT_METHOD_NAMES[data.paymentMethod] || data.paymentMethod}
+                    </span>
+                  </div>
+                  {data.paymentMethod === 'CASH' && data.cashTendered !== undefined && (
+                    <>
+                      <div className="flex justify-between text-[11px] text-slip-dim">
+                        <span>รับเงินสด:</span>
+                        <span className="num font-semibold text-slip">฿{formatBaht(data.cashTendered)}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-slip-dim">
+                        <span>เงินทอน:</span>
+                        <span className="num font-bold text-emerald-700">฿{formatBaht(data.changeDue ?? 0)}</span>
+                      </div>
+                    </>
+                  )}
+                </>
               )}
               <div className="mt-3 text-center text-[11px] text-slip-dim">
                 ขอบคุณที่ใช้บริการ / Thank you

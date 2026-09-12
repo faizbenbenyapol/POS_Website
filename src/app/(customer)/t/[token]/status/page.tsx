@@ -234,7 +234,7 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
               href={`/t/${token}`}
               className="flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-rule bg-char px-4 font-bold text-sm text-slip hover:bg-rule transition-colors cursor-pointer"
             >
-              <span>➕ สั่งเพิ่ม</span>
+              <span>+ สั่งเพิ่ม</span>
             </Link>
             <div className="flex-1">
               <QuickTicketButton

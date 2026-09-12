@@ -6,6 +6,7 @@ import QRCode from 'qrcode';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
 import TableQrPrintModal from '@/components/TableQrPrintModal';
+import BatchTableQrPrintModal from '@/components/BatchTableQrPrintModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { TextField, NumberField, CheckboxField, SelectField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
@@ -52,6 +53,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
   const [saving, setSaving] = useState(false);
   const [qrTable, setQrTable] = useState<DiningTable | null>(null);
   const [qrImage, setQrImage] = useState('');
+  const [batchPrintOpen, setBatchPrintOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{
     open: boolean;
     title: string;
@@ -315,6 +317,17 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {items && items.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setBatchPrintOpen(true)}
+              className="min-h-[42px] rounded-xl border border-slate-300 bg-white px-3.5 font-bold text-xs text-slate-700 shadow-xs transition-colors hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+              title="พิมพ์ป้าย QR Code ทุกโต๊ะพร้อมกัน (จัดหน้า A4 หรือสลิปความร้อน)"
+            >
+              <PrintIcon className="w-4 h-4 text-emerald-600" />
+              <span>พิมพ์ QR ทั้งหมด</span>
+            </button>
+          )}
           {!isAdmin && currentUser && (
             <span className="rounded-full bg-zinc-100 border border-rule px-3 py-1 text-xs text-slip-dim font-medium">
               สิทธิ์พนักงาน: เปิดโต๊ะ, ย้ายโต๊ะ, ตรวจสอบโต๊ะ และดู/พิมพ์ QR
@@ -616,7 +629,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
               disabled={Boolean(currentUser?.branchId)}
               options={branches.map((b) => ({
                 value: String(b.id),
-                label: `🏢 ${b.name} (${b.code})`,
+                label: `${b.name} (${b.code})`,
               }))}
             />
           )}
@@ -723,6 +736,26 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
           onClose={() => setConfirmConfig(null)}
         />
       )}
+
+      {/* Modal พิมพ์ป้าย QR Code ทั้งหมดแบบกลุ่ม (Batch Print) */}
+      <BatchTableQrPrintModal
+        open={batchPrintOpen}
+        onClose={() => setBatchPrintOpen(false)}
+        tables={
+          items
+            ? items
+                .filter((t) => t.is_active === 1)
+                .map((t) => ({
+                  id: t.id,
+                  branch_name: t.branch_name,
+                  table_no: t.table_no,
+                  seats: t.seats,
+                  qr_token: t.qr_token,
+                }))
+            : []
+        }
+        baseUrl={baseUrl}
+      />
     </div>
   );
 }

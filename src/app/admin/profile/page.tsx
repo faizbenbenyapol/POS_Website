@@ -205,17 +205,17 @@ export default function ProfilePage() {
                 </h2>
                 {isHq && (
                   <span className="rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[11px] font-black text-amber-900">
-                    👑 เจ้าของร้าน / สำนักงานใหญ่ (HQ)
+                    เจ้าของร้าน / สำนักงานใหญ่ (HQ)
                   </span>
                 )}
                 {isBranchManager && (
                   <span className="rounded-full bg-blue-100 border border-blue-300 px-2.5 py-0.5 text-[11px] font-black text-blue-900">
-                    🏢 ผู้จัดการสาขา
+                    ผู้จัดการสาขา
                   </span>
                 )}
                 {!isHq && !isBranchManager && (
                   <span className="rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[11px] font-black text-emerald-900">
-                    👨‍🍳 พนักงานประจำสาขา
+                    พนักงานประจำสาขา
                   </span>
                 )}
               </div>

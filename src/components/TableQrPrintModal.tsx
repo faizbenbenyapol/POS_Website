@@ -83,7 +83,7 @@ export default function TableQrPrintModal({
           <!-- Header ร้าน -->
           <div style="margin-bottom: 16px;">
             <div style="display: inline-block; background: #ecfdf5; color: #059669; font-weight: 700; font-size: 13px; padding: 4px 14px; border-radius: 9999px; margin-bottom: 8px;">
-              ${table.branch_name ? `🏢 ${table.branch_name}` : 'ครัวบ้านไร่ • Krua Baan Rai'}
+              ${table.branch_name ? table.branch_name : 'ครัวบ้านไร่ • Krua Baan Rai'}
             </div>
             <h1 style="font-size: 26px; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2;">สแกนสั่งอาหาร</h1>
             <p style="font-size: 13px; color: #64748b; margin-top: 4px;">ไม่ต้องรอเรียกพนักงาน • สั่งได้สะดวก รวดเร็ว</p>
@@ -185,7 +185,7 @@ export default function TableQrPrintModal({
         <div className="rounded-2xl border border-rule bg-white p-4 shadow-xs">
           <div className="mx-auto flex max-w-[280px] flex-col items-center text-center">
             <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-800">
-              {table.branch_name ? `🏢 ${table.branch_name}` : 'ครัวบ้านไร่'}
+              {table.branch_name ? table.branch_name : 'ครัวบ้านไร่'}
             </span>
             <div className="my-2 rounded-xl bg-slate-900 px-4 py-1.5 text-white shadow-xs">
               <span className="text-xs font-semibold">โต๊ะ </span>

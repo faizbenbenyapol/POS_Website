@@ -243,7 +243,7 @@ export default function UsersPage() {
                   <td className="px-4 py-3">
                     {user.branch_id === null ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
-                        <span>🌐 สำนักงานใหญ่ (HQ)</span>
+                        <span>สำนักงานใหญ่ (HQ)</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
@@ -415,10 +415,10 @@ export default function UsersPage() {
             value={form.branchId}
             onChange={(value) => setForm({ ...form, branchId: value })}
             options={[
-              { value: '', label: '🌐 สำนักงานใหญ่ (HQ / เข้าถึงทุกสาขา)' },
+              { value: '', label: 'สำนักงานใหญ่ (HQ / เข้าถึงทุกสาขา)' },
               ...branches.map((b) => ({
                 value: String(b.id),
-                label: `🏢 ${b.name} (${b.code})`,
+                label: `${b.name} (${b.code})`,
               })),
             ]}
           />

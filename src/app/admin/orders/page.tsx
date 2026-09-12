@@ -217,14 +217,14 @@ function getOrderAge(createdAt: string): {
   if (minutes < 20) {
     return {
       minutes,
-      label: `⚠️ รอนาน ${minutes} น.`,
+      label: `รอนาน ${minutes} น.`,
       badgeClass: 'bg-amber-100 text-amber-900 border-amber-300 font-bold',
       isUrgent: true,
     };
   }
   return {
     minutes,
-    label: `🔥 เร่งด่วน! ${minutes} น.`,
+    label: `เร่งด่วน! ${minutes} น.`,
     badgeClass: 'bg-red-100 text-red-900 border-red-400 font-black animate-pulse',
     isUrgent: true,
   };
@@ -321,6 +321,7 @@ function OrdersBoardContent() {
   });
   const [checkoutOrder, setCheckoutOrder] = useState<BoardOrder | null>(null);
   const [payMethod, setPayMethod] = useState('CASH');
+  const [cashTendered, setCashTendered] = useState<string>('');
   const [checkingOut, setCheckingOut] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printType, setPrintType] = useState<'KITCHEN' | 'RECEIPT'>('KITCHEN');
@@ -569,6 +570,10 @@ function OrdersBoardContent() {
     const sessionOrders = orders?.filter((o) => o.session_id === checkoutOrder.session_id) ?? [];
     const sessionOrderIds = new Set(sessionOrders.map((o) => o.id));
     const sessionItems = items.filter((i) => sessionOrderIds.has(i.order_id) && i.status !== 'CANCELLED');
+    const checkoutTotal = sessionItems.reduce((sum, i) => sum + Number(i.unit_price) * i.quantity, 0);
+
+    const tenderNum = parseFloat(cashTendered) || checkoutTotal;
+    const changeDue = Math.max(0, tenderNum - checkoutTotal);
 
     setNotice({
       tone: 'success',
@@ -590,11 +595,14 @@ function OrdersBoardContent() {
       })),
       totalAmount: result.data.total,
       paymentMethod: payMethod,
+      cashTendered: payMethod === 'CASH' ? tenderNum : undefined,
+      changeDue: payMethod === 'CASH' ? changeDue : undefined,
       orderCode: checkoutOrder.order_code,
       paidAt: new Date().toISOString(),
       cashierName: currentUser?.fullName,
     });
     setCheckoutOrder(null);
+    setCashTendered('');
     setPrintModalOpen(true);
     load(false);
   }
@@ -903,6 +911,7 @@ function OrdersBoardContent() {
                 onClick={() => {
                   setCheckoutOrder(order);
                   setPayMethod('CASH');
+                  setCashTendered('');
                 }}
                 className="min-h-[36px] rounded-xl border border-emerald-600 bg-emerald-50 px-3 font-bold text-xs text-emerald-800 hover:bg-emerald-600 hover:text-white transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
               >
@@ -997,7 +1006,7 @@ function OrdersBoardContent() {
               onClick={() => setAuditModalOpen(true)}
               className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-rule bg-white px-3.5 text-xs font-bold text-slip transition-colors hover:bg-zinc-50 shadow-2xs cursor-pointer"
             >
-              <span>📜 บันทึกประวัติการยกเลิก</span>
+              <span>บันทึกประวัติการยกเลิก</span>
             </button>
           )}
         </div>
@@ -1117,7 +1126,7 @@ function OrdersBoardContent() {
                     soundTone === 'CHIME' ? 'bg-white text-zinc-900 shadow-xs font-bold' : 'text-zinc-500 hover:text-zinc-900'
                   }`}
                 >
-                  🔔 ละมุน (Chime)
+                  ละมุน (Chime)
                 </button>
                 <button
                   type="button"
@@ -1126,7 +1135,7 @@ function OrdersBoardContent() {
                     soundTone === 'BELL' ? 'bg-white text-amber-900 shadow-xs font-bold' : 'text-zinc-500 hover:text-zinc-900'
                   }`}
                 >
-                  🛎️ กริ่งครัว (Bell)
+                  กริ่งครัว (Bell)
                 </button>
                 <button
                   type="button"
@@ -1135,7 +1144,7 @@ function OrdersBoardContent() {
                     soundTone === 'ALERT' ? 'bg-white text-red-700 shadow-xs font-bold' : 'text-zinc-500 hover:text-zinc-900'
                   }`}
                 >
-                  🚨 เตือนด่วน (Alert)
+                  เตือนด่วน (Alert)
                 </button>
               </div>
             </div>
@@ -1161,7 +1170,7 @@ function OrdersBoardContent() {
             className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
           >
             <VolumeIcon className="w-3.5 h-3.5" />
-            <span>🔊 ทดสอบเสียง ({soundTone})</span>
+            <span>ทดสอบเสียง ({soundTone})</span>
           </button>
         </div>
       )}
@@ -1178,7 +1187,7 @@ function OrdersBoardContent() {
                 : 'text-zinc-600 hover:text-zinc-900'
             }`}
           >
-            <span>📋 ทุกแผนก</span>
+            <span>ทุกแผนก</span>
             <span className="rounded-full bg-zinc-200 px-1.5 py-0.2 text-[10px] text-zinc-700 font-mono">
               {totalPendingDishes}
             </span>
@@ -1193,7 +1202,7 @@ function OrdersBoardContent() {
             }`}
           >
             <CookingIcon className="w-3.5 h-3.5" />
-            <span>🍳 ครัวอาหาร</span>
+            <span>ครัวอาหาร</span>
             <span
               className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
                 stationFilter === 'KITCHEN' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'
@@ -1212,7 +1221,7 @@ function OrdersBoardContent() {
             }`}
           >
             <DrinkIcon className="w-3.5 h-3.5" />
-            <span>🍹 บาร์เครื่องดื่ม</span>
+            <span>บาร์เครื่องดื่ม</span>
             <span
               className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
                 stationFilter === 'BAR' ? 'bg-cyan-700 text-white' : 'bg-cyan-100 text-cyan-800'
@@ -1225,8 +1234,8 @@ function OrdersBoardContent() {
 
         <div className="text-xs text-slip-dim">
           {stationFilter === 'ALL' && 'แสดงรายการทั้งแผนกครัวอาหารและบาร์เครื่องดื่ม'}
-          {stationFilter === 'KITCHEN' && '🍳 แสดงเฉพาะคิวจานอาหารของครัว'}
-          {stationFilter === 'BAR' && '🍹 แสดงเฉพาะคิวแก้วเครื่องดื่มของบาร์น้ำ'}
+          {stationFilter === 'KITCHEN' && 'แสดงเฉพาะคิวจานอาหารของครัว'}
+          {stationFilter === 'BAR' && 'แสดงเฉพาะคิวแก้วเครื่องดื่มของบาร์น้ำ'}
         </div>
       </div>
 
@@ -1269,7 +1278,7 @@ function OrdersBoardContent() {
           <div className="mt-3 pt-2.5 border-t border-amber-200/60">
             {prepSummary.length === 0 ? (
               <p className="py-2 text-center text-xs font-medium text-emerald-800">
-                ✨ เคลียร์ออเดอร์ครบถ้วนแล้ว ไม่มีรายการค้างทำในขณะนี้
+                เคลียร์ออเดอร์ครบถ้วนแล้ว ไม่มีรายการค้างทำในขณะนี้
               </p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
@@ -1284,9 +1293,9 @@ function OrdersBoardContent() {
                           {item.name}
                         </span>
                         {item.isBar ? (
-                          <span className="text-[9px] font-bold text-cyan-700">🍹 บาร์น้ำ</span>
+                          <span className="text-[9px] font-bold text-cyan-700">บาร์น้ำ</span>
                         ) : (
-                          <span className="text-[9px] font-bold text-amber-700">🍳 ครัว</span>
+                          <span className="text-[9px] font-bold text-amber-700">ครัว</span>
                         )}
                       </div>
                       <span className="flex-shrink-0 rounded-md bg-amber-600 px-1.5 py-0.5 text-xs font-black text-white">
@@ -1437,7 +1446,10 @@ function OrdersBoardContent() {
       <Modal
         title={checkoutOrder ? `ปิดบิลโต๊ะ ${checkoutOrder.table_no}` : 'ปิดบิล'}
         open={checkoutOrder !== null}
-        onClose={() => setCheckoutOrder(null)}
+        onClose={() => {
+          setCheckoutOrder(null);
+          setCashTendered('');
+        }}
       >
         {checkoutOrder && (() => {
           const sessionOrders = orders?.filter((o) => o.session_id === checkoutOrder.session_id) ?? [];
@@ -1445,35 +1457,153 @@ function OrdersBoardContent() {
           const sessionItems = items.filter((i) => sessionOrderIds.has(i.order_id) && i.status !== 'CANCELLED');
           const checkoutTotal = sessionItems.reduce((sum, i) => sum + Number(i.unit_price) * i.quantity, 0);
 
+          const tenderNum = parseFloat(cashTendered) || 0;
+          const isShort = payMethod === 'CASH' && cashTendered !== '' && tenderNum < checkoutTotal;
+          const changeDue = Math.max(0, tenderNum - checkoutTotal);
+          const isCashValid = payMethod !== 'CASH' || tenderNum >= checkoutTotal;
+
           return (
             <div className="flex flex-col gap-4">
-              <p className="text-slip-dim">
+              <p className="text-slip-dim text-xs">
                 ระบบจะรวมทุกใบสั่งของรอบการนั่งนี้ ยกเว้นรายการที่ยกเลิก แล้วปิดโต๊ะให้ว่าง
                 เมื่อปิดแล้วจะแก้ไขออเดอร์ของรอบนี้ไม่ได้อีก
               </p>
+
+              {/* ยอดรวมสุทธิที่ต้องชำระ */}
+              <div className="rounded-xl bg-slate-50 p-3 border border-rule flex items-center justify-between">
+                <span className="font-bold text-sm text-slate-700">ยอดรวมทั้งสิ้น</span>
+                <span className="num text-2xl font-black text-emerald-700">
+                  ฿{formatBaht(checkoutTotal)}
+                </span>
+              </div>
+
               <SelectField
                 id="checkout-method"
                 label="วิธีชำระเงิน"
                 value={payMethod}
-                onChange={setPayMethod}
+                onChange={(m) => {
+                  setPayMethod(m);
+                  if (m === 'CASH' && !cashTendered) {
+                    setCashTendered(checkoutTotal.toString());
+                  }
+                }}
                 options={PAYMENT_METHODS}
               />
-              {payMethod === 'TRANSFER' && (
-                <PromptPayQR amount={checkoutTotal} />
+
+              {/* ส่วนคำนวณเงินสดและเงินทอน เมื่อเลือก CASH */}
+              {payMethod === 'CASH' && (
+                <div className="flex flex-col gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="cash-tendered" className="font-bold text-xs text-slate-800">
+                      รับเงินสดมา (บาท)
+                    </label>
+                    <span className="text-[11px] text-slate-500">กดปุ่มด่วนหรือพิมพ์จำนวนเงิน</span>
+                  </div>
+
+                  {/* ปุ่มด่วนรับเงิน */}
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCashTendered(checkoutTotal.toString())}
+                      className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      พอดี (฿{formatBaht(checkoutTotal)})
+                    </button>
+                    {[100, 500, 1000].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setCashTendered(amt.toString())}
+                        className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition-colors cursor-pointer shadow-2xs ${
+                          tenderNum === amt
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        ฿{amt}
+                      </button>
+                    ))}
+                    {[20, 50, 100].map((inc) => (
+                      <button
+                        key={`inc-${inc}`}
+                        type="button"
+                        onClick={() => {
+                          const curr = parseFloat(cashTendered) || 0;
+                          setCashTendered((curr + inc).toString());
+                        }}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                        title={`บวกเพิ่ม ${inc} บาท`}
+                      >
+                        +{inc}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* ช่องกรอกยอดเงิน */}
+                  <div className="relative">
+                    <input
+                      id="cash-tendered"
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={cashTendered}
+                      onChange={(e) => setCashTendered(e.target.value)}
+                      placeholder={checkoutTotal.toString()}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base font-bold text-slate-900 shadow-2xs focus:border-emerald-600 focus:outline-hidden focus:ring-1 focus:ring-emerald-600"
+                    />
+                  </div>
+
+                  {/* แสดงสถานะเงินทอน */}
+                  {isShort && (
+                    <div className="rounded-lg bg-red-50 p-2.5 text-xs font-bold text-red-600 border border-red-200 flex items-center justify-between">
+                      <span>ยอดเงินยังไม่พอ (ขาดอีก)</span>
+                      <span className="num font-black text-sm">฿{formatBaht(checkoutTotal - tenderNum)}</span>
+                    </div>
+                  )}
+
+                  {!isShort && tenderNum > 0 && tenderNum === checkoutTotal && (
+                    <div className="rounded-lg bg-blue-50 p-2 text-xs font-bold text-blue-700 border border-blue-200 flex items-center justify-between">
+                      <span>รับเงินพอดี</span>
+                      <span className="text-[11px] font-normal text-blue-600">ไม่ต้องทอนเงิน</span>
+                    </div>
+                  )}
+
+                  {!isShort && tenderNum > checkoutTotal && (
+                    <div className="rounded-lg bg-emerald-100/70 p-2.5 text-emerald-950 border border-emerald-300 flex items-center justify-between">
+                      <span className="text-xs font-bold">เงินทอนที่ต้องคืนลูกค้า:</span>
+                      <span className="num text-lg font-black text-emerald-800">
+                        ฿{formatBaht(changeDue)}
+                      </span>
+                    </div>
+                  )}
+                </div>
               )}
-              <div className="flex justify-end gap-2">
+
+              {/* ส่วน QR PromptPay เมื่อเลือก TRANSFER พร้อมระบุสาขาจริง */}
+              {payMethod === 'TRANSFER' && (
+                <PromptPayQR
+                  amount={checkoutTotal}
+                  phoneNumber={checkoutOrder.branch_phone || undefined}
+                  accountName={checkoutOrder.branch_name ? `ร้านสาขา ${checkoutOrder.branch_name}` : undefined}
+                />
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-rule">
                 <button
                   type="button"
-                  onClick={() => setCheckoutOrder(null)}
-                  className="min-h-[44px] rounded-lg bg-char px-4 text-slip"
+                  onClick={() => {
+                    setCheckoutOrder(null);
+                    setCashTendered('');
+                  }}
+                  className="min-h-[44px] rounded-lg bg-char px-4 text-xs font-semibold text-slip hover:bg-zinc-200 transition-colors"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="button"
                   onClick={handleCheckout}
-                  disabled={checkingOut}
-                  className="min-h-[44px] rounded-lg bg-flame px-4 font-medium text-char disabled:opacity-60"
+                  disabled={checkingOut || !isCashValid}
+                  className="min-h-[44px] rounded-lg bg-emerald-600 px-5 font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
                 >
                   {checkingOut ? 'กำลังปิดบิล…' : 'ยืนยันปิดบิล'}
                 </button>

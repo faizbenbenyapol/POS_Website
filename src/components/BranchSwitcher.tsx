@@ -91,10 +91,10 @@ export default function BranchSwitcher({ user }: { user: SessionUser }) {
           disabled={loading}
           className="w-full bg-transparent font-medium text-zinc-700 focus:outline-none cursor-pointer py-0.5 truncate appearance-none pr-4"
         >
-          <option value="all">🌐 ทุกสาขา (ภาพรวมองค์กร)</option>
+          <option value="all">ทุกสาขา (ภาพรวมองค์กร)</option>
           {branches.map((b) => (
             <option key={b.id} value={b.id}>
-              🏢 {b.name} ({b.code})
+              {b.name} ({b.code})
             </option>
           ))}
         </select>
