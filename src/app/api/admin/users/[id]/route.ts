@@ -41,6 +41,28 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   const targetBranchId = role === 'ADMIN' ? (branchId ?? null) : (branchId ?? 1);
 
+  // ตรวจสอบข้อมูลผู้ใช้เดิม
+  const targetUser = await queryOne<RowDataPacket & { id: number; branch_id: number | null }>(
+    'SELECT id, branch_id FROM users WHERE id = ? LIMIT 1',
+    [id],
+  );
+  if (!targetUser) {
+    return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบผู้ใช้นี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
+  }
+
+  // ตรวจสอบ tenant isolation: แอดมินประจำสาขาไม่สามารถจัดการ HQ Admin หรือผู้ใช้ของสาขาอื่น
+  if (auth.user.branchId !== null && auth.user.branchId !== undefined) {
+    if (targetUser.branch_id === null || targetUser.branch_id !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์จัดการบัญชีผู้ใช้ของสาขาอื่นหรือสำนักงานใหญ่', 403);
+    }
+    if (role === 'ADMIN' && targetBranchId === null) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'เฉพาะสำนักงานใหญ่เท่านั้นที่สามารถแต่งตั้งผู้ดูแลระบบส่วนกลาง (HQ) ได้', 403);
+    }
+    if (targetBranchId !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่สามารถย้ายผู้ใช้ไปสาขาอื่นได้', 403);
+    }
+  }
+
   const duplicate = await queryOne<RowDataPacket & { id: number }>(
     'SELECT id FROM users WHERE username = ? AND id <> ? LIMIT 1',
     [username, id],
@@ -90,6 +112,20 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       'ลบบัญชีที่กำลังใช้งานอยู่ไม่ได้ ให้แอดมินคนอื่นเป็นผู้ลบบัญชีนี้แทน',
       409,
     );
+  }
+
+  // ตรวจสอบ tenant isolation: แอดมินประจำสาขาไม่สามารถลบ HQ Admin หรือผู้ใช้ของสาขาอื่น
+  const targetUser = await queryOne<RowDataPacket & { id: number; branch_id: number | null }>(
+    'SELECT id, branch_id FROM users WHERE id = ? LIMIT 1',
+    [id],
+  );
+  if (!targetUser) {
+    return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบผู้ใช้นี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
+  }
+  if (auth.user.branchId !== null && auth.user.branchId !== undefined) {
+    if (targetUser.branch_id === null || targetUser.branch_id !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์จัดการบัญชีผู้ใช้ของสาขาอื่นหรือสำนักงานใหญ่', 403);
+    }
   }
 
   const usage = await queryOne<RowDataPacket & { activity_count: number }>(

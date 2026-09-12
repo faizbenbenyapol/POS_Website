@@ -71,6 +71,16 @@ export async function POST(request: NextRequest) {
 
   const targetBranchId = role === 'ADMIN' ? (branchId ?? null) : (branchId ?? 1);
 
+  // ตรวจสอบ tenant isolation: แอดมินประจำสาขาไม่สามารถแต่งตั้ง HQ Admin หรือสร้างผู้ใช้ให้สาขาอื่น
+  if (auth.user.branchId !== null && auth.user.branchId !== undefined) {
+    if (role === 'ADMIN' && targetBranchId === null) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'เฉพาะสำนักงานใหญ่เท่านั้นที่สามารถแต่งตั้งผู้ดูแลระบบส่วนกลาง (HQ) ได้', 403);
+    }
+    if (targetBranchId !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่สามารถสร้างผู้ใช้ให้สาขาอื่นได้', 403);
+    }
+  }
+
   const result = await execute(
     'INSERT INTO users (username, password_hash, full_name, role, branch_id, is_active) VALUES (?, ?, ?, ?, ?, ?)',
     [username, await hashPassword(password), fullName, role, targetBranchId, isActive ? 1 : 0],
