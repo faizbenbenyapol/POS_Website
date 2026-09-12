@@ -6,7 +6,7 @@ import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
 import TableQrPrintModal from '@/components/TableQrPrintModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
-import { TextField, NumberField, CheckboxField, FormActions } from '@/components/Field';
+import { TextField, NumberField, CheckboxField, SelectField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { PlusIcon, RefreshIcon, PrintIcon } from '@/components/Icons';
 
@@ -24,7 +24,7 @@ type DiningTable = {
 };
 
 /** ค่าตั้งต้นของฟอร์มตอนกดเพิ่มโต๊ะใหม่ */
-const EMPTY_FORM = { tableNo: '', seats: '4', isActive: true };
+const EMPTY_FORM = { tableNo: '', seats: '4', isActive: true, branchId: '' };
 
 /** ขนาดภาพ QR เป็นพิกเซล ใหญ่พอให้ปริ้นติดโต๊ะแล้วสแกนติด */
 const QR_SIZE = 512;
@@ -37,7 +37,8 @@ const QR_SIZE = 512;
  */
 export default function TableManager({ baseUrl }: { baseUrl: string }) {
   const [items, setItems] = useState<DiningTable[] | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ role: string; fullName: string } | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ role: string; fullName: string; branchId?: number | null } | null>(null);
+  const [branches, setBranches] = useState<Array<{ id: number; name: string; code: string }>>([]);
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string }>({
     tone: 'success',
@@ -85,8 +86,11 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
 
   useEffect(() => {
     load();
-    apiFetch<{ role: string; fullName: string }>('/api/auth/me').then((res) => {
+    apiFetch<{ role: string; fullName: string; branchId?: number | null }>('/api/auth/me').then((res) => {
       if (res.ok) setCurrentUser(res.data);
+    });
+    apiFetch<Array<{ id: number; name: string; code: string }>>('/api/admin/branches').then((res) => {
+      if (res.ok && Array.isArray(res.data)) setBranches(res.data);
     });
   }, [load]);
 
@@ -108,12 +112,21 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
    * เปิด modal ในโหมดเพิ่มใหม่หรือแก้ไข (เฉพาะ ADMIN)
    */
   function openForm(table?: DiningTable) {
-    setEditing(table ?? null);
-    setForm(
-      table
-        ? { tableNo: table.table_no, seats: String(table.seats), isActive: table.is_active === 1 }
-        : EMPTY_FORM,
-    );
+    if (table) {
+      setEditing(table);
+      setForm({
+        tableNo: table.table_no,
+        seats: String(table.seats),
+        isActive: Boolean(table.is_active),
+        branchId: table.branch_id ? String(table.branch_id) : '',
+      });
+    } else {
+      setEditing(null);
+      setForm({
+        ...EMPTY_FORM,
+        branchId: branches[0] ? String(branches[0].id) : '',
+      });
+    }
     setFormError('');
     setModalOpen(true);
   }
@@ -121,14 +134,15 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
   /**
    * บันทึกฟอร์มโต๊ะ
    */
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
     setFormError('');
     const payload = {
-      tableNo: form.tableNo,
+      tableNo: form.tableNo.trim(),
       seats: Number(form.seats || 0),
       isActive: form.isActive,
+      branchId: form.branchId ? Number(form.branchId) : undefined,
     };
     const result = editing
       ? await apiFetch(`/api/admin/tables/${editing.id}`, { method: 'PUT', body: jsonBody(payload) })
@@ -370,6 +384,18 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         onClose={() => setModalOpen(false)}
       >
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+          {branches.length > 0 && (
+            <SelectField
+              id="table-branch"
+              label="สาขาประจำโต๊ะ"
+              value={form.branchId || String(branches[0]?.id || 1)}
+              onChange={(value) => setForm({ ...form, branchId: value })}
+              options={branches.map((b) => ({
+                value: String(b.id),
+                label: `🏢 ${b.name} (${b.code})`,
+              }))}
+            />
+          )}
           <TextField
             id="table-no"
             label="เลขโต๊ะ"
