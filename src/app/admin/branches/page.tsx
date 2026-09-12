@@ -134,6 +134,25 @@ export default function BranchesPage() {
     }
   }
 
+  async function handleSwitchToBranch(targetBranchId: number) {
+    try {
+      const res = await fetch('/api/admin/branches/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branchId: targetBranchId }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        showSuccessToast(json.data.message || 'สลับสาขาสำเร็จ');
+        window.location.reload();
+      } else {
+        showErrorToast(json.error?.message || 'สลับสาขาไม่สำเร็จ');
+      }
+    } catch {
+      showErrorToast('เกิดข้อผิดพลาดในการสลับสาขา');
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -242,6 +261,16 @@ export default function BranchesPage() {
                           <FoodMenuIcon className="w-3.5 h-3.5 text-zinc-500" />
                           <span>ราคาเมนู</span>
                         </Link>
+                        {isHqAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchToBranch(b.id)}
+                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100 transition cursor-pointer"
+                            title="สลับมุมมองทั้งระบบเป็นสาขานี้"
+                          >
+                            <span>เข้าสู่สาขา</span>
+                          </button>
+                        )}
                         {isHqAdmin && (
                           <button
                             type="button"

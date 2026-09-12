@@ -634,4 +634,13 @@ export async function createOrder(sessionId: number, items: CartItem[]): Promise
 - **Branch Menu & Price Overrides**: ปรับราคาพิเศษและเปิด/ปิดสต๊อกแยกสาขา พร้อมระบบบันทึกแบบกลุ่ม (Batch Save)
 - **Branch Table & QR Management**: ป้ายชื่อสาขาบน QR Tent Card, Thermal Slip 80mm และตัวเลือกสาขาในการเพิ่ม/ย้ายโต๊ะ
 - **Multi-Branch Analytics & Reporting**: รายงานเปรียบเทียบยอดขายรายวัน/รายเดือน และส่งออก CSV แยกตามสาขา
-- **Cancellation Audit with Branch Context**: ป้ายชื่อสาขาในรายงานประวัติการยกเลิกอาหารและบิลเพื่อความโปร่งใสสูงสุด
+- **Cancellation Audit with Branch Context**: ป้ายชื่อสาขาในรายงานประวัติการยกเลิกอาหารและบิลเพื่อความโปร่งใสสูงสุด
+
+### 20.4 การยกระดับความปลอดภัยและระบบปฏิบัติการสาขาระดับลึก (Branch Hardening & Integrity: v0.7.1)
+- **Master Catalog Precedence**: เมนูที่ปิดจำหน่ายจากสำนักงานใหญ่ (`is_available = 0`) จะระงับการขายในทุกสาขาทันที พร้อมป้ายกำกับ "ปิดขายจากส่วนกลาง (HQ)" บนหน้าจัดการเมนูสาขา
+- **Strict Mutation Tenant Isolation**: ตรวจสอบสิทธิ์สาขา 100% ในทุก Endpoint การเปลี่ยนสถานะและชำระเงิน (`orders/[id]`, `order-items/[id]`, `sessions/[id]/checkout`, `tables/[id]/open`, `tables/[id]/regenerate-qr`)
+- **Privilege Escalation Defense**: ป้องกันแอดมินประจำสาขายกระดับบัญชีเป็น HQ Admin, สร้างบัญชี หรือแก้ไขข้อมูลผู้ใช้ของสาขาอื่น
+- **Foreign Key Referential Integrity**: ตรวจสอบความมีอยู่จริงของสาขาก่อนบันทึกโต๊ะ (`dining_tables`), บัญชีผู้ใช้ (`users`) และการสลับบริบทสาขา (`branches/switch`)
+- **Cross-Branch Ticket Defense**: ตรวจสอบความเป็นเจ้าของของโต๊ะอาหาร และป้องกันการมอบหมายงานให้พนักงานต่างสาขา
+- **End-to-End Branch Branding**: แสดงชื่อสาขาบนหัวเว็บฝั่งลูกค้า, ตั๋วห้องครัว, ใบเสร็จรับเงิน และแถบแจ้งเตือนออเดอร์ค้างบนแดชบอร์ด
+- **Seamless Branch Context Actions**: ปุ่มเข้าสู่สาขาโดยตรงบนตารางจัดการสาขาสำหรับผู้ดูแลระบบ HQ
