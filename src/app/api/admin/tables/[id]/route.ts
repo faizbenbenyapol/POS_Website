@@ -29,7 +29,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
-  const { tableNo, seats, isActive } = parsed.data;
+  const { tableNo, seats, isActive, branchId } = parsed.data;
 
   const currentTable = await queryOne<RowDataPacket & { branch_id: number }>(
     'SELECT branch_id FROM dining_tables WHERE id = ? LIMIT 1',
@@ -39,9 +39,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบโต๊ะนี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
   }
 
+  const targetBranchId = branchId ?? currentTable.branch_id;
+
   const duplicate = await queryOne<RowDataPacket & { id: number }>(
     'SELECT id FROM dining_tables WHERE branch_id = ? AND table_no = ? AND id <> ? LIMIT 1',
-    [currentTable.branch_id, tableNo, id],
+    [targetBranchId, tableNo, id],
   );
   if (duplicate) {
     return apiError(
@@ -51,8 +53,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   const result = await execute(
-    'UPDATE dining_tables SET table_no = ?, seats = ?, is_active = ? WHERE id = ?',
-    [tableNo, seats, isActive ? 1 : 0, id],
+    'UPDATE dining_tables SET branch_id = ?, table_no = ?, seats = ?, is_active = ? WHERE id = ?',
+    [targetBranchId, tableNo, seats, isActive ? 1 : 0, id],
   );
   if (result.affectedRows === 0) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบโต๊ะนี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
