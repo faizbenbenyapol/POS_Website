@@ -9,6 +9,7 @@ export type TableSession = {
   branchId: number;
   branchName: string;
   branchCode: string;
+  businessDayCutoffHour?: number;
 };
 
 /** แถวโต๊ะที่ค้นด้วย qr_token พร้อมข้อมูลสาขา */
@@ -20,6 +21,7 @@ type TableWithBranchRow = RowDataPacket & {
   branch_name: string;
   branch_code: string;
   branch_is_active: number;
+  business_day_cutoff_hour: number;
 };
 
 /** แถวรอบการนั่งที่กำลังเปิดอยู่ของโต๊ะ */
@@ -46,7 +48,8 @@ export async function resolveTableSession(
 ): Promise<{ ok: true; session: TableSession } | { ok: false; reason: SessionError }> {
   const table = await queryOne<TableWithBranchRow>(
     `SELECT t.id, t.table_no, t.is_active, t.branch_id,
-            b.name AS branch_name, b.code AS branch_code, b.is_active AS branch_is_active
+            b.name AS branch_name, b.code AS branch_code, b.is_active AS branch_is_active,
+            b.business_day_cutoff_hour
        FROM dining_tables t
        JOIN branches b ON b.id = t.branch_id
       WHERE t.qr_token = ? LIMIT 1`,
@@ -72,6 +75,7 @@ export async function resolveTableSession(
       branchId: table.branch_id,
       branchName: table.branch_name,
       branchCode: table.branch_code,
+      businessDayCutoffHour: table.business_day_cutoff_hour,
     },
   };
 }
@@ -94,12 +98,14 @@ export async function findTableSession(
       branchId: number;
       branchName: string;
       branchCode: string;
+      businessDayCutoffHour?: number;
     }
   | { ok: false; reason: SessionError }
 > {
   const table = await queryOne<TableWithBranchRow>(
     `SELECT t.id, t.table_no, t.is_active, t.branch_id,
-            b.name AS branch_name, b.code AS branch_code, b.is_active AS branch_is_active
+            b.name AS branch_name, b.code AS branch_code, b.is_active AS branch_is_active,
+            b.business_day_cutoff_hour
        FROM dining_tables t
        JOIN branches b ON b.id = t.branch_id
       WHERE t.qr_token = ? LIMIT 1`,
@@ -121,6 +127,7 @@ export async function findTableSession(
     branchId: table.branch_id,
     branchName: table.branch_name,
     branchCode: table.branch_code,
+    businessDayCutoffHour: table.business_day_cutoff_hour,
   };
 }
 

@@ -3,7 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, serverError, authFailureResponse } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { getEffectiveBranchId } from '@/lib/branch';
+import { getEffectiveBranchId, getBranchById } from '@/lib/branch';
 import {
   getBusinessDayRange,
   getBusinessDayRangeFromDateString,
@@ -43,14 +43,15 @@ export async function GET(request: NextRequest) {
     if (!auth.ok) return authFailureResponse(auth.reason);
 
     const branchId = await getEffectiveBranchId(request, auth.user);
+    const activeBranch = branchId ? await getBranchById(branchId) : null;
     const params = request.nextUrl.searchParams;
     const status = params.get('status') ?? '';
     const dateParam = params.get('date')?.trim();
 
     // หากระบุวันที่ ให้คำนวณช่วงวันทำการของวันนั้น หากไม่ระบุให้ใช้ค่าตั้งต้นเป็นวันทำการปัจจุบัน
     const range = dateParam
-      ? getBusinessDayRangeFromDateString(dateParam)
-      : getBusinessDayRange();
+      ? getBusinessDayRangeFromDateString(dateParam, activeBranch?.businessDayCutoffHour)
+      : getBusinessDayRange(undefined, activeBranch?.businessDayCutoffHour);
 
     const [orders, items] = await Promise.all([
       query<BoardOrderRow>(

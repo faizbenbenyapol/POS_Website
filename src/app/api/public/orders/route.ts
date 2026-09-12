@@ -53,8 +53,12 @@ type OrderItemRow = RowDataPacket & {
  * @param branchId - รหัสสาขาของออเดอร์
  * @returns รหัสออเดอร์ยาว 12 ตัวอักษร
  */
-async function generateOrderCode(conn: PoolConnection, branchId: number): Promise<string> {
-  const todayRange = getBusinessDayRange();
+async function generateOrderCode(
+  conn: PoolConnection,
+  branchId: number,
+  cutoffHour?: number,
+): Promise<string> {
+  const todayRange = getBusinessDayRange(undefined, cutoffHour);
   await conn.execute(
     `INSERT INTO order_counters (branch_id, business_date, last_seq)
      VALUES (?, ?, 1)
@@ -163,7 +167,11 @@ export async function POST(request: NextRequest) {
       if (!priced) return null;
 
       const total = priced.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-      const orderCode = await generateOrderCode(conn, branchId);
+      const orderCode = await generateOrderCode(
+        conn,
+        branchId,
+        session.session.businessDayCutoffHour,
+      );
 
       const [orderResult] = await conn.execute<ResultSetHeader>(
         'INSERT INTO orders (session_id, branch_id, order_code, status, total_amount) VALUES (?, ?, ?, ?, ?)',

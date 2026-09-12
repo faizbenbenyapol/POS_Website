@@ -101,14 +101,20 @@ export function getBangkokNow(): Date {
  * @param refDate - วันเวลาที่ต้องการอ้างอิง (Date หรือข้อความ 'YYYY-MM-DD')
  * @returns { businessDate, start, end, startSql, endSql }
  */
-export function businessDayRange(refDate?: Date | string): {
+export function businessDayRange(refDate?: Date | string, cutoffHourOverride?: number): {
   businessDate: string;
   start: string;
   end: string;
   startSql: string;
   endSql: string;
 } {
-  const cutoffHour = getBusinessCutoffHour();
+  const cutoffHour =
+    cutoffHourOverride !== undefined &&
+    Number.isInteger(cutoffHourOverride) &&
+    cutoffHourOverride >= 0 &&
+    cutoffHourOverride < 24
+      ? cutoffHourOverride
+      : getBusinessCutoffHour();
   const hourStr = String(cutoffHour).padStart(2, '0');
 
   let date: Date;
@@ -153,35 +159,37 @@ export function businessDayRange(refDate?: Date | string): {
 /**
  * Alias ฟังก์ชัน getBusinessDayRange สำหรับความเข้ากันได้
  */
-export const getBusinessDayRange = businessDayRange;
+export function getBusinessDayRange(refDate?: Date | string, cutoffHourOverride?: number) {
+  return businessDayRange(refDate, cutoffHourOverride);
+}
 
 /**
  * คำนวณช่วงวันทำการของวันก่อนหน้า (เมื่อวาน)
  */
-export function getYesterdayBusinessDayRange(refDate?: Date): {
+export function getYesterdayBusinessDayRange(refDate?: Date, cutoffHourOverride?: number): {
   businessDate: string;
   start: string;
   end: string;
   startSql: string;
   endSql: string;
 } {
-  const current = businessDayRange(refDate);
+  const current = businessDayRange(refDate, cutoffHourOverride);
   const [y, m, d] = current.businessDate.split('-').map(Number);
   const prevDate = new Date(y, m - 1, d);
   prevDate.setDate(prevDate.getDate() - 1);
-  return businessDayRange(new Date(prevDate.getFullYear(), prevDate.getMonth(), prevDate.getDate(), 12, 0, 0));
+  return businessDayRange(new Date(prevDate.getFullYear(), prevDate.getMonth(), prevDate.getDate(), 12, 0, 0), cutoffHourOverride);
 }
 
 /**
  * คำนวณช่วงวันทำการจากข้อความวันที่ 'YYYY-MM-DD'
  */
-export function getBusinessDayRangeFromDateString(dateStr: string): {
+export function getBusinessDayRangeFromDateString(dateStr: string, cutoffHourOverride?: number): {
   businessDate: string;
   start: string;
   end: string;
   startSql: string;
   endSql: string;
 } {
-  return businessDayRange(dateStr);
+  return businessDayRange(dateStr, cutoffHourOverride);
 }
 

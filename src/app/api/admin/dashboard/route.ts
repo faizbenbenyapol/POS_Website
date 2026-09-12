@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
     const branchId = await getEffectiveBranchId(request, auth.user);
     const activeBranch = branchId ? await getBranchById(branchId) : null;
 
-    const todayRange = getBusinessDayRange();
-    const yesterdayRange = getYesterdayBusinessDayRange();
+    const todayRange = getBusinessDayRange(undefined, activeBranch?.businessDayCutoffHour);
+    const yesterdayRange = getYesterdayBusinessDayRange(undefined, activeBranch?.businessDayCutoffHour);
 
     // หากเป็นพนักงาน (STAFF) ให้ส่งเฉพาะข้อมูลปฏิบัติการหน้าร้าน (ไม่เปิดเผยตัวเลขรายได้/ยอดขาย)
     if (auth.user.role === 'STAFF') {
