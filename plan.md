@@ -624,4 +624,14 @@ export async function createOrder(sessionId: number, items: CartItem[]): Promise
   - Dashboard: การ์ดเปรียบเทียบยอดขายรายสาขาแบบเรียลไทม์ และป้ายกำกับสาขาในหน้าต่าง ๆ
 - **Quality & Verification**:
   - ผ่าน `npx tsc --noEmit` ไร้ข้อผิดพลาด (0 errors)
-  - ผ่าน `npm run build` Next.js Production Build ครบทั้ง 29 เส้นทางอย่างสมบูรณ์
+  - ผ่าน `npm run build` Next.js Production Build ครบทั้ง 29 เส้นทางอย่างสมบูรณ์
+  - ยืนยัน Tenant Isolation 100%: พนักงานสาขาไม่สามารถข้ามเขตสาขาได้ แม้จะพยายามส่ง cookie ปลอม
+  - ระบบซิงก์สถานะ Client Components สมบูรณ์เมื่อมีการสลับสาขา
+
+### 20.3 บันทึกประวัติเวอร์ชัน (Changelog: v0.7.0)
+- **Multi-Branch Architecture**: สถาปัตยกรรมรองรับหลายสาขาเต็มรูปแบบ พร้อมตาราง `branches` และ Foreign Keys ทั่วระบบ
+- **Branch Context & Tenant Isolation**: ป้องกันการข้ามเขตข้อมูลระหว่างสาขาสำหรับพนักงาน และระบบสลับสาขาสำหรับผู้ดูแลส่วนกลาง (HQ Admin)
+- **Branch Menu & Price Overrides**: ปรับราคาพิเศษและเปิด/ปิดสต๊อกแยกสาขา พร้อมระบบบันทึกแบบกลุ่ม (Batch Save)
+- **Branch Table & QR Management**: ป้ายชื่อสาขาบน QR Tent Card, Thermal Slip 80mm และตัวเลือกสาขาในการเพิ่ม/ย้ายโต๊ะ
+- **Multi-Branch Analytics & Reporting**: รายงานเปรียบเทียบยอดขายรายวัน/รายเดือน และส่งออก CSV แยกตามสาขา
+- **Cancellation Audit with Branch Context**: ป้ายชื่อสาขาในรายงานประวัติการยกเลิกอาหารและบิลเพื่อความโปร่งใสสูงสุด
