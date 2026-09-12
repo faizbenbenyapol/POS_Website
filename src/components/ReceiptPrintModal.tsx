@@ -16,6 +16,8 @@ export type PrintItem = {
 /** ข้อมูลการสั่งซื้อสำหรับสร้างสลิปตั๋วครัวและใบเสร็จ */
 export type ReceiptData = {
   branchName?: string;
+  branchAddress?: string;
+  branchPhone?: string;
   tableNo: string;
   orderCode?: string;
   createdAt: string;
@@ -111,14 +113,19 @@ export default function ReceiptPrintModal({
       });
     } else {
       // ใบเสร็จรับเงิน
+      const totalNum = Number(data.totalAmount || 0);
+      const vatAmount = totalNum > 0 ? (totalNum * 7) / 107 : 0;
+      const preTaxAmount = totalNum - vatAmount;
+
       const html = `
         <div style="width: 76mm; margin: 0 auto; padding: 4px; font-family: 'IBM Plex Sans Thai', sans-serif; color: #000000; line-height: 1.35;">
           <!-- หัวร้าน -->
           <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
             <h1 style="font-size: 18px; font-weight: 900; margin: 0;">ครัวบ้านไร่</h1>
             ${data.branchName ? `<p style="font-size: 12px; font-weight: 700; margin: 2px 0;">สาขา: ${data.branchName}</p>` : ''}
-            <p style="font-size: 11px; margin-top: 2px;">ใบเสร็จรับเงินอย่างย่อ / Receipt</p>
-            <p style="font-size: 10px; color: #444;">โทร. 081-234-5678</p>
+            ${data.branchAddress ? `<p style="font-size: 10px; color: #444; margin: 1px 0;">${data.branchAddress}</p>` : ''}
+            ${data.branchPhone ? `<p style="font-size: 10px; color: #444; margin: 1px 0;">โทร. ${data.branchPhone}</p>` : ''}
+            <p style="font-size: 11px; margin-top: 3px; font-weight: 600;">ใบเสร็จรับเงินอย่างย่อ / Receipt</p>
           </div>
 
           <!-- ข้อมูลบิล -->
@@ -165,9 +172,26 @@ export default function ReceiptPrintModal({
             ${
               data.paymentMethod
                 ? `
-              <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 4px;">
                 <span>วิธีชำระเงิน:</span>
                 <span>${PAYMENT_METHOD_NAMES[data.paymentMethod] || data.paymentMethod}</span>
+              </div>
+            `
+                : ''
+            }
+            ${
+              totalNum > 0
+                ? `
+              <div style="font-size: 10px; color: #444; border-top: 1px dotted #aaa; padding-top: 4px; margin-top: 4px;">
+                <div style="display: flex; justify-content: space-between;">
+                  <span>มูลค่าก่อนภาษี (Pre-VAT 7%):</span>
+                  <span style="font-family: monospace;">฿${formatBaht(preTaxAmount)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 1px;">
+                  <span>ภาษีมูลค่าเพิ่ม (VAT 7%):</span>
+                  <span style="font-family: monospace;">฿${formatBaht(vatAmount)}</span>
+                </div>
+                <div style="font-size: 9px; color: #666; text-align: right; margin-top: 2px;">(ราคารวมภาษีมูลค่าเพิ่มแล้ว)</div>
               </div>
             `
                 : ''
@@ -218,7 +242,13 @@ export default function ReceiptPrintModal({
                 {data.branchName && (
                   <p className="text-xs font-semibold text-zinc-700">สาขา: {data.branchName}</p>
                 )}
-                <p className="text-[11px] text-slip-dim">ใบเสร็จรับเงินอย่างย่อ / Receipt</p>
+                {data.branchAddress && (
+                  <p className="text-[10px] text-zinc-500">{data.branchAddress}</p>
+                )}
+                {data.branchPhone && (
+                  <p className="text-[10px] text-zinc-500">โทร. {data.branchPhone}</p>
+                )}
+                <p className="mt-1 text-[11px] text-slip-dim font-medium">ใบเสร็จรับเงินอย่างย่อ / Receipt</p>
                 <div className="mt-2 flex justify-between border-b border-dashed border-rule pb-2 text-[11px]">
                   <span>โต๊ะ: {data.tableNo}</span>
                   <span>{formatThaiDateTime(data.paidAt || data.createdAt)}</span>
@@ -269,15 +299,36 @@ export default function ReceiptPrintModal({
           ) : (
             <div className="flex flex-col gap-1">
               {data.totalAmount !== undefined && (
-                <div className="flex justify-between font-bold text-sm text-slip">
-                  <span>ยอดรวมทั้งสิ้น:</span>
-                  <span className="num text-base font-black text-emerald-700">
-                    ฿{formatBaht(data.totalAmount)}
-                  </span>
-                </div>
+                <>
+                  <div className="flex justify-between font-bold text-sm text-slip">
+                    <span>ยอดรวมทั้งสิ้น:</span>
+                    <span className="num text-base font-black text-emerald-700">
+                      ฿{formatBaht(data.totalAmount)}
+                    </span>
+                  </div>
+                  {Number(data.totalAmount || 0) > 0 && (
+                    <div className="border-t border-dotted border-rule pt-1 text-[10px] text-slip-dim flex flex-col gap-0.5">
+                      <div className="flex justify-between">
+                        <span>มูลค่าก่อนภาษี (Pre-VAT):</span>
+                        <span className="num">
+                          ฿{formatBaht(Number(data.totalAmount) - (Number(data.totalAmount) * 7) / 107)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>ภาษีมูลค่าเพิ่ม (VAT 7%):</span>
+                        <span className="num">
+                          ฿{formatBaht((Number(data.totalAmount) * 7) / 107)}
+                        </span>
+                      </div>
+                      <div className="text-right text-[9px] text-zinc-400">
+                        (ราคารวมภาษีมูลค่าเพิ่มแล้ว)
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               {data.paymentMethod && (
-                <div className="flex justify-between text-[11px] text-slip-dim">
+                <div className="flex justify-between text-[11px] text-slip-dim pt-1 border-t border-dashed border-rule">
                   <span>ชำระด้วย:</span>
                   <span className="font-semibold text-slip">
                     {PAYMENT_METHOD_NAMES[data.paymentMethod] || data.paymentMethod}
