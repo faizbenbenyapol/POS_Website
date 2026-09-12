@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     const activeBranch = branchId ? await getBranchById(branchId) : null;
     const params = request.nextUrl.searchParams;
     const status = params.get('status') ?? '';
+    const tableNo = (params.get('tableNo') ?? '').trim();
     const dateParam = params.get('date')?.trim();
 
     // หากระบุวันที่ ให้คำนวณช่วงวันทำการของวันนั้น หากไม่ระบุให้ใช้ค่าตั้งต้นเป็นวันทำการปัจจุบัน
@@ -64,23 +65,27 @@ export async function GET(request: NextRequest) {
            LEFT JOIN branches b ON b.id = o.branch_id
           WHERE (? IS NULL OR o.branch_id = ?)
             AND (? = '' OR o.status = ?)
+            AND (? = '' OR t.table_no = ?)
             AND o.created_at >= ? AND o.created_at < ?
           ORDER BY o.id DESC
           LIMIT 100`,
-        [branchId, branchId, status, status, range.startSql, range.endSql],
+        [branchId, branchId, status, status, tableNo, tableNo, range.startSql, range.endSql],
       ),
       query<BoardItemRow>(
         `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.status
            FROM order_items oi
            JOIN orders o ON o.id = oi.order_id
            JOIN table_sessions s ON s.id = o.session_id
+           JOIN dining_tables t ON t.id = s.table_id
           WHERE (? IS NULL OR o.branch_id = ?)
             AND (? = '' OR o.status = ?)
+            AND (? = '' OR t.table_no = ?)
             AND o.created_at >= ? AND o.created_at < ?
           ORDER BY oi.id`,
-        [branchId, branchId, status, status, range.startSql, range.endSql],
+        [branchId, branchId, status, status, tableNo, tableNo, range.startSql, range.endSql],
       ),
     ]);
+
 
     return apiOk({ orders, items });
   } catch (err) {

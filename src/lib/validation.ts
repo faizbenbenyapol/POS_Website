@@ -95,6 +95,14 @@ export const tableSchema = z.object({
 });
 
 /**
+ * ตรวจข้อมูลการย้ายโต๊ะ (Table Transfer)
+ */
+export const transferTableSchema = z.object({
+  targetTableId: z.coerce.number().int().positive('กรุณาเลือกโต๊ะปลายทางที่ต้องการย้าย'),
+});
+
+
+/**
  * ตรวจข้อมูลผู้ใช้ตอนสร้างใหม่ บังคับรหัสผ่านอย่างน้อย 8 ตัวสำหรับบัญชีที่ตั้งใหม่
  * branchId = null หมายถึง HQ Super Admin
  */

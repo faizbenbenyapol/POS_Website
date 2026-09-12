@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
 import PromptPayQR from '@/components/PromptPayQR';
@@ -127,11 +128,15 @@ function playNewOrderSound() {
  *
  * @returns หน้าจอกระดานออเดอร์พร้อมปุ่มเปลี่ยนสถานะและปิดบิล
  */
-export default function OrdersBoardPage() {
+function OrdersBoardContent() {
+  const searchParams = useSearchParams();
+  const urlTableNo = searchParams.get('tableNo') ?? '';
+
   const [orders, setOrders] = useState<BoardOrder[] | null>(null);
   const [items, setItems] = useState<BoardItem[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFilter, setDateFilter] = useState(todayInputValue());
+  const [tableFilter, setTableFilter] = useState(urlTableNo);
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string }>({
     tone: 'success',
@@ -188,7 +193,11 @@ export default function OrdersBoardPage() {
         setOrders(null);
         setLoadError('');
       }
-      const params = new URLSearchParams({ status: statusFilter, date: dateFilter });
+      const params = new URLSearchParams({
+        status: statusFilter,
+        date: dateFilter,
+        tableNo: tableFilter.trim(),
+      });
       const result = await apiFetch<{ orders: BoardOrder[]; items: BoardItem[] }>(
         `/api/admin/orders?${params.toString()}`,
       );
@@ -213,12 +222,8 @@ export default function OrdersBoardPage() {
       setOrders(newOrders);
       setItems(result.data.items);
     },
-    [statusFilter, dateFilter, soundEnabled],
+    [statusFilter, dateFilter, tableFilter, soundEnabled],
   );
-
-  useEffect(() => {
-    load(true);
-  }, [load]);
 
   useEffect(() => {
     load(true);
@@ -399,6 +404,33 @@ export default function OrdersBoardPage() {
               onChange={(event) => setDateFilter(event.target.value)}
               className="min-h-[44px] w-full rounded-lg bg-char px-3 text-slip"
             />
+          </div>
+        </div>
+        <div className="w-full sm:w-36">
+          <div className="flex flex-col gap-2">
+            <label htmlFor="order-table-filter" className="text-sm text-slip-dim">
+              เลขโต๊ะ
+            </label>
+            <div className="relative">
+              <input
+                id="order-table-filter"
+                type="text"
+                placeholder="ทุกโต๊ะ..."
+                value={tableFilter}
+                onChange={(event) => setTableFilter(event.target.value)}
+                className="min-h-[44px] w-full rounded-lg bg-char px-3 text-slip focus:outline-none text-xs"
+              />
+              {tableFilter && (
+                <button
+                  type="button"
+                  onClick={() => setTableFilter('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slip-dim hover:text-slip cursor-pointer"
+                  title="ล้างตัวกรองโต๊ะ"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -707,5 +739,16 @@ export default function OrdersBoardPage() {
         onClose={() => setAuditModalOpen(false)}
       />
     </div>
+  );
+}
+
+/**
+ * หน้าจอกระดานออเดอร์ ห่อด้วย Suspense เพื่อรองรับการอ่าน useSearchParams (?tableNo=...)
+ */
+export default function OrdersBoardPage() {
+  return (
+    <Suspense fallback={<TableSkeleton rows={6} />}>
+      <OrdersBoardContent />
+    </Suspense>
   );
 }

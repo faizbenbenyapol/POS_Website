@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import QRCode from 'qrcode';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -8,7 +9,7 @@ import TableQrPrintModal from '@/components/TableQrPrintModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { TextField, NumberField, CheckboxField, SelectField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
-import { PlusIcon, RefreshIcon, PrintIcon } from '@/components/Icons';
+import { PlusIcon, RefreshIcon, PrintIcon, CartIcon, UtensilsIcon } from '@/components/Icons';
 
 /** โต๊ะ 1 แถวตามที่ GET /api/admin/tables คืนมา */
 type DiningTable = {
@@ -58,6 +59,62 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
     tone: 'danger' | 'warning';
     onConfirm: () => void;
   } | null>(null);
+  const [transferSource, setTransferSource] = useState<DiningTable | null>(null);
+  const [targetTableId, setTargetTableId] = useState('');
+  const [transferring, setTransferring] = useState(false);
+  const [transferError, setTransferError] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'VACANT' | 'OCCUPIED' | 'INACTIVE'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  /**
+   * เปิดรอบการนั่งของโต๊ะทันที 1 แตะ
+   */
+  async function handleQuickOpen(table: DiningTable) {
+    const result = await apiFetch<{ sessionId: number; message: string }>(
+      `/api/admin/tables/${table.id}/open`,
+      { method: 'POST' },
+    );
+    if (result.ok) {
+      setNotice({
+        tone: 'success',
+        message: result.data.message || `เปิดโต๊ะ ${table.table_no} เรียบร้อยแล้ว พร้อมรับลูกค้า`,
+      });
+      load();
+    } else {
+      setNotice({ tone: 'error', message: result.message });
+    }
+  }
+
+  /**
+   * เปิด Modal ย้ายโต๊ะ
+   */
+  function openTransfer(table: DiningTable) {
+    setTransferSource(table);
+    setTargetTableId('');
+    setTransferError('');
+  }
+
+  /**
+   * ยืนยันการย้ายโต๊ะไปยังโต๊ะปลายทาง
+   */
+  async function handleConfirmTransfer(e: React.FormEvent) {
+    e.preventDefault();
+    if (!transferSource || !targetTableId) return;
+    setTransferring(true);
+    setTransferError('');
+    const result = await apiFetch<{ message: string }>(
+      `/api/admin/tables/${transferSource.id}/transfer`,
+      { method: 'POST', body: jsonBody({ targetTableId: Number(targetTableId) }) },
+    );
+    setTransferring(false);
+    if (result.ok) {
+      setNotice({ tone: 'success', message: result.data.message });
+      setTransferSource(null);
+      load();
+    } else {
+      setTransferError(result.message);
+    }
+  }
 
   /**
    * ประกอบลิงก์ที่ลูกค้าจะไปถึงเมื่อสแกน QR ของโต๊ะนั้น
@@ -216,6 +273,38 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
 
   const isAdmin = currentUser?.role === 'ADMIN';
 
+  // รายการโต๊ะปลายทางที่ว่างอยู่ในสาขาเดียวกันสำหรับรับย้าย
+  const availableTargets =
+    items?.filter(
+      (t) =>
+        t.id !== transferSource?.id &&
+        (transferSource?.branch_id ? t.branch_id === transferSource.branch_id : true) &&
+        t.is_active === 1 &&
+        t.has_open_session === 0,
+    ) ?? [];
+
+  // สรุปตัวเลข KPI สถานะโต๊ะ
+  const totalTablesCount = items?.length || 0;
+  const occupiedCount = items?.filter((t) => t.has_open_session > 0).length || 0;
+  const vacantCount = items?.filter((t) => t.is_active === 1 && t.has_open_session === 0).length || 0;
+  const inactiveCount = items?.filter((t) => t.is_active !== 1).length || 0;
+  const activeTablesCount = totalTablesCount - inactiveCount;
+  const occupancyPercent = activeTablesCount > 0 ? ((occupiedCount / activeTablesCount) * 100).toFixed(0) : '0';
+
+  // กรองตามแท็บสถานะและคำค้นหา
+  const filteredItems = items?.filter((table) => {
+    if (statusFilter === 'VACANT' && (table.has_open_session > 0 || table.is_active !== 1)) return false;
+    if (statusFilter === 'OCCUPIED' && table.has_open_session === 0) return false;
+    if (statusFilter === 'INACTIVE' && table.is_active === 1) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const matchNo = table.table_no.toLowerCase().includes(q);
+      const matchBranch = table.branch_name?.toLowerCase().includes(q);
+      if (!matchNo && !matchBranch) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -228,7 +317,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         <div className="flex items-center gap-2">
           {!isAdmin && currentUser && (
             <span className="rounded-full bg-zinc-100 border border-rule px-3 py-1 text-xs text-slip-dim font-medium">
-              สิทธิ์พนักงาน: ตรวจสอบโต๊ะ และดู/พิมพ์ QR ได้ (การสร้าง QR ใหม่สงวนสิทธิ์ผู้ดูแลระบบ)
+              สิทธิ์พนักงาน: เปิดโต๊ะ, ย้ายโต๊ะ, ตรวจสอบโต๊ะ และดู/พิมพ์ QR
             </span>
           )}
           {isAdmin && (
@@ -243,6 +332,95 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
           )}
         </div>
       </div>
+
+      {/* Table KPI Strip */}
+      {items && items.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-2xl border border-rule bg-white p-3.5 shadow-xs">
+            <span className="text-[11px] font-bold text-slip-dim">โต๊ะทั้งหมด</span>
+            <p className="num mt-0.5 text-2xl font-black text-slip">{totalTablesCount}</p>
+            <p className="text-[10px] text-slip-dim">ในสาขาที่เลือก</p>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3.5 shadow-xs">
+            <span className="text-[11px] font-bold text-amber-900">มีลูกค้านั่ง (Occupied)</span>
+            <p className="num mt-0.5 text-2xl font-black text-amber-800">{occupiedCount}</p>
+            <p className="text-[10px] text-amber-700 font-medium">ครองโต๊ะ {occupancyPercent}%</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 shadow-xs">
+            <span className="text-[11px] font-bold text-emerald-900">โต๊ะว่างพร้อมบริการ</span>
+            <p className="num mt-0.5 text-2xl font-black text-emerald-800">{vacantCount}</p>
+            <p className="text-[10px] text-emerald-700 font-medium">พร้อมเปิดรับลูกค้า</p>
+          </div>
+          <div className="rounded-2xl border border-rule bg-white p-3.5 shadow-xs">
+            <span className="text-[11px] font-bold text-slip-dim">ปิดใช้งานชั่วคราว</span>
+            <p className="num mt-0.5 text-2xl font-black text-zinc-500">{inactiveCount}</p>
+            <p className="text-[10px] text-slip-dim">ปรับปรุง / ซ่อมแซม</p>
+          </div>
+        </div>
+      )}
+
+      {/* Filter and Search Bar */}
+      {items && items.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-zinc-50 border border-rule p-2.5">
+          <div className="inline-flex rounded-lg border border-rule bg-white p-1 text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('ALL')}
+              className={`rounded-md px-3 py-1 transition-colors cursor-pointer ${
+                statusFilter === 'ALL' ? 'bg-zinc-100 font-bold text-slip' : 'text-slip-dim hover:text-slip'
+              }`}
+            >
+              ทั้งหมด ({totalTablesCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('VACANT')}
+              className={`rounded-md px-3 py-1 transition-colors cursor-pointer ${
+                statusFilter === 'VACANT' ? 'bg-emerald-100 font-bold text-emerald-800' : 'text-slip-dim hover:text-slip'
+              }`}
+            >
+              โต๊ะว่าง ({vacantCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('OCCUPIED')}
+              className={`rounded-md px-3 py-1 transition-colors cursor-pointer ${
+                statusFilter === 'OCCUPIED' ? 'bg-amber-100 font-bold text-amber-800' : 'text-slip-dim hover:text-slip'
+              }`}
+            >
+              มีลูกค้านั่ง ({occupiedCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('INACTIVE')}
+              className={`rounded-md px-3 py-1 transition-colors cursor-pointer ${
+                statusFilter === 'INACTIVE' ? 'bg-zinc-200 font-bold text-zinc-800' : 'text-slip-dim hover:text-slip'
+              }`}
+            >
+              ปิดใช้งาน ({inactiveCount})
+            </button>
+          </div>
+
+          <div className="relative flex items-center">
+            <input
+              type="text"
+              placeholder="ค้นหาเลขโต๊ะ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="rounded-xl border border-rule bg-white px-3 py-1.5 text-xs text-slip focus:border-zinc-400 focus:outline-none w-44"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 text-xs text-slip-dim hover:text-slip cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <Notice
         tone={notice.tone}
@@ -270,7 +448,13 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         />
       )}
 
-      {!loadError && items !== null && items.length > 0 && (
+      {!loadError && items !== null && items.length > 0 && filteredItems?.length === 0 && (
+        <div className="py-10 text-center text-xs text-slip-dim bg-white rounded-xl border border-rule">
+          ไม่พบโต๊ะที่ตรงกับตัวกรองหรือคำค้นหาที่ระบุ
+        </div>
+      )}
+
+      {!loadError && items !== null && filteredItems && filteredItems.length > 0 && (
         <div className="overflow-x-auto rounded-xl bg-white border border-rule shadow-xs">
           <table className="w-full min-w-[44rem] border-collapse text-left">
             <thead>
@@ -283,7 +467,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-rule text-xs">
-              {items.map((table) => (
+              {filteredItems.map((table) => (
                 <tr key={table.id} className="hover:bg-zinc-50/50 transition-colors">
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-1.5 font-bold text-sm text-slip">
@@ -329,6 +513,42 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      {/* จัดการรอบการนั่งของโต๊ะ */}
+                      {table.is_active === 1 && (
+                        <>
+                          {table.has_open_session === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickOpen(table)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white transition-all hover:bg-emerald-700 active:scale-95 cursor-pointer shadow-xs"
+                              title="เปิดโต๊ะรอบการนั่งใหม่ทันที 1 แตะ"
+                            >
+                              <UtensilsIcon className="w-3.5 h-3.5" />
+                              <span>เปิดโต๊ะ</span>
+                            </button>
+                          ) : (
+                            <>
+                              <Link
+                                href={`/admin/orders?tableNo=${encodeURIComponent(table.table_no)}`}
+                                className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-bold text-white transition-all hover:bg-amber-700 active:scale-95 shadow-xs"
+                                title="ไปดูกระดานออเดอร์ของโต๊ะนี้"
+                              >
+                                <CartIcon className="w-3.5 h-3.5" />
+                                <span>ดูออเดอร์</span>
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => openTransfer(table)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-bold text-purple-800 transition-all hover:bg-purple-100 active:scale-95 cursor-pointer"
+                                title="ย้ายรอบการนั่งและออเดอร์ไปยังโต๊ะว่างอื่น"
+                              >
+                                <span>ย้ายโต๊ะ</span>
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
+
                       {/* ปุ่มดูและพิมพ์ QR Code — มีทั้งป้าย A4/A5 และสลิป 80mm */}
                       <button
                         type="button"
@@ -436,6 +656,62 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
           load();
         }}
       />
+
+      {/* Modal ย้ายโต๊ะ */}
+      <Modal
+        title={`ย้ายรอบการนั่ง: โต๊ะ ${transferSource?.table_no}`}
+        open={Boolean(transferSource)}
+        onClose={() => setTransferSource(null)}
+      >
+        <form onSubmit={handleConfirmTransfer} className="flex flex-col gap-4">
+          <p className="text-xs text-slip-dim">
+            เลือกรอบโต๊ะปลายทางที่ต้องการย้ายลูกค้าไป ออเดอร์และรายการอาหารทั้งหมดจะถูกย้ายตามไปยังโต๊ะใหม่ทันที
+          </p>
+
+          {transferError && (
+            <div className="rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-700">
+              {transferError}
+            </div>
+          )}
+
+          {availableTargets.length === 0 ? (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+              ไม่มีโต๊ะว่างในสาขานี้ที่พร้อมรับย้ายในขณะนี้ กรุณาเคลียร์โต๊ะหรือเปิดใช้งานโต๊ะอื่นก่อน
+            </div>
+          ) : (
+            <SelectField
+              id="transfer-target-table"
+              label="เลือกโต๊ะปลายทาง (ต้องเป็นโต๊ะว่าง)"
+              value={targetTableId}
+              onChange={setTargetTableId}
+              options={[
+                { value: '', label: '-- กรุณาเลือกโต๊ะปลายทาง --' },
+                ...availableTargets.map((t) => ({
+                  value: String(t.id),
+                  label: `โต๊ะ ${t.table_no} (${t.seats} ที่นั่ง)${t.branch_name ? ` - ${t.branch_name}` : ''}`,
+                })),
+              ]}
+            />
+          )}
+
+          <div className="flex items-center justify-end gap-2 border-t border-rule pt-4">
+            <button
+              type="button"
+              onClick={() => setTransferSource(null)}
+              className="min-h-[40px] rounded-xl bg-char px-4 text-xs font-bold text-slip hover:bg-rule cursor-pointer"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={transferring || !targetTableId || availableTargets.length === 0}
+              className="min-h-[40px] rounded-xl bg-purple-600 px-5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-purple-700 disabled:opacity-40 cursor-pointer flex items-center gap-1.5"
+            >
+              {transferring ? 'กำลังย้าย...' : 'ยืนยันการย้ายโต๊ะ'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {confirmConfig && (
         <ConfirmModal
