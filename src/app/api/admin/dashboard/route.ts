@@ -17,6 +17,8 @@ type TrendRow = RowDataPacket & { sale_date: string; total: string };
 type TopMenuRow = RowDataPacket & { item_name: string; quantity: number; amount: string };
 type StaleOrderRow = RowDataPacket & {
   id: number;
+  branch_id: number;
+  branch_name: string;
   order_code: string;
   table_no: string;
   created_at: string;
@@ -72,11 +74,12 @@ export async function GET(request: NextRequest) {
           [branchId, branchId],
         ),
         query<StaleOrderRow>(
-          `SELECT o.id, o.order_code, t.table_no, o.created_at,
+          `SELECT o.id, o.branch_id, b.name AS branch_name, o.order_code, t.table_no, o.created_at,
                   TIMESTAMPDIFF(MINUTE, o.created_at, NOW()) AS waiting_minutes
              FROM orders o
              JOIN table_sessions s ON s.id = o.session_id
              JOIN dining_tables t ON t.id = s.table_id
+             LEFT JOIN branches b ON b.id = o.branch_id
             WHERE (? IS NULL OR o.branch_id = ?)
               AND o.status = 'PENDING'
               AND s.status = 'OPEN'
@@ -195,11 +198,12 @@ export async function GET(request: NextRequest) {
       ),
       // 9. ออเดอร์รอครัวรับค้างเกินเวลา
       query<StaleOrderRow>(
-        `SELECT o.id, o.order_code, t.table_no, o.created_at,
+        `SELECT o.id, o.branch_id, b.name AS branch_name, o.order_code, t.table_no, o.created_at,
                 TIMESTAMPDIFF(MINUTE, o.created_at, NOW()) AS waiting_minutes
            FROM orders o
            JOIN table_sessions s ON s.id = o.session_id
            JOIN dining_tables t ON t.id = s.table_id
+           LEFT JOIN branches b ON b.id = o.branch_id
           WHERE (? IS NULL OR o.branch_id = ?)
             AND o.status = 'PENDING'
             AND s.status = 'OPEN'

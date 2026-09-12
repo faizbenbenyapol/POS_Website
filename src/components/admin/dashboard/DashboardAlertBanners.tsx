@@ -51,7 +51,7 @@ export default function DashboardAlertBanners({
             ออเดอร์รอครัวรับเกิน {stalePendingMinutes} นาที:{' '}
             {staleOrders.map((o) => (
               <span key={o.id} className="ml-2 font-normal text-amber-700">
-                โต๊ะ <strong>{o.table_no}</strong> ({o.waiting_minutes} นาที)
+                {o.branch_name ? `[${o.branch_name}] ` : ''}โต๊ะ <strong>{o.table_no}</strong> ({o.waiting_minutes} นาที)
               </span>
             ))}
           </p>

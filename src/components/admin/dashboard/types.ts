@@ -3,6 +3,8 @@ import { formatBahtWithSign } from '@/lib/format';
 /** ออเดอร์ที่ค้างรอครัวรับนานเกินเกณฑ์กำหนด */
 export type StaleOrder = {
   id: number;
+  branch_id?: number | null;
+  branch_name?: string | null;
   order_code: string;
   table_no: string;
   created_at: string;
