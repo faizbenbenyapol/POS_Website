@@ -126,6 +126,71 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
             </p>
           </header>
 
+          {/* ตัวบอกความคืบหน้าของใบสั่งอาหาร (Order Timeline Progression) */}
+          <div className="border-b border-rule/70 bg-zinc-50/70 px-4 py-2.5">
+            <div className="flex items-center justify-between text-xs">
+              {/* ขั้นที่ 1: ส่งครัวแล้ว */}
+              <div className="flex items-center gap-1.5 font-bold text-emerald-700">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px]">
+                  ✓
+                </span>
+                <span>สั่งแล้ว</span>
+              </div>
+              <div
+                className={`h-0.5 flex-1 mx-2 transition-colors ${
+                  order.status === 'PREPARING' || order.status === 'SERVED'
+                    ? 'bg-emerald-600'
+                    : 'bg-zinc-200'
+                }`}
+              />
+              {/* ขั้นที่ 2: กำลังปรุง */}
+              <div
+                className={`flex items-center gap-1.5 font-bold ${
+                  order.status === 'PREPARING'
+                    ? 'text-amber-700'
+                    : order.status === 'SERVED'
+                    ? 'text-emerald-700'
+                    : 'text-zinc-400'
+                }`}
+              >
+                <span
+                  className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
+                    order.status === 'PREPARING'
+                      ? 'bg-amber-500 text-white animate-pulse'
+                      : order.status === 'SERVED'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-zinc-200 text-zinc-500'
+                  }`}
+                >
+                  {order.status === 'SERVED' ? '✓' : '2'}
+                </span>
+                <span>กำลังปรุง</span>
+              </div>
+              <div
+                className={`h-0.5 flex-1 mx-2 transition-colors ${
+                  order.status === 'SERVED' ? 'bg-emerald-600' : 'bg-zinc-200'
+                }`}
+              />
+              {/* ขั้นที่ 3: เสิร์ฟแล้ว */}
+              <div
+                className={`flex items-center gap-1.5 font-bold ${
+                  order.status === 'SERVED' ? 'text-emerald-700' : 'text-zinc-400'
+                }`}
+              >
+                <span
+                  className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
+                    order.status === 'SERVED'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-zinc-200 text-zinc-500'
+                  }`}
+                >
+                  {order.status === 'SERVED' ? '✓' : '3'}
+                </span>
+                <span>เสิร์ฟครบแล้ว</span>
+              </div>
+            </div>
+          </div>
+
           <ul className="px-4 py-2">
             {items
               .filter((item) => item.order_id === order.id)
@@ -159,20 +224,30 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
       ))}
 
       <div className="fixed inset-x-0 bottom-16 z-20 px-4">
-        <div className="mx-auto flex max-w-md flex-col gap-2 rounded-2xl bg-white border border-zinc-200 p-4 shadow-xl">
+        <div className="mx-auto flex max-w-md flex-col gap-2.5 rounded-2xl bg-white border border-zinc-200 p-4 shadow-xl">
           <div className="flex items-baseline justify-between">
             <span className="text-xs font-bold text-slip-dim">ยอดสะสมของโต๊ะ (ไม่รวมรายการยกเลิก)</span>
             <span className="num text-lg font-black text-emerald-700">{formatBahtWithSign(total)}</span>
           </div>
-          <QuickTicketButton
-            token={token}
-            category="PAYMENT"
-            subject="ขอเช็คบิล/ชำระเงิน"
-            detail={`ลูกค้าขอปิดบิลและชำระเงิน ยอดสะสม ${formatBahtWithSign(total)}`}
-            idleLabel="ขอเช็คบิล / ชำระเงิน"
-            sentLabel="แจ้งพนักงานแล้ว กำลังนำบิลมาให้"
-            className="min-h-[48px] w-full rounded-xl bg-emerald-600 px-4 font-bold text-sm text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:opacity-80 cursor-pointer"
-          />
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/t/${token}`}
+              className="flex min-h-[48px] items-center justify-center gap-1.5 rounded-xl border border-rule bg-char px-4 font-bold text-sm text-slip hover:bg-rule transition-colors cursor-pointer"
+            >
+              <span>➕ สั่งเพิ่ม</span>
+            </Link>
+            <div className="flex-1">
+              <QuickTicketButton
+                token={token}
+                category="PAYMENT"
+                subject="ขอเช็คบิล/ชำระเงิน"
+                detail={`ลูกค้าขอปิดบิลและชำระเงิน ยอดสะสม ${formatBahtWithSign(total)}`}
+                idleLabel="ขอเช็คบิล / ชำระเงิน"
+                sentLabel="แจ้งพนักงานแล้ว กำลังนำบิลมาให้"
+                className="min-h-[48px] w-full rounded-xl bg-emerald-600 px-4 font-bold text-sm text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:opacity-80 cursor-pointer"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
