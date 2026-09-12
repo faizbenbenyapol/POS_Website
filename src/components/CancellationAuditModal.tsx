@@ -98,8 +98,15 @@ export default function CancellationAuditModal({
                 {logs.map((log) => (
                   <tr key={log.id} className="hover:bg-zinc-50/70">
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      <div className="font-semibold text-slip">
-                        โต๊ะ {log.table_no}
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-slip">
+                          โต๊ะ {log.table_no}
+                        </span>
+                        {log.branch_name && (
+                          <span className="rounded-md bg-zinc-100 border border-zinc-200 px-1.5 py-0.5 text-[10px] font-medium text-zinc-700">
+                            {log.branch_name}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slip-dim num">
                         {formatThaiTime(log.created_at)}
