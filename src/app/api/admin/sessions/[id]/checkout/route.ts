@@ -59,8 +59,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const result = await withTransaction<
     { ok: true; total: number } | { ok: false; reason: CheckoutFailure }
   >(async (conn) => {
-    const [sessions] = await conn.execute<(RowDataPacket & { status: string })[]>(
-      'SELECT status FROM table_sessions WHERE id = ? FOR UPDATE',
+    const [sessions] = await conn.execute<(RowDataPacket & { status: string; branch_id: number })[]>(
+      'SELECT status, branch_id FROM table_sessions WHERE id = ? FOR UPDATE',
       [sessionId],
     );
     const session = sessions[0];
@@ -71,8 +71,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (total <= 0) return { ok: false, reason: 'NOTHING_TO_PAY' };
 
     await conn.execute(
-      'INSERT INTO payments (session_id, method, total_amount, received_by) VALUES (?, ?, ?, ?)',
-      [sessionId, parsed.data.method, total, auth.user.id],
+      'INSERT INTO payments (session_id, branch_id, method, total_amount, received_by) VALUES (?, ?, ?, ?, ?)',
+      [sessionId, session.branch_id ?? 1, parsed.data.method, total, auth.user.id],
     );
     await conn.execute(
       "UPDATE table_sessions SET status = 'CLOSED', closed_at = NOW(), closed_by = ? WHERE id = ?",

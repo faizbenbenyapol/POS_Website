@@ -30,10 +30,11 @@ export async function POST(request: NextRequest) {
     const created = await withTransaction(async (conn) => {
       const ticketCode = await generateTicketCode(conn);
       const [result] = await conn.execute<ResultSetHeader>(
-        `INSERT INTO tickets (ticket_code, source, table_id, category, subject, detail)
-         VALUES (?, 'CUSTOMER', ?, ?, ?, ?)`,
+        `INSERT INTO tickets (ticket_code, branch_id, source, table_id, category, subject, detail)
+         VALUES (?, ?, 'CUSTOMER', ?, ?, ?, ?)`,
         [
           ticketCode,
+          found.branchId,
           found.tableId,
           parsed.data.category,
           parsed.data.subject,

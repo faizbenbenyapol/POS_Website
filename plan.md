@@ -601,4 +601,27 @@ export async function createOrder(sessionId: number, items: CartItem[]): Promise
 4. **Zero-Friction Customer QR Experience**:
    - ลูกค้ายังคงสแกน QR ลิงก์ `/t/[qr_token]` เช่นเดิม โดยระบบสืบค้น `branch_id` จากโต๊ะอัตโนมัติ ไม่ต้องให้ลูกค้ากดเลือกสาขาเอง
 5. **HQ Dashboard & Branch Context Switching**:
-   - เจ้าของร้านสามารถดูยอดขายรวมทุกสาขา หรือเลือกดูเจาะจงรายสาขาได้ผ่านตัวสลับสาขา (Branch Switcher) บนแถบนำทาง
+   - เจ้าของร้านสามารถดูยอดขายรวมทุกสาขา หรือเลือกดูเจาะจงรายสาขาได้ผ่านตัวสลับสาขา (Branch Switcher) บนแถบนำทาง
+
+### 20.2 สถานะการพัฒนาและการส่งมอบ Phase 3 (Implemented & Verified on `feat/multi-branch`)
+- **Database & Migration**: สร้าง `db/migrations/004_branches.sql` และอัปเดต `db/schema.sql` รองรับตาราง `branches` (Default Branch 1: `HQ-SIAM`), `branch_menu_availability` และ Foreign Keys `branch_id` ในทุกตารางสำคัญ
+- **Tenant Isolation & Security Core (`src/lib/branch.ts`)**:
+  - ฟังก์ชัน `getEffectiveBranchId()` ตรวจสอบผู้ใช้: หากเป็นพนักงานสาขา (`user.branchId !== null`) ระบบจะบังคับล็อกสิทธิ์สาขานั้นอย่างเข้มงวด ละเลย cookie/param ใดๆ ทั้งสิ้น
+  - สำหรับ HQ Admin (`user.branchId === null`) รองรับการสลับมุมมองสาขาผ่าน cookie `pos_active_branch` หรือเลือกดูภาพรวมทุกสาขา
+- **Admin APIs**:
+  - `/api/admin/branches`: จัดการรายการสาขาและสร้างสาขาใหม่
+  - `/api/admin/branches/[id]`: ดูข้อมูลและแก้ไขรายละเอียดสาขา
+  - `/api/admin/branches/[id]/menu`: ปรับราคาเฉพาะสาขา (Custom Price) และเปิด/ปิดการจำหน่าย (Stock Toggle)
+  - `/api/admin/branches/switch`: สลับบริบทการทำงานของสาขาสำหรับ HQ Admin
+  - ปรับปรุง `/api/admin/tables`, `/api/admin/orders`, `/api/admin/cancellations`, `/api/admin/tickets`, `/api/admin/dashboard` ให้กรองข้อมูลตามสาขาอัตโนมัติ
+- **Customer Experience**:
+  - ลูกค้าสแกน QR โต๊ะเดิมที่ `/t/[token]` ระบบจะเชื่อมโยงสาขาจากโต๊ะไปยังออเดอร์ บิล และตั๋วแจ้งปัญหาโดยตรง
+  - ดึงข้อมูลราคาและสถานะอาหารเฉพาะสาขาอัตโนมัติผ่าน `/api/public/menu?token=...`
+- **UI Components & Pages**:
+  - `BranchSwitcher`: Dropdown สลับสาขาสำหรับผู้ดูแลระบบ HQ และป้ายกำกับสาขาสำหรับพนักงาน
+  - `/admin/branches`: หน้าบริหารจัดการสาขาทั้งหมด แสดงจำนวนโต๊ะและออเดอร์
+  - `/admin/branches/[id]/menu`: หน้าปรับราคาและจัดการของหมดรายสาขา
+  - Dashboard: การ์ดเปรียบเทียบยอดขายรายสาขาแบบเรียลไทม์ และป้ายกำกับสาขาในหน้าต่าง ๆ
+- **Quality & Verification**:
+  - ผ่าน `npx tsc --noEmit` ไร้ข้อผิดพลาด (0 errors)
+  - ผ่าน `npm run build` Next.js Production Build ครบทั้ง 29 เส้นทางอย่างสมบูรณ์

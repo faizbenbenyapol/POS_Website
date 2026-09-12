@@ -30,14 +30,23 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   const { tableNo, seats, isActive } = parsed.data;
+
+  const currentTable = await queryOne<RowDataPacket & { branch_id: number }>(
+    'SELECT branch_id FROM dining_tables WHERE id = ? LIMIT 1',
+    [id],
+  );
+  if (!currentTable) {
+    return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบโต๊ะนี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
+  }
+
   const duplicate = await queryOne<RowDataPacket & { id: number }>(
-    'SELECT id FROM dining_tables WHERE table_no = ? AND id <> ? LIMIT 1',
-    [tableNo, id],
+    'SELECT id FROM dining_tables WHERE branch_id = ? AND table_no = ? AND id <> ? LIMIT 1',
+    [currentTable.branch_id, tableNo, id],
   );
   if (duplicate) {
     return apiError(
       ERROR_CODES.VALIDATION_ERROR,
-      `มีโต๊ะเลข ${tableNo} อยู่แล้ว กรุณาตั้งเลขโต๊ะที่ไม่ซ้ำกับของเดิม`,
+      `มีโต๊ะเลข ${tableNo} ในสาขานี้อยู่แล้ว กรุณาตั้งเลขโต๊ะที่ไม่ซ้ำกับของเดิม`,
     );
   }
 

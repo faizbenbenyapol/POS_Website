@@ -11,14 +11,15 @@ export type UserListRow = RowDataPacket & {
   username: string;
   full_name: string;
   role: 'ADMIN' | 'STAFF';
+  branch_id: number | null;
+  branch_name: string | null;
   is_active: number;
   created_at: string;
   activity_count: number;
 };
 
 /**
- * อ่านผู้ใช้ระบบทั้งหมด พร้อมนับร่องรอยการทำงาน (ปิดบิล/รับเงิน/ticket)
- * ใช้บอกว่าลบบัญชีจริงได้ไหม หรือต้องปิดใช้งานแทน
+ * อ่านผู้ใช้ระบบทั้งหมด พร้อมข้อมูลสาขาที่สังกัดและนับร่องรอยการทำงาน
  *
  * @returns รายการผู้ใช้เรียงตามบทบาทแล้วตามชื่อผู้ใช้
  */
@@ -27,12 +28,14 @@ export async function GET() {
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const rows = await query<UserListRow>(
-    `SELECT u.id, u.username, u.full_name, u.role, u.is_active, u.created_at,
+    `SELECT u.id, u.username, u.full_name, u.role, u.branch_id, b.name AS branch_name,
+            u.is_active, u.created_at,
             (SELECT COUNT(*) FROM table_sessions s WHERE s.closed_by = u.id OR s.opened_by = u.id)
           + (SELECT COUNT(*) FROM payments p WHERE p.received_by = u.id)
           + (SELECT COUNT(*) FROM tickets k WHERE k.created_by = u.id OR k.assigned_to = u.id)
           + (SELECT COUNT(*) FROM ticket_replies r WHERE r.user_id = u.id) AS activity_count
        FROM users u
+       LEFT JOIN branches b ON b.id = u.branch_id
       ORDER BY u.role, u.username`,
   );
   return apiOk(rows);
@@ -40,6 +43,7 @@ export async function GET() {
 
 /**
  * สร้างผู้ใช้ระบบใหม่ รหัสผ่านถูก hash ด้วย bcrypt ก่อนบันทึกเสมอ
+ * รองรับการผูกสาขาสำหรับ Staff (หรือ null สำหรับ HQ Admin)
  *
  * @param request - คำขอที่มี body เป็น JSON ตาม createUserSchema
  * @returns id ของผู้ใช้ที่สร้าง หรือ error เมื่อชื่อผู้ใช้ซ้ำ
@@ -53,7 +57,7 @@ export async function POST(request: NextRequest) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
-  const { username, password, fullName, role, isActive } = parsed.data;
+  const { username, password, fullName, role, isActive, branchId } = parsed.data;
   const duplicate = await queryOne<RowDataPacket & { id: number }>(
     'SELECT id FROM users WHERE username = ? LIMIT 1',
     [username],
@@ -65,9 +69,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const targetBranchId = role === 'ADMIN' ? (branchId ?? null) : (branchId ?? 1);
+
   const result = await execute(
-    'INSERT INTO users (username, password_hash, full_name, role, is_active) VALUES (?, ?, ?, ?, ?)',
-    [username, await hashPassword(password), fullName, role, isActive ? 1 : 0],
+    'INSERT INTO users (username, password_hash, full_name, role, branch_id, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+    [username, await hashPassword(password), fullName, role, targetBranchId, isActive ? 1 : 0],
   );
   return apiOk({ id: result.insertId }, 201);
 }

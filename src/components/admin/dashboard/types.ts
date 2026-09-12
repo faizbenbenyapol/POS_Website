@@ -27,6 +27,8 @@ export type StaffDashboardData = {
   isStaff: true;
   userRole: 'STAFF';
   userFullName: string;
+  branchId?: number | null;
+  branchName?: string;
   todayOrderCount: number;
   openTableCount: number;
   openTicketCount: number;
@@ -35,10 +37,20 @@ export type StaffDashboardData = {
   staleOrders: StaleOrder[];
 };
 
+export type BranchComparison = {
+  id: number;
+  code: string;
+  name: string;
+  today_revenue: string;
+  today_bills: number;
+};
+
 /** ข้อมูลสรุปภาพรวมยอดขายและการเงินสำหรับผู้ดูแลระบบ (ADMIN) */
 export type AdminDashboardData = {
   isStaff: false;
   userRole: 'ADMIN';
+  branchId?: number | null;
+  branchName?: string;
   selectedMonth: string;
   availableMonths: string[];
   monthlyRevenue: number;
@@ -61,6 +73,7 @@ export type AdminDashboardData = {
   salesTrend: TrendPoint[];
   openTicketCount: number;
   urgentOpenTicketCount: number;
+  branchComparison?: BranchComparison[];
 };
 
 export type DashboardData = StaffDashboardData | AdminDashboardData;

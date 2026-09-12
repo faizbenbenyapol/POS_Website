@@ -6,7 +6,8 @@ import SalesTrend from '@/components/SalesTrend';
 import CustomSelect from '@/components/Select';
 import { apiFetch } from '@/lib/client';
 import { downloadCsvFile } from '@/lib/exportCsv';
-import { CalendarIcon, RefreshIcon, DownloadIcon } from '@/components/Icons';
+import Link from 'next/link';
+import { CalendarIcon, RefreshIcon, DownloadIcon, BuildingIcon } from '@/components/Icons';
 
 import StaffOperationalView from '@/components/admin/dashboard/StaffOperationalView';
 import DashboardAlertBanners from '@/components/admin/dashboard/DashboardAlertBanners';
@@ -100,19 +101,16 @@ export default function DashboardPage() {
     downloadCsvFile(filename, headers, rows);
   }
 
-  if (loadError || data === null) {
+  if (loadError) {
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-slip">แดชบอร์ดสรุปยอดขาย</h1>
-        </div>
-        {loadError ? (
-          <ErrorState message={loadError} onRetry={() => load(selectedMonth, true)} />
-        ) : (
-          <TableSkeleton rows={6} />
-        )}
+        <ErrorState message={loadError} onRetry={() => load(selectedMonth, true)} />
       </div>
     );
+  }
+
+  if (!data) {
+    return <TableSkeleton rows={6} />;
   }
 
   if (data.isStaff) {
@@ -124,7 +122,15 @@ export default function DashboardPage() {
       {/* Page Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-900">ภาพรวมยอดขาย</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-zinc-900">ภาพรวมยอดขาย</h1>
+            {data.branchName && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 border border-emerald-200">
+                <BuildingIcon className="w-3 h-3" />
+                {data.branchName}
+              </span>
+            )}
+          </div>
           <p className="mt-0.5 text-xs text-zinc-400">
             {formatThaiMonthYear(data.selectedMonth)} · อัปเดตทุก 30 วินาที
           </p>
@@ -171,6 +177,43 @@ export default function DashboardPage() {
         staleOrders={data.staleOrders}
         stalePendingMinutes={data.stalePendingMinutes}
       />
+
+      {/* Branch Comparison Cards (HQ Admin viewing all branches) */}
+      {data.branchComparison && data.branchComparison.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between px-0.5">
+            <div className="flex items-center gap-2">
+              <BuildingIcon className="w-4 h-4 text-emerald-600" />
+              <h2 className="text-sm font-bold text-zinc-900">เปรียบเทียบยอดขายรายสาขา (วันนี้)</h2>
+            </div>
+            <Link
+              href="/admin/branches"
+              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+            >
+              จัดการสาขา &rarr;
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {data.branchComparison.map((b) => (
+              <div
+                key={b.id}
+                className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm hover:border-zinc-300 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-zinc-100 text-zinc-700">
+                    {b.code}
+                  </span>
+                  <span className="text-xs text-zinc-400">{b.today_bills} บิล</span>
+                </div>
+                <h3 className="mt-2 text-sm font-medium text-zinc-900 truncate">{b.name}</h3>
+                <p className="mt-1 text-lg font-bold text-emerald-600">
+                  ฿{Number(b.today_revenue || 0).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* KPI Metric Strip */}
       <AdminKpiStrip data={data} />

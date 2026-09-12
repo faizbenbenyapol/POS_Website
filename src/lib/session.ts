@@ -6,13 +6,20 @@ export type TableSession = {
   tableId: number;
   tableNo: string;
   sessionId: number;
+  branchId: number;
+  branchName: string;
+  branchCode: string;
 };
 
-/** แถวโต๊ะที่ค้นด้วย qr_token */
-type TableRow = RowDataPacket & {
+/** แถวโต๊ะที่ค้นด้วย qr_token พร้อมข้อมูลสาขา */
+type TableWithBranchRow = RowDataPacket & {
   id: number;
   table_no: string;
   is_active: number;
+  branch_id: number;
+  branch_name: string;
+  branch_code: string;
+  branch_is_active: number;
 };
 
 /** แถวรอบการนั่งที่กำลังเปิดอยู่ของโต๊ะ */
@@ -21,7 +28,7 @@ type SessionRow = RowDataPacket & { id: number };
 /**
  * สาเหตุที่ token ใช้ไม่ได้ แยกเป็นรหัสเพื่อให้หน้าจอบอกวิธีแก้ได้ตรงกรณี
  */
-export type SessionError = 'TABLE_NOT_FOUND' | 'TABLE_INACTIVE' | 'TABLE_NOT_OPEN';
+export type SessionError = 'TABLE_NOT_FOUND' | 'TABLE_INACTIVE' | 'TABLE_NOT_OPEN' | 'BRANCH_INACTIVE';
 
 /**
  * ตรวจ qr_token จากลิงก์ QR แล้วคืนรอบการนั่งที่เปิดอยู่ของโต๊ะนั้น
@@ -37,12 +44,17 @@ export type SessionError = 'TABLE_NOT_FOUND' | 'TABLE_INACTIVE' | 'TABLE_NOT_OPE
 export async function resolveTableSession(
   token: string,
 ): Promise<{ ok: true; session: TableSession } | { ok: false; reason: SessionError }> {
-  const table = await queryOne<TableRow>(
-    'SELECT id, table_no, is_active FROM dining_tables WHERE qr_token = ? LIMIT 1',
+  const table = await queryOne<TableWithBranchRow>(
+    `SELECT t.id, t.table_no, t.is_active, t.branch_id,
+            b.name AS branch_name, b.code AS branch_code, b.is_active AS branch_is_active
+       FROM dining_tables t
+       JOIN branches b ON b.id = t.branch_id
+      WHERE t.qr_token = ? LIMIT 1`,
     [token],
   );
   if (!table) return { ok: false, reason: 'TABLE_NOT_FOUND' };
   if (table.is_active !== 1) return { ok: false, reason: 'TABLE_INACTIVE' };
+  if (table.branch_is_active !== 1) return { ok: false, reason: 'BRANCH_INACTIVE' };
 
   const open = await queryOne<SessionRow>(
     "SELECT id FROM table_sessions WHERE table_id = ? AND status = 'OPEN' ORDER BY id DESC LIMIT 1",
@@ -53,7 +65,14 @@ export async function resolveTableSession(
 
   return {
     ok: true,
-    session: { tableId: table.id, tableNo: table.table_no, sessionId: open.id },
+    session: {
+      tableId: table.id,
+      tableNo: table.table_no,
+      sessionId: open.id,
+      branchId: table.branch_id,
+      branchName: table.branch_name,
+      branchCode: table.branch_code,
+    },
   };
 }
 
@@ -67,21 +86,42 @@ export async function resolveTableSession(
 export async function findTableSession(
   token: string,
 ): Promise<
-  | { ok: true; tableId: number; tableNo: string; sessionId: number | null }
+  | {
+      ok: true;
+      tableId: number;
+      tableNo: string;
+      sessionId: number | null;
+      branchId: number;
+      branchName: string;
+      branchCode: string;
+    }
   | { ok: false; reason: SessionError }
 > {
-  const table = await queryOne<TableRow>(
-    'SELECT id, table_no, is_active FROM dining_tables WHERE qr_token = ? LIMIT 1',
+  const table = await queryOne<TableWithBranchRow>(
+    `SELECT t.id, t.table_no, t.is_active, t.branch_id,
+            b.name AS branch_name, b.code AS branch_code, b.is_active AS branch_is_active
+       FROM dining_tables t
+       JOIN branches b ON b.id = t.branch_id
+      WHERE t.qr_token = ? LIMIT 1`,
     [token],
   );
   if (!table) return { ok: false, reason: 'TABLE_NOT_FOUND' };
   if (table.is_active !== 1) return { ok: false, reason: 'TABLE_INACTIVE' };
+  if (table.branch_is_active !== 1) return { ok: false, reason: 'BRANCH_INACTIVE' };
 
   const open = await queryOne<SessionRow>(
     "SELECT id FROM table_sessions WHERE table_id = ? AND status = 'OPEN' ORDER BY id DESC LIMIT 1",
     [table.id],
   );
-  return { ok: true, tableId: table.id, tableNo: table.table_no, sessionId: open?.id ?? null };
+  return {
+    ok: true,
+    tableId: table.id,
+    tableNo: table.table_no,
+    sessionId: open?.id ?? null,
+    branchId: table.branch_id,
+    branchName: table.branch_name,
+    branchCode: table.branch_code,
+  };
 }
 
 /** errno ที่ MySQL คืนเมื่อ INSERT ชน unique index */
@@ -110,11 +150,18 @@ export async function openTableSession(
   );
   if (existing) return { sessionId: existing.id, created: false };
 
+  // ดึง branch_id ของโต๊ะเพื่อผูกกับ session
+  const table = await queryOne<RowDataPacket & { branch_id: number }>(
+    'SELECT branch_id FROM dining_tables WHERE id = ? LIMIT 1',
+    [tableId],
+  );
+  const branchId = table?.branch_id ?? 1;
+
   for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
     try {
       const result: ResultSetHeader = await execute(
-        "INSERT INTO table_sessions (table_id, status, opened_by) VALUES (?, 'OPEN', ?)",
-        [tableId, userId],
+        "INSERT INTO table_sessions (table_id, branch_id, status, opened_by) VALUES (?, ?, 'OPEN', ?)",
+        [tableId, branchId, userId],
       );
       return { sessionId: result.insertId, created: true };
     } catch (err: unknown) {
@@ -144,6 +191,9 @@ export async function openTableSession(
  * @returns ข้อความภาษาไทยพร้อมแสดงบนหน้าจอ
  */
 export function sessionErrorMessage(reason: SessionError): string {
+  if (reason === 'BRANCH_INACTIVE') {
+    return 'สาขานี้ปิดให้บริการชั่วคราว ขออภัยในความไม่สะดวก';
+  }
   if (reason === 'TABLE_INACTIVE') {
     return 'โต๊ะนี้ปิดใช้งานชั่วคราว กรุณาแจ้งพนักงานเพื่อย้ายโต๊ะหรือเปิดโต๊ะให้ใหม่';
   }

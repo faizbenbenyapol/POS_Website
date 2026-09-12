@@ -17,6 +17,8 @@ export type SessionUser = {
   username: string;
   fullName: string;
   role: UserRole;
+  branchId?: number | null;
+  branchName?: string | null;
 };
 
 /**
@@ -58,13 +60,18 @@ export async function readToken(token: string): Promise<SessionUser | null> {
     ) {
       return null;
     }
+    const branchId = typeof payload.branchId === 'number' ? payload.branchId : null;
+    const branchName = typeof payload.branchName === 'string' ? payload.branchName : null;
     return {
       id: payload.id,
       username: payload.username,
       fullName: payload.fullName,
       role: payload.role,
+      branchId,
+      branchName,
     };
   } catch {
     return null;
   }
 }
+

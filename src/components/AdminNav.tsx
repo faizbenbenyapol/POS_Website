@@ -12,7 +12,9 @@ import {
   TicketIcon,
   UsersIcon,
   LogoutIcon,
+  BuildingIcon,
 } from '@/components/Icons';
+import BranchSwitcher from '@/components/BranchSwitcher';
 
 /** เมนูหลังบ้านทั้งหมด ประกาศไว้ที่เดียวเพื่อไม่ให้ลิงก์หลุดหายเวลาเพิ่มหน้า */
 const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ className?: string }>; adminOnly: boolean }[] = [
@@ -22,6 +24,7 @@ const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ clas
   { href: '/admin/categories', label: 'หมวดหมู่', icon: TagIcon, adminOnly: true },
   { href: '/admin/tables', label: 'โต๊ะและ QR', icon: TableIcon, adminOnly: false },
   { href: '/admin/tickets', label: 'เรื่องแจ้งปัญหา', icon: TicketIcon, adminOnly: false },
+  { href: '/admin/branches', label: 'จัดการสาขา', icon: BuildingIcon, adminOnly: true },
   { href: '/admin/users', label: 'ผู้ใช้ระบบ', icon: UsersIcon, adminOnly: true },
 ];
 
@@ -56,13 +59,18 @@ export default function AdminNav({ user }: { user: SessionUser }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-white/25 font-bold text-sm text-white">
             {user.fullName.slice(0, 1)}
           </div>
-          <div>
-            <p className="font-semibold text-sm leading-tight text-white">{user.fullName}</p>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm leading-tight text-white truncate">{user.fullName}</p>
             <p className="text-xs text-white/80 font-medium">
-              {user.role === 'ADMIN' ? 'เจ้าของร้าน' : 'พนักงาน'}
+              {user.role === 'ADMIN' ? (user.branchId ? 'ผู้จัดการสาขา' : 'เจ้าของร้าน (HQ)') : 'พนักงาน'}
             </p>
           </div>
         </div>
+      </div>
+
+      {/* ตัวสลับสาขาสำหรับ HQ หรือป้ายสาขาสำหรับ Staff */}
+      <div className="px-3 pt-2.5 pb-1">
+        <BranchSwitcher user={user} />
       </div>
 
       <ul className="flex gap-0.5 overflow-x-auto p-2 md:flex-1 md:flex-col md:overflow-y-auto">

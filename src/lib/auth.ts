@@ -21,6 +21,8 @@ type UserRow = RowDataPacket & {
   password_hash: string;
   full_name: string;
   role: UserRole;
+  branch_id: number | null;
+  branch_name: string | null;
   is_active: number;
 };
 
@@ -82,7 +84,11 @@ export async function authenticate(
 > {
   const { queryOne } = await import('@/lib/db');
   const row = await queryOne<UserRow>(
-    'SELECT id, username, password_hash, full_name, role, is_active FROM users WHERE username = ? LIMIT 1',
+    `SELECT u.id, u.username, u.password_hash, u.full_name, u.role, u.branch_id,
+            b.name AS branch_name, u.is_active
+       FROM users u
+       LEFT JOIN branches b ON b.id = u.branch_id
+      WHERE u.username = ? LIMIT 1`,
     [username],
   );
   // ไม่บอกแยกว่า "ไม่มีชื่อผู้ใช้นี้" เพื่อไม่ให้คนนอกไล่เดาว่ามีบัญชีอะไรอยู่บ้าง
@@ -99,6 +105,8 @@ export async function authenticate(
       username: row.username,
       fullName: row.full_name,
       role: row.role,
+      branchId: row.branch_id,
+      branchName: row.branch_name,
     },
   };
 }

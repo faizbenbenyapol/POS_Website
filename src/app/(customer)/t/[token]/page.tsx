@@ -77,7 +77,9 @@ export default function CustomerMenuPage({
     setLoadError('');
     const [sessionRes, menuRes] = await Promise.all([
       apiFetch(`/api/public/tables/${token}`),
-      apiFetch<{ categories: Category[]; items: MenuItem[] }>('/api/public/menu'),
+      apiFetch<{ categories: Category[]; items: MenuItem[] }>(
+        `/api/public/menu?token=${encodeURIComponent(token)}`,
+      ),
     ]);
 
     if (!sessionRes.ok) {

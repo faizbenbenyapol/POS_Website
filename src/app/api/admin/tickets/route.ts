@@ -5,9 +5,12 @@ import { requireStaff } from '@/lib/auth';
 import { query, withTransaction } from '@/lib/db';
 import { generateTicketCode } from '@/lib/ticket';
 import { staffTicketSchema, firstErrorMessage } from '@/lib/validation';
+import { getEffectiveBranchId } from '@/lib/branch';
 
 export type TicketRow = RowDataPacket & {
   id: number;
+  branch_id: number;
+  branch_name: string;
   ticket_code: string;
   source: string;
   table_no: string | null;
@@ -33,40 +36,45 @@ export type TicketReplyRow = RowDataPacket & {
 
 /**
  * อ่านเรื่องแจ้งปัญหาและรายการคำตอบขนานกันผ่าน Promise.all
+ * รองรับการกรองตามสาขาที่เลือก (หรือแสดงทุกสาขาสำหรับ HQ Admin)
  */
 export async function GET(request: NextRequest) {
   const auth = await requireStaff();
   if (!auth.ok) return authFailureResponse(auth.reason);
 
+  const branchId = await getEffectiveBranchId(request, auth.user);
   const params = request.nextUrl.searchParams;
   const status = params.get('status') ?? '';
   const priority = params.get('priority') ?? '';
 
   const [tickets, replies] = await Promise.all([
     query<TicketRow>(
-      `SELECT k.id, k.ticket_code, k.source, t.table_no,
+      `SELECT k.id, k.branch_id, b.name AS branch_name, k.ticket_code, k.source, t.table_no,
               creator.full_name AS created_by_name,
               k.assigned_to, assignee.full_name AS assigned_to_name,
               k.category, k.subject, k.detail, k.priority, k.status,
               k.created_at, k.updated_at
          FROM tickets k
          LEFT JOIN dining_tables t ON t.id = k.table_id
+         LEFT JOIN branches b ON b.id = k.branch_id
          LEFT JOIN users creator ON creator.id = k.created_by
          LEFT JOIN users assignee ON assignee.id = k.assigned_to
-        WHERE (? = '' OR k.status = ?)
+        WHERE (? IS NULL OR k.branch_id = ?)
+          AND (? = '' OR k.status = ?)
           AND (? = '' OR k.priority = ?)
         ORDER BY FIELD(k.priority, 'URGENT', 'NORMAL', 'LOW'), k.id DESC`,
-      [status, status, priority, priority],
+      [branchId, branchId, status, status, priority, priority],
     ),
     query<TicketReplyRow>(
       `SELECT r.id, r.ticket_id, u.full_name AS user_name, r.message, r.created_at
          FROM ticket_replies r
          JOIN tickets k ON k.id = r.ticket_id
          LEFT JOIN users u ON u.id = r.user_id
-        WHERE (? = '' OR k.status = ?)
+        WHERE (? IS NULL OR k.branch_id = ?)
+          AND (? = '' OR k.status = ?)
           AND (? = '' OR k.priority = ?)
         ORDER BY r.id`,
-      [status, status, priority, priority],
+      [branchId, branchId, status, status, priority, priority],
     ),
   ]);
 
@@ -83,12 +91,15 @@ export async function POST(request: NextRequest) {
   }
 
   const { category, subject, detail, priority, tableId } = parsed.data;
+  const effectiveBranchId = await getEffectiveBranchId(request, auth.user);
+  const targetBranchId = effectiveBranchId ?? auth.user.branchId ?? 1;
+
   const created = await withTransaction(async (conn) => {
     const ticketCode = await generateTicketCode(conn);
     const [result] = await conn.execute<ResultSetHeader>(
-      `INSERT INTO tickets (ticket_code, source, table_id, created_by, category, subject, detail, priority)
-       VALUES (?, 'STAFF', ?, ?, ?, ?, ?, ?)`,
-      [ticketCode, tableId || null, auth.user.id, category, subject, detail, priority],
+      `INSERT INTO tickets (ticket_code, branch_id, source, table_id, created_by, category, subject, detail, priority)
+       VALUES (?, ?, 'STAFF', ?, ?, ?, ?, ?, ?)`,
+      [ticketCode, targetBranchId, tableId || null, auth.user.id, category, subject, detail, priority],
     );
     return { id: result.insertId, ticketCode };
   });

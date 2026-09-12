@@ -32,15 +32,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
-  type OrderDetail = RowDataPacket & {
-    session_status: string;
-    order_code: string;
-    total_amount: number;
-    table_no: string;
-  };
-
-  const order = await queryOne<OrderDetail>(
-    `SELECT s.status AS session_status, o.order_code, o.total_amount, t.table_no
+  const order = await queryOne<
+    RowDataPacket & {
+      session_status: string;
+      total_amount: string;
+      order_code: string;
+      table_no: string;
+      branch_id: number;
+    }
+  >(
+    `SELECT o.id, o.order_code, o.total_amount, o.branch_id, s.status AS session_status, t.table_no
        FROM orders o
        JOIN table_sessions s ON s.id = o.session_id
        JOIN dining_tables t ON t.id = s.table_id
@@ -88,10 +89,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     try {
       await execute(
         `INSERT INTO cancellation_audit_logs 
-          (entity_type, entity_id, order_code, table_no, item_name, quantity, amount, reason, cancelled_by)
-         VALUES ('ORDER', ?, ?, ?, NULL, NULL, ?, ?, ?)`,
+          (entity_type, entity_id, branch_id, order_code, table_no, item_name, quantity, amount, reason, cancelled_by)
+         VALUES ('ORDER', ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`,
         [
           id,
+          order.branch_id ?? 1,
           order.order_code,
           order.table_no,
           Number(order.total_amount || 0),

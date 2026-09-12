@@ -52,9 +52,43 @@ export const menuItemSchema = z.object({
 });
 
 /**
- * ตรวจข้อมูลโต๊ะ table_no ต้องไม่ซ้ำ (ตรวจซ้ำอีกชั้นด้วย UNIQUE ในฐานข้อมูล)
+ * ตรวจข้อมูลสาขา
+ */
+export const branchSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(1, MESSAGES.required)
+    .max(20, 'รหัสสาขายาวเกิน 20 ตัวอักษร')
+    .regex(/^[A-Z0-9_-]+$/i, 'รหัสสาขาใช้ได้เฉพาะตัวอักษร ตัวเลข ขีดกลาง และขีดล่าง'),
+  name: z.string().trim().min(1, MESSAGES.required).max(100, 'ชื่อสาขายาวเกิน 100 ตัวอักษร'),
+  address: z.string().trim().max(255, 'ที่อยู่ยาวเกิน 255 ตัวอักษร').optional().or(z.literal('')),
+  phone: z.string().trim().max(30, 'เบอร์โทรยาวเกิน 30 ตัวอักษร').optional().or(z.literal('')),
+  businessDayCutoffHour: z.coerce.number().int().min(0).max(23).default(4),
+  isActive: z.boolean().default(true),
+});
+
+export const updateBranchSchema = branchSchema.partial();
+
+/**
+ * ตรวจการตั้งราคาพิเศษและเปิด/ปิดของหมดเฉพาะสาขา
+ */
+export const branchMenuOverrideSchema = z.object({
+  menuItemId: z.coerce.number().int().positive('ต้องระบุ menuItemId'),
+  customPrice: z.coerce
+    .number()
+    .min(0, 'ราคาต้องไม่ติดลบ')
+    .max(99999999, 'ราคาสูงเกินไป')
+    .nullable()
+    .optional(),
+  isAvailable: z.boolean().default(true),
+});
+
+/**
+ * ตรวจข้อมูลโต๊ะ table_no ต้องไม่ซ้ำในสาขาเดียวกัน (ตรวจซ้ำอีกชั้นด้วย UNIQUE ในฐานข้อมูล)
  */
 export const tableSchema = z.object({
+  branchId: z.coerce.number().int().positive().optional(),
   tableNo: z.string().trim().min(1, MESSAGES.required).max(10, 'เลขโต๊ะยาวเกิน 10 ตัวอักษร'),
   seats: z.coerce.number().int().min(1, 'จำนวนที่นั่งต้องอย่างน้อย 1').max(127, 'จำนวนที่นั่งมากเกินไป'),
   isActive: z.boolean().default(true),
@@ -62,6 +96,7 @@ export const tableSchema = z.object({
 
 /**
  * ตรวจข้อมูลผู้ใช้ตอนสร้างใหม่ บังคับรหัสผ่านอย่างน้อย 8 ตัวสำหรับบัญชีที่ตั้งใหม่
+ * branchId = null หมายถึง HQ Super Admin
  */
 export const createUserSchema = z.object({
   username: z
@@ -73,6 +108,7 @@ export const createUserSchema = z.object({
   password: z.string().min(8, 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร').max(200),
   fullName: z.string().trim().min(1, MESSAGES.required).max(100, 'ชื่อ-สกุลยาวเกิน 100 ตัวอักษร'),
   role: z.enum(['ADMIN', 'STAFF']),
+  branchId: z.coerce.number().int().positive().nullable().optional(),
   isActive: z.boolean().default(true),
 });
 

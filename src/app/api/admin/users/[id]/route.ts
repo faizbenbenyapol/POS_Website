@@ -30,7 +30,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
-  const { username, password, fullName, role, isActive } = parsed.data;
+  const { username, password, fullName, role, isActive, branchId } = parsed.data;
   if (id === auth.user.id && (role !== 'ADMIN' || !isActive)) {
     return apiError(
       ERROR_CODES.VALIDATION_ERROR,
@@ -38,6 +38,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       409,
     );
   }
+
+  const targetBranchId = role === 'ADMIN' ? (branchId ?? null) : (branchId ?? 1);
 
   const duplicate = await queryOne<RowDataPacket & { id: number }>(
     'SELECT id FROM users WHERE username = ? AND id <> ? LIMIT 1',
@@ -52,12 +54,12 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   const result = password
     ? await execute(
-        'UPDATE users SET username = ?, full_name = ?, role = ?, is_active = ?, password_hash = ? WHERE id = ?',
-        [username, fullName, role, isActive ? 1 : 0, await hashPassword(password), id],
+        'UPDATE users SET username = ?, full_name = ?, role = ?, branch_id = ?, is_active = ?, password_hash = ? WHERE id = ?',
+        [username, fullName, role, targetBranchId, isActive ? 1 : 0, await hashPassword(password), id],
       )
     : await execute(
-        'UPDATE users SET username = ?, full_name = ?, role = ?, is_active = ? WHERE id = ?',
-        [username, fullName, role, isActive ? 1 : 0, id],
+        'UPDATE users SET username = ?, full_name = ?, role = ?, branch_id = ?, is_active = ? WHERE id = ?',
+        [username, fullName, role, targetBranchId, isActive ? 1 : 0, id],
       );
 
   if (result.affectedRows === 0) {

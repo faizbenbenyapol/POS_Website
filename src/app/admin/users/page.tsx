@@ -7,7 +7,7 @@ import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/Data
 import { TextField, SelectField, CheckboxField, FormActions } from '@/components/Field';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { formatThaiDate } from '@/lib/format';
-import { PlusIcon, CrownIcon, BriefcaseIcon, BanIcon, EyeIcon } from '@/components/Icons';
+import { PlusIcon, CrownIcon, BriefcaseIcon, BanIcon, EyeIcon, BuildingIcon } from '@/components/Icons';
 
 /** ผู้ใช้ 1 แถวตามที่ GET /api/admin/users คืนมา (ไม่มี password_hash) */
 type SystemUser = {
@@ -15,9 +15,17 @@ type SystemUser = {
   username: string;
   full_name: string;
   role: 'ADMIN' | 'STAFF';
+  branch_id: number | null;
+  branch_name: string | null;
   is_active: number;
   created_at: string;
   activity_count: number;
+};
+
+type BranchSimple = {
+  id: number;
+  code: string;
+  name: string;
 };
 
 /** ค่าตั้งต้นของฟอร์มตอนกดเพิ่มผู้ใช้ใหม่ */
@@ -26,23 +34,23 @@ const EMPTY_FORM = {
   password: '',
   fullName: '',
   role: 'STAFF',
+  branchId: '1',
   isActive: true,
 };
 
 /** ตัวเลือกบทบาทพร้อมคำอธิบายภาษาไทย */
 const ROLE_OPTIONS = [
-  { value: 'STAFF', label: 'พนักงาน (ดูออเดอร์ ปิดบิล ตอบ ticket)' },
-  { value: 'ADMIN', label: 'ผู้ดูแลระบบ (ทำได้ทุกอย่าง)' },
+  { value: 'STAFF', label: 'พนักงาน (ดูออเดอร์ ปิดบิล ตอบ ticket ประจำสาขา)' },
+  { value: 'ADMIN', label: 'ผู้ดูแลระบบ (เข้าถึงทุกส่วน)' },
 ];
 
 /**
  * หน้าจัดการผู้ใช้ระบบ เข้าได้เฉพาะแอดมิน
- * บัญชีที่เคยทำรายการในระบบแล้วจะถูกปิดใช้งานแทนการลบ เพื่อให้ยังสืบย้อนได้ว่าใครทำอะไร
- *
- * @returns หน้าจอตารางผู้ใช้พร้อมฟอร์มใน modal
+ * รองรับการกำหนดสาขาที่สังกัด หรือกำหนดให้เป็นผู้ดูแลระบบส่วนกลาง (HQ Admin)
  */
 export default function UsersPage() {
   const [items, setItems] = useState<SystemUser[] | null>(null);
+  const [branches, setBranches] = useState<BranchSimple[]>([]);
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string }>({
     tone: 'success',
@@ -56,16 +64,22 @@ export default function UsersPage() {
   const [deletingUser, setDeletingUser] = useState<SystemUser | null>(null);
 
   /**
-   * โหลดรายชื่อผู้ใช้ระบบทั้งหมดใหม่
-   *
-   * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือปรับ state ของรายการผู้ใช้
+   * โหลดรายชื่อผู้ใช้ระบบทั้งหมดและสาขา
    */
   const load = useCallback(async () => {
     setItems(null);
     setLoadError('');
-    const result = await apiFetch<SystemUser[]>('/api/admin/users');
-    if (result.ok) setItems(result.data);
-    else setLoadError(result.message);
+    const [uRes, bRes] = await Promise.all([
+      apiFetch<SystemUser[]>('/api/admin/users'),
+      apiFetch<BranchSimple[]>('/api/admin/branches'),
+    ]);
+
+    if (uRes.ok) setItems(uRes.data);
+    else setLoadError(uRes.message);
+
+    if (bRes.ok && Array.isArray(bRes.data)) {
+      setBranches(bRes.data);
+    }
   }, []);
 
   useEffect(() => {
@@ -73,11 +87,7 @@ export default function UsersPage() {
   }, [load]);
 
   /**
-   * เปิด modal ในโหมดเพิ่มใหม่หรือแก้ไข ตอนแก้ไขจะเว้นช่องรหัสผ่านว่างไว้เสมอ
-   * เพราะระบบเก็บแต่ hash จึงเอารหัสผ่านเดิมมาแสดงไม่ได้
-   *
-   * @param user - ผู้ใช้ที่จะแก้ไข ถ้าไม่ส่งมาแปลว่าเพิ่มใหม่
-   * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือเปิด modal พร้อมค่าตั้งต้นของฟอร์ม
+   * เปิด modal ในโหมดเพิ่มใหม่หรือแก้ไข
    */
   function openForm(user?: SystemUser) {
     setEditing(user ?? null);
@@ -88,6 +98,7 @@ export default function UsersPage() {
             password: '',
             fullName: user.full_name,
             role: user.role,
+            branchId: user.branch_id !== null && user.branch_id !== undefined ? String(user.branch_id) : '',
             isActive: user.is_active === 1,
           }
         : EMPTY_FORM,
@@ -97,18 +108,25 @@ export default function UsersPage() {
   }
 
   /**
-   * บันทึกฟอร์มผู้ใช้ รหัสผ่านจะถูก hash ที่ฝั่งเซิร์ฟเวอร์ก่อนบันทึกเสมอ
-   *
-   * @param event - เหตุการณ์ submit ใช้ยกเลิกการรีโหลดหน้า
-   * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือเขียนข้อมูลลงฐานข้อมูลและรีโหลดตาราง
+   * บันทึกฟอร์มผู้ใช้
    */
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setFormError('');
+
+    const payload = {
+      username: form.username,
+      password: form.password,
+      fullName: form.fullName,
+      role: form.role,
+      branchId: form.branchId ? Number(form.branchId) : null,
+      isActive: form.isActive,
+    };
+
     const result = editing
-      ? await apiFetch(`/api/admin/users/${editing.id}`, { method: 'PUT', body: jsonBody(form) })
-      : await apiFetch('/api/admin/users', { method: 'POST', body: jsonBody(form) });
+      ? await apiFetch(`/api/admin/users/${editing.id}`, { method: 'PUT', body: jsonBody(payload) })
+      : await apiFetch('/api/admin/users', { method: 'POST', body: jsonBody(payload) });
     setSaving(false);
 
     if (!result.ok) {
@@ -127,9 +145,6 @@ export default function UsersPage() {
     setDeletingUser(user);
   }
 
-  /**
-   * ดำเนินการลบผู้ใช้จริงหลังจากผ่านการยืนยันใน ConfirmModal
-   */
   async function executeDelete() {
     if (!deletingUser) return;
     const target = deletingUser;
@@ -139,39 +154,46 @@ export default function UsersPage() {
       `/api/admin/users/${target.id}`,
       { method: 'DELETE' },
     );
-    setNotice(
-      result.ok
-        ? { tone: 'success', message: result.data.message }
-        : { tone: 'error', message: result.message },
-    );
-    if (result.ok) load();
+    if (!result.ok) {
+      setNotice({ tone: 'error', message: result.message });
+      return;
+    }
+    setNotice({ tone: 'success', message: result.data.message });
+    load();
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slip">ผู้ใช้ระบบ</h1>
-          <p className="text-slip-dim">บัญชีสำหรับพนักงานและผู้ดูแลร้าน ลูกค้าไม่ต้องมีบัญชี</p>
+          <h1 className="text-xl font-semibold text-slip">ผู้ใช้ระบบ (User Management)</h1>
+          <p className="text-xs text-slip-dim">
+            จัดการบัญชีผู้ใช้ระบบ กำหนดบทบาท และจัดสรรสาขาประจำของพนักงาน
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => openForm()}
-          className="min-h-[42px] rounded-xl bg-emerald-600 px-4 font-bold text-xs text-white shadow-xs transition-colors hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer"
-        >
-          <PlusIcon className="w-4 h-4" />
-          <span>เพิ่มผู้ใช้</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openForm()}
+            className="min-h-[40px] rounded-xl bg-emerald-600 px-4 font-bold text-xs text-white shadow-xs transition-colors hover:bg-emerald-700 flex items-center gap-1.5 cursor-pointer"
+          >
+            <PlusIcon className="w-4 h-4" />
+            <span>เพิ่มผู้ใช้ใหม่</span>
+          </button>
+        </div>
       </div>
 
-      <Notice
-        tone={notice.tone}
-        message={notice.message}
-        onDismiss={() => setNotice({ tone: 'success', message: '' })}
-      />
+      {notice.message && (
+        <Notice
+          tone={notice.tone}
+          message={notice.message}
+          onDismiss={() => setNotice({ tone: 'success', message: '' })}
+        />
+      )}
 
       {loadError && <ErrorState message={loadError} onRetry={load} />}
       {!loadError && items === null && <TableSkeleton rows={4} />}
+
       {!loadError && items !== null && items.length === 0 && (
         <EmptyState
           message="ยังไม่มีผู้ใช้ในระบบ — เพิ่มบัญชีพนักงานคนแรกเพื่อให้เข้าใช้งานหลังบ้านได้"
@@ -189,49 +211,72 @@ export default function UsersPage() {
       )}
 
       {!loadError && items !== null && items.length > 0 && (
-        <div className="overflow-x-auto rounded-lg bg-griddle shadow-sm">
-          <table className="w-full min-w-[44rem] border-collapse">
+        <div className="overflow-x-auto rounded-xl border border-rule bg-white shadow-xs">
+          <table className="w-full min-w-[44rem] border-collapse text-left text-xs">
             <thead>
-              <tr className="bg-char text-left text-slip-dim">
-                <th className="px-3 py-2 font-medium">ชื่อผู้ใช้</th>
-                <th className="px-3 py-2 font-medium">ชื่อ-สกุล</th>
-                <th className="px-3 py-2 font-medium">บทบาท</th>
-                <th className="px-3 py-2 font-medium">สถานะ</th>
-                <th className="px-3 py-2 font-medium">สร้างเมื่อ</th>
-                <th className="px-3 py-2 font-medium">จัดการ</th>
+              <tr className="border-b border-rule bg-zinc-50/75 font-semibold text-zinc-500 uppercase tracking-wider">
+                <th className="px-4 py-3">ชื่อผู้ใช้</th>
+                <th className="px-4 py-3">ชื่อ-สกุล</th>
+                <th className="px-4 py-3">บทบาท</th>
+                <th className="px-4 py-3">สาขาที่สังกัด</th>
+                <th className="px-4 py-3">สถานะ</th>
+                <th className="px-4 py-3">สร้างเมื่อ</th>
+                <th className="px-4 py-3 text-right">จัดการ</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-rule">
               {items.map((user) => (
-                <tr key={user.id} className="border-b border-rule last:border-b-0">
-                  <td className="num px-3 py-2 text-slip">{user.username}</td>
-                  <td className="px-3 py-2 text-slip">{user.full_name}</td>
-                  <td className="px-3 py-2 text-slip-dim">
-                    {user.role === 'ADMIN' ? 'ผู้ดูแลระบบ' : 'พนักงาน'}
-                  </td>
-                  <td className="px-3 py-2">
+                <tr key={user.id} className="hover:bg-zinc-50/50 transition-colors">
+                  <td className="num px-4 py-3 font-semibold text-zinc-900">{user.username}</td>
+                  <td className="px-4 py-3 text-zinc-800">{user.full_name}</td>
+                  <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-sm ${
-                        user.is_active === 1 ? 'bg-served/10 text-served' : 'bg-char text-slip-dim'
+                      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold ${
+                        user.role === 'ADMIN'
+                          ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                          : 'bg-zinc-100 text-zinc-700'
+                      }`}
+                    >
+                      {user.role === 'ADMIN' ? 'ผู้ดูแลระบบ' : 'พนักงาน'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {user.branch_id === null ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                        <span>🌐 สำนักงานใหญ่ (HQ)</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700">
+                        <BuildingIcon className="w-3 h-3 text-zinc-500" />
+                        <span>{user.branch_name || `สาขา #${user.branch_id}`}</span>
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        user.is_active === 1
+                          ? 'bg-green-50 text-green-700'
+                          : 'bg-zinc-100 text-zinc-500'
                       }`}
                     >
                       {user.is_active === 1 ? 'ใช้งานได้' : 'ปิดใช้งาน'}
                     </span>
                   </td>
-                  <td className="num px-3 py-2 text-slip-dim">{formatThaiDate(user.created_at)}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
+                  <td className="num px-4 py-3 text-zinc-500">{formatThaiDate(user.created_at)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
                         type="button"
                         onClick={() => openForm(user)}
-                        className="rounded-lg border border-rule bg-paper px-3 py-1 text-xs font-semibold text-slip transition-colors hover:border-slate-400 hover:text-slate-900 cursor-pointer"
+                        className="rounded-md border border-rule px-2.5 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 transition cursor-pointer"
                       >
                         แก้ไข
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(user)}
-                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-600 transition-all hover:bg-red-100"
+                        className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-600 hover:bg-red-100 transition cursor-pointer"
                       >
                         ลบ
                       </button>
@@ -250,7 +295,7 @@ export default function UsersPage() {
           <h2 className="text-sm font-bold text-slip">ตารางเปรียบเทียบสิทธิ์การใช้งาน (Permissions Matrix)</h2>
         </div>
         <p className="text-xs text-slip-dim mb-3.5">
-          ระบบกำหนดขอบเขตอำนาจหน้าที่อย่างชัดเจน เพื่อความปลอดภัยในการดำเนินงานหน้าร้าน และปกป้องข้อมูลทางการเงินของเจ้าของร้าน
+          ระบบกำหนดขอบเขตอำนาจหน้าที่อย่างชัดเจน เพื่อความปลอดภัยในการดำเนินงานหน้าร้าน และจำกัดการเข้าถึงข้อมูลตามสาขา
         </p>
 
         <div className="overflow-x-auto rounded-xl border border-rule">
@@ -261,13 +306,13 @@ export default function UsersPage() {
                 <th className="px-4 py-2.5 text-center">
                   <span className="inline-flex items-center justify-center gap-1.5 text-slate-900">
                     <CrownIcon className="w-4 h-4 text-amber-600" />
-                    <span>เจ้าของร้าน (ADMIN)</span>
+                    <span>เจ้าของร้าน (HQ Admin)</span>
                   </span>
                 </th>
                 <th className="px-4 py-2.5 text-center">
                   <span className="inline-flex items-center justify-center gap-1.5 text-slate-900">
                     <BriefcaseIcon className="w-4 h-4 text-slate-600" />
-                    <span>พนักงานหน้าร้าน (STAFF)</span>
+                    <span>พนักงานสาขา (STAFF)</span>
                   </span>
                 </th>
               </tr>
@@ -275,7 +320,17 @@ export default function UsersPage() {
             <tbody className="divide-y divide-rule">
               <tr>
                 <td className="px-4 py-2.5 font-medium text-slip">ดูภาพรวมยอดขาย กำไร และสถิติการเงินร้าน</td>
-                <td className="px-4 py-2.5 text-center text-emerald-700 font-bold">เข้าถึงได้ 100%</td>
+                <td className="px-4 py-2.5 text-center text-emerald-700 font-bold">เข้าถึงได้ทุกสาขา</td>
+                <td className="px-4 py-2.5 text-center text-slate-500 font-medium">
+                  <span className="inline-flex items-center gap-1 text-red-600">
+                    <BanIcon className="w-3.5 h-3.5" />
+                    <span>ปิดการเข้าถึง</span>
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2.5 font-medium text-slip">จัดการข้อมูลสาขา (เพิ่ม/แก้ไขสาขา)</td>
+                <td className="px-4 py-2.5 text-center text-emerald-700 font-bold">ทำได้ทุกอย่าง</td>
                 <td className="px-4 py-2.5 text-center text-slate-500 font-medium">
                   <span className="inline-flex items-center gap-1 text-red-600">
                     <BanIcon className="w-3.5 h-3.5" />
@@ -294,59 +349,19 @@ export default function UsersPage() {
                 </td>
               </tr>
               <tr>
-                <td className="px-4 py-2.5 font-medium text-slip">จัดการเมนูอาหาร (เพิ่ม, แก้ราคา, อัปโหลดรูป, ลบ)</td>
-                <td className="px-4 py-2.5 text-center text-emerald-700 font-bold">ทำได้ทุกอย่าง</td>
+                <td className="px-4 py-2.5 font-medium text-slip">จัดการเมนูหลัก และราคาพิเศษเฉพาะสาขา</td>
+                <td className="px-4 py-2.5 text-center text-emerald-700 font-bold">ทำได้ทุกสาขา</td>
                 <td className="px-4 py-2.5 text-center text-amber-700 font-semibold">
                   <span className="inline-flex items-center gap-1">
                     <EyeIcon className="w-3.5 h-3.5 text-amber-600" />
-                    <span>ดู & สลับของหมดได้เท่านั้น</span>
+                    <span>ดู & สลับของหมดในสาขาได้</span>
                   </span>
                 </td>
               </tr>
               <tr>
-                <td className="px-4 py-2.5 font-medium text-slip">จัดการหมวดหมู่อาหาร</td>
-                <td className="px-4 py-2.5 text-center text-emerald-700 font-bold">ทำได้ทุกอย่าง</td>
-                <td className="px-4 py-2.5 text-center text-slate-500 font-medium">
-                  <span className="inline-flex items-center gap-1 text-red-600">
-                    <BanIcon className="w-3.5 h-3.5" />
-                    <span>ปิดการเข้าถึง</span>
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2.5 font-medium text-slip">เพิ่มหรือลบโครงสร้างโต๊ะในร้าน</td>
-                <td className="px-4 py-2.5 text-center text-emerald-700 font-bold">ทำได้</td>
-                <td className="px-4 py-2.5 text-center text-slate-500 font-medium">
-                  <span className="inline-flex items-center gap-1 text-red-600">
-                    <BanIcon className="w-3.5 h-3.5" />
-                    <span>ลบ/เพิ่มโต๊ะไม่ได้</span>
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2.5 font-medium text-slip">สร้าง QR Code ใหม่ประจำโต๊ะ (Regenerate QR)</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้ (เมื่อเคลียร์โต๊ะ)</td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2.5 font-medium text-slip">พิมพ์ป้าย QR Code ตั้งโต๊ะ (A4/A5) และสลิป (80mm)</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2.5 font-medium text-slip">กระดานออเดอร์ (รับออเดอร์, อัปเดตสถานะ กำลังทำ/เสิร์ฟแล้ว)</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2.5 font-medium text-slip">แคชเชียร์เช็คบิล คิดเงิน และพิมพ์ใบเสร็จ</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
-              </tr>
-              <tr>
-                <td className="px-4 py-2.5 font-medium text-slip">รับเรื่องแจ้งปัญหาจากลูกค้าที่โต๊ะ</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
-                <td className="px-4 py-2.5 text-center text-green-700 font-bold"> ทำได้</td>
+                <td className="px-4 py-2.5 font-medium text-slip">กระดานออเดอร์และเช็คบิล</td>
+                <td className="px-4 py-2.5 text-center text-green-700 font-bold">สลับดูได้ทุกสาขา</td>
+                <td className="px-4 py-2.5 text-center text-green-700 font-bold">เฉพาะสาขาของตนเอง</td>
               </tr>
             </tbody>
           </table>
@@ -364,7 +379,7 @@ export default function UsersPage() {
             label="ชื่อผู้ใช้"
             value={form.username}
             onChange={(value) => setForm({ ...form, username: value })}
-            placeholder="เช่น staff02"
+            placeholder="เช่น staff_ari01"
             hint="ใช้ได้เฉพาะ a-z 0-9 จุด และขีดล่าง"
           />
           <TextField
@@ -393,6 +408,26 @@ export default function UsersPage() {
             onChange={(value) => setForm({ ...form, role: value })}
             options={ROLE_OPTIONS}
           />
+
+          <SelectField
+            id="user-branch"
+            label="สาขาที่สังกัด"
+            value={form.branchId}
+            onChange={(value) => setForm({ ...form, branchId: value })}
+            options={[
+              { value: '', label: '🌐 สำนักงานใหญ่ (HQ / เข้าถึงทุกสาขา)' },
+              ...branches.map((b) => ({
+                value: String(b.id),
+                label: `🏢 ${b.name} (${b.code})`,
+              })),
+            ]}
+          />
+          <p className="text-xs text-zinc-500 -mt-2">
+            {form.role === 'STAFF'
+              ? 'พนักงานต้องถูกล็อกไว้กับสาขาใดสาขาหนึ่งเพื่อความปลอดภัย'
+              : 'หากเลือกสำนักงานใหญ่จะสามารถสลับดูข้อมูลได้ทุกสาขา'}
+          </p>
+
           <CheckboxField
             label="เปิดใช้งาน (บัญชีนี้ล็อกอินเข้าระบบได้)"
             checked={form.isActive}

@@ -47,23 +47,23 @@ type OrderItemRow = RowDataPacket & {
 
 /**
  * สร้างรหัสออเดอร์รูปแบบ OD + YYMMDD + ลำดับ 4 หลักของวันนั้น เช่น OD2609090007
- * ใช้ INSERT ... ON DUPLICATE KEY UPDATE เพื่อเพิ่มลำดับแบบ atomic
- * ไม่ต้องล็อกแถวอื่น จึงไม่กัน concurrency เท่ากับ COUNT(*) FOR UPDATE
+ * แยกนับลำดับรายสาขาผ่าน (branch_id, business_date)
  *
  * @param conn - connection ที่อยู่ใน transaction เดียวกับการสร้างออเดอร์
+ * @param branchId - รหัสสาขาของออเดอร์
  * @returns รหัสออเดอร์ยาว 12 ตัวอักษร
  */
-async function generateOrderCode(conn: PoolConnection): Promise<string> {
+async function generateOrderCode(conn: PoolConnection, branchId: number): Promise<string> {
   const todayRange = getBusinessDayRange();
   await conn.execute(
-    `INSERT INTO order_counters (business_date, last_seq)
-     VALUES (?, 1)
+    `INSERT INTO order_counters (branch_id, business_date, last_seq)
+     VALUES (?, ?, 1)
      ON DUPLICATE KEY UPDATE last_seq = last_seq + 1`,
-    [todayRange.businessDate],
+    [branchId, todayRange.businessDate],
   );
   const [rows] = await conn.execute<(RowDataPacket & { last_seq: number })[]>(
-    'SELECT last_seq FROM order_counters WHERE business_date = ?',
-    [todayRange.businessDate],
+    'SELECT last_seq FROM order_counters WHERE branch_id = ? AND business_date = ?',
+    [branchId, todayRange.businessDate],
   );
   const sequence = String(rows[0]?.last_seq ?? 1).padStart(ORDER_SEQUENCE_DIGITS, '0');
   const [y, m, d] = todayRange.businessDate.split('-');
@@ -73,27 +73,39 @@ async function generateOrderCode(conn: PoolConnection): Promise<string> {
 
 /**
  * ดึงชื่อและราคาปัจจุบันของเมนูที่ลูกค้าสั่ง เพื่อคัดลอกลง order_items
- * ต้องทำที่ฝั่งเซิร์ฟเวอร์เสมอ ห้ามเชื่อราคาที่ส่งมาจากเบราว์เซอร์ เพราะแก้ได้
- *
- * ใช้ WHERE id IN (...) แทนการวนลูปถามทีละจาน ลด query จาก N เหลือ 1
+ * คำนวณราคาพิเศษเฉพาะสาขา (Custom Price) และตรวจสถานะเปิด/ปิดขายเฉพาะสาขา
  *
  * @param conn - connection ที่อยู่ใน transaction เดียวกับการสร้างออเดอร์
+ * @param branchId - รหัสสาขา
  * @param items - รายการที่ลูกค้าสั่ง มีแค่ menuItemId, quantity, note
  * @returns รายการที่เติมชื่อและราคาแล้ว หรือ null เมื่อมีเมนูที่ถูกปิดขายไปแล้ว
  */
 async function priceItems(
   conn: PoolConnection,
+  branchId: number,
   items: { menuItemId: number; quantity: number; note?: string }[],
 ): Promise<PricedItem[] | null> {
   const ids = items.map((i) => i.menuItemId);
   const placeholders = ids.map(() => '?').join(',');
-  const [rows] = await conn.execute<(RowDataPacket & { id: number; name: string; price: string })[]>(
-    `SELECT id, name, price FROM menu_items WHERE id IN (${placeholders}) AND is_available = 1`,
-    ids,
+  const [rows] = await conn.execute<
+    (RowDataPacket & { id: number; name: string; price: string; is_available: number })[]
+  >(
+    `SELECT m.id, m.name,
+            COALESCE(bma.custom_price, m.price) AS price,
+            CASE
+              WHEN bma.is_available IS NOT NULL THEN bma.is_available
+              ELSE m.is_available
+            END AS is_available
+       FROM menu_items m
+       LEFT JOIN branch_menu_availability bma
+         ON bma.menu_item_id = m.id AND bma.branch_id = ?
+      WHERE m.id IN (${placeholders})`,
+    [branchId, ...ids],
   );
 
-  // สร้าง map เพื่อจับคู่ id กับชื่อและราคาที่ได้จากฐานข้อมูล
-  const menuMap = new Map(rows.map((r) => [r.id, { name: r.name, price: Number(r.price) }]));
+  // สร้าง map เฉพาะเมนูที่เปิดขายอยู่
+  const availableRows = rows.filter((r) => r.is_available === 1);
+  const menuMap = new Map(availableRows.map((r) => [r.id, { name: r.name, price: Number(r.price) }]));
 
   // ตรวจว่ามีเมนูไหนไม่พบหรือปิดขายไปแล้ว
   if (menuMap.size !== new Set(ids).size) return null;
@@ -143,16 +155,18 @@ export async function POST(request: NextRequest) {
       return apiError(ERROR_CODES.NOT_FOUND, sessionErrorMessage(session.reason), status);
     }
 
+    const branchId = session.session.branchId;
+
     const created = await withTransaction(async (conn) => {
-      const priced = await priceItems(conn, parsed.data.items);
+      const priced = await priceItems(conn, branchId, parsed.data.items);
       if (!priced) return null;
 
       const total = priced.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-      const orderCode = await generateOrderCode(conn);
+      const orderCode = await generateOrderCode(conn, branchId);
 
       const [orderResult] = await conn.execute<ResultSetHeader>(
-        'INSERT INTO orders (session_id, order_code, status, total_amount) VALUES (?, ?, ?, ?)',
-        [session.session.sessionId, orderCode, 'PENDING', total],
+        'INSERT INTO orders (session_id, branch_id, order_code, status, total_amount) VALUES (?, ?, ?, ?, ?)',
+        [session.session.sessionId, branchId, orderCode, 'PENDING', total],
       );
 
       for (const item of priced) {

@@ -13,6 +13,8 @@ import { PlusIcon, RefreshIcon, PrintIcon } from '@/components/Icons';
 /** โต๊ะ 1 แถวตามที่ GET /api/admin/tables คืนมา */
 type DiningTable = {
   id: number;
+  branch_id?: number;
+  branch_name?: string;
   table_no: string;
   seats: number;
   qr_token: string;
@@ -267,10 +269,15 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
               {items.map((table) => (
                 <tr key={table.id} className="hover:bg-zinc-50/50 transition-colors">
                   <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1 font-bold text-sm text-slip">
+                    <span className="inline-flex items-center gap-1.5 font-bold text-sm text-slip">
                       <span className="rounded-md bg-zinc-100 border border-zinc-200 px-2 py-0.5 num">
                         {table.table_no}
                       </span>
+                      {table.branch_name && (
+                        <span className="text-[11px] font-medium text-zinc-500">
+                          {table.branch_name}
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="num px-4 py-3 text-center text-slip font-medium">

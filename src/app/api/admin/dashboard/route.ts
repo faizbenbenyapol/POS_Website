@@ -1,8 +1,9 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import type { NextRequest } from 'next/server';
-import { apiOk, apiError, serverError, ERROR_CODES, authFailureResponse } from '@/lib/api';
+import { apiOk, serverError, authFailureResponse } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
+import { getEffectiveBranchId, getBranchById } from '@/lib/branch';
 import { getBusinessDayRange, getYesterdayBusinessDayRange } from '@/lib/format';
 
 /** ออเดอร์ที่ค้างสถานะรอครัวรับนานเกินกี่นาทีถึงจะขึ้นแถบเตือน */
@@ -23,6 +24,13 @@ type StaleOrderRow = RowDataPacket & {
 };
 type TicketSummaryRow = RowDataPacket & { open_count: number; urgent_open_count: number };
 type MonthRow = RowDataPacket & { month: string };
+type BranchComparisonRow = RowDataPacket & {
+  id: number;
+  code: string;
+  name: string;
+  today_revenue: string;
+  today_bills: number;
+};
 
 function getPreviousYearMonth(yearMonth: string): string {
   const [y, m] = yearMonth.split('-').map(Number);
@@ -34,11 +42,15 @@ function getPreviousYearMonth(yearMonth: string): string {
 
 /**
  * รวบข้อมูลทั้งหมดที่ Dashboard ต้องใช้ รัน query แบบ Parallel ทั้งหมดพร้อมกัน
+ * รองรับการกรองตามสาขาที่เลือก หรือแสดงภาพรวมทุกสาขาสำหรับ HQ Admin
  */
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireStaff();
     if (!auth.ok) return authFailureResponse(auth.reason);
+
+    const branchId = await getEffectiveBranchId(request, auth.user);
+    const activeBranch = branchId ? await getBranchById(branchId) : null;
 
     const todayRange = getBusinessDayRange();
     const yesterdayRange = getYesterdayBusinessDayRange();
@@ -47,11 +59,15 @@ export async function GET(request: NextRequest) {
     if (auth.user.role === 'STAFF') {
       const [orderCount, openTables, staleOrders, tickets] = await Promise.all([
         queryOne<RowDataPacket & { total: number }>(
-          "SELECT COUNT(*) AS total FROM orders WHERE created_at >= ? AND created_at < ? AND status <> 'CANCELLED'",
-          [todayRange.startSql, todayRange.endSql],
+          `SELECT COUNT(*) AS total FROM orders
+            WHERE (? IS NULL OR branch_id = ?)
+              AND created_at >= ? AND created_at < ? AND status <> 'CANCELLED'`,
+          [branchId, branchId, todayRange.startSql, todayRange.endSql],
         ),
         queryOne<RowDataPacket & { total: number }>(
-          "SELECT COUNT(*) AS total FROM table_sessions WHERE status = 'OPEN'",
+          `SELECT COUNT(*) AS total FROM table_sessions
+            WHERE (? IS NULL OR branch_id = ?) AND status = 'OPEN'`,
+          [branchId, branchId],
         ),
         query<StaleOrderRow>(
           `SELECT o.id, o.order_code, t.table_no, o.created_at,
@@ -59,17 +75,20 @@ export async function GET(request: NextRequest) {
              FROM orders o
              JOIN table_sessions s ON s.id = o.session_id
              JOIN dining_tables t ON t.id = s.table_id
-            WHERE o.status = 'PENDING'
+            WHERE (? IS NULL OR o.branch_id = ?)
+              AND o.status = 'PENDING'
               AND s.status = 'OPEN'
               AND o.created_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)
             ORDER BY o.created_at`,
-          [STALE_PENDING_MINUTES],
+          [branchId, branchId, STALE_PENDING_MINUTES],
         ),
         queryOne<TicketSummaryRow>(
           `SELECT
              COUNT(*) AS open_count,
              COALESCE(SUM(CASE WHEN priority = 'URGENT' THEN 1 ELSE 0 END), 0) AS urgent_open_count
-            FROM tickets WHERE status = 'OPEN'`,
+            FROM tickets
+           WHERE (? IS NULL OR branch_id = ?) AND status = 'OPEN'`,
+          [branchId, branchId],
         ),
       ]);
 
@@ -77,6 +96,8 @@ export async function GET(request: NextRequest) {
         isStaff: true,
         userRole: 'STAFF',
         userFullName: auth.user.fullName,
+        branchId,
+        branchName: activeBranch?.name ?? 'สาขาปัจจุบัน',
         todayOrderCount: Number(orderCount?.total ?? 0),
         openTableCount: Number(openTables?.total ?? 0),
         openTicketCount: Number(tickets?.open_count ?? 0),
@@ -105,46 +126,60 @@ export async function GET(request: NextRequest) {
       topMenus,
       salesTrend,
       tickets,
+      branchComparison,
     ] = await Promise.all([
       // 1. ยอดขายประจำเดือนที่เลือก
       queryOne<RevenueRow>(
         `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
-           FROM payments WHERE DATE_FORMAT(paid_at, '%Y-%m') = ?`,
-        [selectedMonth],
+           FROM payments
+          WHERE (? IS NULL OR branch_id = ?)
+            AND DATE_FORMAT(paid_at, '%Y-%m') = ?`,
+        [branchId, branchId, selectedMonth],
       ),
       // 2. ยอดขายเดือนก่อนหน้า
       queryOne<RevenueRow>(
         `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
-           FROM payments WHERE DATE_FORMAT(paid_at, '%Y-%m') = ?`,
-        [prevMonth],
+           FROM payments
+          WHERE (? IS NULL OR branch_id = ?)
+            AND DATE_FORMAT(paid_at, '%Y-%m') = ?`,
+        [branchId, branchId, prevMonth],
       ),
       // 3. รายชื่อเดือนที่มีในฐานข้อมูล
       query<MonthRow>(
-        `SELECT DISTINCT DATE_FORMAT(paid_at, '%Y-%m') AS month FROM payments
+        `SELECT DISTINCT DATE_FORMAT(paid_at, '%Y-%m') AS month FROM payments WHERE (? IS NULL OR branch_id = ?)
          UNION
-         SELECT DISTINCT DATE_FORMAT(created_at, '%Y-%m') AS month FROM orders
+         SELECT DISTINCT DATE_FORMAT(created_at, '%Y-%m') AS month FROM orders WHERE (? IS NULL OR branch_id = ?)
          ORDER BY month DESC`,
+        [branchId, branchId, branchId, branchId],
       ),
       // 4. ยอดขายวันนี้ (ตามวันทำการ 04:00 - 03:59 น.)
       queryOne<RevenueRow>(
         `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
-           FROM payments WHERE paid_at >= ? AND paid_at < ?`,
-        [todayRange.startSql, todayRange.endSql],
+           FROM payments
+          WHERE (? IS NULL OR branch_id = ?)
+            AND paid_at >= ? AND paid_at < ?`,
+        [branchId, branchId, todayRange.startSql, todayRange.endSql],
       ),
       // 5. ยอดขายเมื่อวาน (ตามวันทำการก่อนหน้า)
       queryOne<RevenueRow>(
         `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
-           FROM payments WHERE paid_at >= ? AND paid_at < ?`,
-        [yesterdayRange.startSql, yesterdayRange.endSql],
+           FROM payments
+          WHERE (? IS NULL OR branch_id = ?)
+            AND paid_at >= ? AND paid_at < ?`,
+        [branchId, branchId, yesterdayRange.startSql, yesterdayRange.endSql],
       ),
       // 6. จำนวนออเดอร์วันนี้
       queryOne<RowDataPacket & { total: number }>(
-        "SELECT COUNT(*) AS total FROM orders WHERE created_at >= ? AND created_at < ? AND status <> 'CANCELLED'",
-        [todayRange.startSql, todayRange.endSql],
+        `SELECT COUNT(*) AS total FROM orders
+          WHERE (? IS NULL OR branch_id = ?)
+            AND created_at >= ? AND created_at < ? AND status <> 'CANCELLED'`,
+        [branchId, branchId, todayRange.startSql, todayRange.endSql],
       ),
       // 7. โต๊ะที่เปิดอยู่
       queryOne<RowDataPacket & { total: number }>(
-        "SELECT COUNT(*) AS total FROM table_sessions WHERE status = 'OPEN'",
+        `SELECT COUNT(*) AS total FROM table_sessions
+          WHERE (? IS NULL OR branch_id = ?) AND status = 'OPEN'`,
+        [branchId, branchId],
       ),
       // 8. ยอดค้างชำระ
       queryOne<RowDataPacket & { total: string | null }>(
@@ -152,7 +187,9 @@ export async function GET(request: NextRequest) {
            FROM order_items oi
            JOIN orders o ON o.id = oi.order_id
            JOIN table_sessions s ON s.id = o.session_id
-          WHERE s.status = 'OPEN' AND oi.status <> 'CANCELLED'`,
+          WHERE (? IS NULL OR o.branch_id = ?)
+            AND s.status = 'OPEN' AND oi.status <> 'CANCELLED'`,
+        [branchId, branchId],
       ),
       // 9. ออเดอร์รอครัวรับค้างเกินเวลา
       query<StaleOrderRow>(
@@ -161,11 +198,12 @@ export async function GET(request: NextRequest) {
            FROM orders o
            JOIN table_sessions s ON s.id = o.session_id
            JOIN dining_tables t ON t.id = s.table_id
-          WHERE o.status = 'PENDING'
+          WHERE (? IS NULL OR o.branch_id = ?)
+            AND o.status = 'PENDING'
             AND s.status = 'OPEN'
             AND o.created_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)
           ORDER BY o.created_at`,
-        [STALE_PENDING_MINUTES],
+        [branchId, branchId, STALE_PENDING_MINUTES],
       ),
       // 10. เมนูขายดีประจำเดือน
       query<TopMenuRow>(
@@ -174,26 +212,42 @@ export async function GET(request: NextRequest) {
                 SUM(oi.unit_price * oi.quantity) AS amount
            FROM order_items oi
            JOIN orders o ON o.id = oi.order_id
-          WHERE DATE_FORMAT(o.created_at, '%Y-%m') = ? AND oi.status <> 'CANCELLED'
+          WHERE (? IS NULL OR o.branch_id = ?)
+            AND DATE_FORMAT(o.created_at, '%Y-%m') = ? AND oi.status <> 'CANCELLED'
           GROUP BY oi.item_name
           ORDER BY quantity DESC, amount DESC
           LIMIT ?`,
-        [selectedMonth, TOP_MENU_LIMIT],
+        [branchId, branchId, selectedMonth, TOP_MENU_LIMIT],
       ),
       // 11. ยอดขายรายวันประจำเดือน
       query<TrendRow>(
         `SELECT DATE_FORMAT(paid_at, '%Y-%m-%d') AS sale_date, SUM(total_amount) AS total
            FROM payments
-          WHERE DATE_FORMAT(paid_at, '%Y-%m') = ?
+          WHERE (? IS NULL OR branch_id = ?)
+            AND DATE_FORMAT(paid_at, '%Y-%m') = ?
           GROUP BY DATE_FORMAT(paid_at, '%Y-%m-%d')
           ORDER BY sale_date`,
-        [selectedMonth],
+        [branchId, branchId, selectedMonth],
       ),
       // 12. สรุปรายการ ticket
       queryOne<TicketSummaryRow>(
         `SELECT SUM(status <> 'CLOSED') AS open_count,
                 SUM(status = 'OPEN' AND priority = 'URGENT') AS urgent_open_count
-           FROM tickets`,
+           FROM tickets
+          WHERE (? IS NULL OR branch_id = ?)`,
+        [branchId, branchId],
+      ),
+      // 13. การเปรียบเทียบยอดขายรายสาขาในวันนี้ (สำหรับภาพรวม HQ Admin)
+      query<BranchComparisonRow>(
+        `SELECT b.id, b.code, b.name,
+                COALESCE(SUM(p.total_amount), 0) AS today_revenue,
+                COUNT(p.id) AS today_bills
+           FROM branches b
+           LEFT JOIN payments p ON p.branch_id = b.id AND p.paid_at >= ? AND p.paid_at < ?
+          WHERE b.is_active = 1
+          GROUP BY b.id, b.code, b.name
+          ORDER BY today_revenue DESC, b.id ASC`,
+        [todayRange.startSql, todayRange.endSql],
       ),
     ]);
 
@@ -219,6 +273,8 @@ export async function GET(request: NextRequest) {
     return apiOk({
       isStaff: false,
       userRole: 'ADMIN',
+      branchId,
+      branchName: activeBranch?.name ?? 'ทุกสาขา (ภาพรวมองค์กร)',
       selectedMonth,
       availableMonths,
       monthlyRevenue,
@@ -241,6 +297,7 @@ export async function GET(request: NextRequest) {
       salesTrend,
       openTicketCount: Number(tickets?.open_count ?? 0),
       urgentOpenTicketCount: Number(tickets?.urgent_open_count ?? 0),
+      branchComparison: branchId === null ? branchComparison : [],
     });
   } catch (err) {
     return serverError(err, 'GET /api/admin/dashboard');
