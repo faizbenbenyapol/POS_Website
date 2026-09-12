@@ -98,6 +98,18 @@ export default function DashboardPage() {
       ...data.topMenus.map((m) => [m.item_name, `ขายได้ ${m.quantity} รายการ`, m.amount]),
     ];
 
+    if (data.branchComparison && data.branchComparison.length > 0) {
+      rows.push(
+        ['', '', ''],
+        [`--- รายงานยอดขายรายสาขา (ประจำเดือน ${thaiMonthStr}) ---`, '', ''],
+        ...data.branchComparison.map((b) => [
+          `${b.name} (${b.code})`,
+          `วันนี้: ฿${Number(b.today_revenue || 0).toLocaleString()} (${b.today_bills} บิล) | ประจำเดือน: ${b.monthly_bills || 0} บิล`,
+          Number(b.monthly_revenue || 0),
+        ]),
+      );
+    }
+
     downloadCsvFile(filename, headers, rows);
   }
 
@@ -184,7 +196,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between px-0.5">
             <div className="flex items-center gap-2">
               <BuildingIcon className="w-4 h-4 text-emerald-600" />
-              <h2 className="text-sm font-bold text-zinc-900">เปรียบเทียบยอดขายรายสาขา (วันนี้)</h2>
+              <h2 className="text-sm font-bold text-zinc-900">เปรียบเทียบยอดขายรายสาขา</h2>
             </div>
             <Link
               href="/admin/branches"
@@ -203,12 +215,21 @@ export default function DashboardPage() {
                   <span className="text-xs font-semibold px-2 py-0.5 rounded bg-zinc-100 text-zinc-700">
                     {b.code}
                   </span>
-                  <span className="text-xs text-zinc-400">{b.today_bills} บิล</span>
+                  <span className="text-xs text-zinc-400">วันนี้ {b.today_bills} บิล</span>
                 </div>
                 <h3 className="mt-2 text-sm font-medium text-zinc-900 truncate">{b.name}</h3>
-                <p className="mt-1 text-lg font-bold text-emerald-600">
-                  ฿{Number(b.today_revenue || 0).toLocaleString()}
-                </p>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-xs text-zinc-500">ยอดวันนี้</span>
+                  <span className="text-base font-bold text-emerald-600">
+                    ฿{Number(b.today_revenue || 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-1.5 pt-1.5 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500">
+                  <span>เดือนนี้ ({b.monthly_bills || 0} บิล)</span>
+                  <span className="font-semibold text-zinc-700">
+                    ฿{Number(b.monthly_revenue || 0).toLocaleString()}
+                  </span>
+                </div>
               </div>
             ))}
           </div>

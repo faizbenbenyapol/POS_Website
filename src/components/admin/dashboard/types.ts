@@ -43,6 +43,8 @@ export type BranchComparison = {
   name: string;
   today_revenue: string;
   today_bills: number;
+  monthly_revenue?: string;
+  monthly_bills?: number;
 };
 
 /** ข้อมูลสรุปภาพรวมยอดขายและการเงินสำหรับผู้ดูแลระบบ (ADMIN) */

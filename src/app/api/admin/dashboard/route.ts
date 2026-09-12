@@ -30,6 +30,8 @@ type BranchComparisonRow = RowDataPacket & {
   name: string;
   today_revenue: string;
   today_bills: number;
+  monthly_revenue: string;
+  monthly_bills: number;
 };
 
 function getPreviousYearMonth(yearMonth: string): string {
@@ -237,17 +239,19 @@ export async function GET(request: NextRequest) {
           WHERE (? IS NULL OR branch_id = ?)`,
         [branchId, branchId],
       ),
-      // 13. การเปรียบเทียบยอดขายรายสาขาในวันนี้ (สำหรับภาพรวม HQ Admin)
+      // 13. การเปรียบเทียบยอดขายรายสาขาทั้งวันนี้และประจำเดือน (สำหรับภาพรวม HQ Admin)
       query<BranchComparisonRow>(
         `SELECT b.id, b.code, b.name,
-                COALESCE(SUM(p.total_amount), 0) AS today_revenue,
-                COUNT(p.id) AS today_bills
+                COALESCE(SUM(CASE WHEN p.paid_at >= ? AND p.paid_at < ? THEN p.total_amount ELSE 0 END), 0) AS today_revenue,
+                COUNT(CASE WHEN p.paid_at >= ? AND p.paid_at < ? THEN p.id ELSE NULL END) AS today_bills,
+                COALESCE(SUM(CASE WHEN DATE_FORMAT(p.paid_at, '%Y-%m') = ? THEN p.total_amount ELSE 0 END), 0) AS monthly_revenue,
+                COUNT(CASE WHEN DATE_FORMAT(p.paid_at, '%Y-%m') = ? THEN p.id ELSE NULL END) AS monthly_bills
            FROM branches b
-           LEFT JOIN payments p ON p.branch_id = b.id AND p.paid_at >= ? AND p.paid_at < ?
+           LEFT JOIN payments p ON p.branch_id = b.id
           WHERE b.is_active = 1
           GROUP BY b.id, b.code, b.name
-          ORDER BY today_revenue DESC, b.id ASC`,
-        [todayRange.startSql, todayRange.endSql],
+          ORDER BY today_revenue DESC, monthly_revenue DESC, b.id ASC`,
+        [todayRange.startSql, todayRange.endSql, todayRange.startSql, todayRange.endSql, selectedMonth, selectedMonth],
       ),
     ]);
 
