@@ -32,9 +32,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
-  const order = await queryOne<RowDataPacket & { session_status: string }>(
-    `SELECT s.status AS session_status
-       FROM orders o JOIN table_sessions s ON s.id = o.session_id
+  type OrderDetail = RowDataPacket & {
+    session_status: string;
+    order_code: string;
+    total_amount: number;
+    table_no: string;
+  };
+
+  const order = await queryOne<OrderDetail>(
+    `SELECT s.status AS session_status, o.order_code, o.total_amount, t.table_no
+       FROM orders o
+       JOIN table_sessions s ON s.id = o.session_id
+       JOIN dining_tables t ON t.id = s.table_id
       WHERE o.id = ? LIMIT 1`,
     [id],
   );
@@ -59,6 +68,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       403,
     );
   }
+
   await execute(
     "UPDATE order_items SET status = ? WHERE order_id = ? AND status <> 'CANCELLED'",
     [status, id],
@@ -71,5 +81,28 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       WHERE id = ?`,
     [status, id],
   );
+
+  // บันทึก Cancellation Audit Log ป้องกันการทุจริตเมื่อมีการ Void ออเดอร์ทั้งใบ
+  if (status === 'CANCELLED') {
+    const reason = parsed.data.reason?.trim() || 'ยกเลิกออเดอร์ทั้งใบ (Void Order)';
+    try {
+      await execute(
+        `INSERT INTO cancellation_audit_logs 
+          (entity_type, entity_id, order_code, table_no, item_name, quantity, amount, reason, cancelled_by)
+         VALUES ('ORDER', ?, ?, ?, NULL, NULL, ?, ?, ?)`,
+        [
+          id,
+          order.order_code,
+          order.table_no,
+          Number(order.total_amount || 0),
+          reason,
+          auth.user.id,
+        ],
+      );
+    } catch {
+      // หากตารางยังไม่ถูก migrate ในสภาพแวดล้อม dev ให้การทำงานหลักยังดำเนินต่อไปได้
+    }
+  }
+
   return apiOk({ id, status });
 }

@@ -9,17 +9,17 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 /**
  * สร้าง QR Token ใหม่ประจำโต๊ะ (Regenerate Table QR)
- * ใช้เมื่อต้องการเปลี่ยนป้าย หรือเมื่อลูกค้ากลุ่มเดิมเช็คบิลลุกไปแล้ว
- * เพื่อตัดสิทธิ์ QR เดิม ป้องกันลูกค้าเก่านำรูปที่ถ่ายไว้ไปแอบสั่งอาหารจากนอกร้าน
+ * ใช้เมื่อต้องการเปลี่ยนป้าย หรือเมื่อป้าย QR โต๊ะเดิมชำรุด/รั่วไหล
+ * เพื่อตัดสิทธิ์ QR เดิม และออก Token ใหม่อย่างปลอดภัย
  *
- * สิทธิ์: ทั้ง ADMIN และ STAFF สามารถกดสร้างใหม่ได้
+ * สิทธิ์: เฉพาะ ADMIN เท่านั้นที่สามารถกดสร้างใหม่ได้ เพื่อป้องกันไม่ให้กระทบป้ายตั้งโต๊ะจริงที่ติดอยู่หน้าร้าน
  *
  * @param _request - คำขอเรียก API
  * @param context - พารามิเตอร์เส้นทางที่มี id ของโต๊ะ
  * @returns ข้อมูลโต๊ะพร้อม qrToken ใหม่
  */
 export async function POST(_request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireStaff('ADMIN');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const id = parseId((await context.params).id);

@@ -209,7 +209,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         <div className="flex items-center gap-2">
           {!isAdmin && currentUser && (
             <span className="rounded-full bg-zinc-100 border border-rule px-3 py-1 text-xs text-slip-dim font-medium">
-              สิทธิ์พนักงาน: ตรวจสอบโต๊ะ, พิมพ์ QR และสร้าง QR ใหม่ได้
+              สิทธิ์พนักงาน: ตรวจสอบโต๊ะ และดู/พิมพ์ QR ได้ (การสร้าง QR ใหม่สงวนสิทธิ์ผู้ดูแลระบบ)
             </span>
           )}
           {isAdmin && (
@@ -315,16 +315,18 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
                         <span>ดู / พิมพ์ QR</span>
                       </button>
 
-                      {/* ปุ่มสร้าง QR ใหม่ประจำโต๊ะ (ทั้ง ADMIN และ STAFF ใช้ได้) */}
-                      <button
-                        type="button"
-                        onClick={() => handleQuickRegenerate(table)}
-                        title="สร้าง QR Token ใหม่ ตัดสิทธิ์รูปเดิม ป้องกันแอบสแกนจากนอกร้าน"
-                        className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-800 transition-all hover:bg-amber-100 active:scale-95 flex items-center gap-1"
-                      >
-                        <RefreshIcon className="w-3.5 h-3.5" />
-                        <span>สร้างใหม่</span>
-                      </button>
+                      {/* ปุ่มสร้าง QR ใหม่ประจำโต๊ะ (เฉพาะ ADMIN) */}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleQuickRegenerate(table)}
+                          title="สร้าง QR Token ใหม่ ตัดสิทธิ์รูปเดิม ป้องกันแอบสแกนจากนอกร้าน (เฉพาะแอดมิน)"
+                          className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-800 transition-all hover:bg-amber-100 active:scale-95 flex items-center gap-1 cursor-pointer"
+                        >
+                          <RefreshIcon className="w-3.5 h-3.5" />
+                          <span>สร้างใหม่</span>
+                        </button>
+                      )}
 
                       {/* ปุ่มแก้ไข & ลบ — เฉพาะเจ้าของร้าน (ADMIN) */}
                       {isAdmin && (
@@ -390,6 +392,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
         table={qrTable}
         qrImage={qrImage}
         tableUrl={qrTable ? buildTableUrl(qrTable.qr_token) : ''}
+        isAdmin={isAdmin}
         onClose={() => setQrTable(null)}
         onRegenerateSuccess={(updated) => {
           setQrTable((prev) => (prev ? { ...prev, qr_token: updated.qr_token } : null));

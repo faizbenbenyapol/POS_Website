@@ -548,3 +548,57 @@ export async function createOrder(sessionId: number, items: CartItem[]): Promise
 - โต๊ะ 8 โต๊ะ (`A1`–`A4`, `B1`–`B4`) พร้อม `qr_token` แบบสุ่ม
 - หมวดหมู่ 4 หมวด: ของทานเล่น, จานเดียว, กับข้าว, เครื่องดื่ม
 - เมนูอย่างน้อย 16 รายการ **ใช้ชื่อและราคาจริงที่ร้านไทยใช้จริง** (เช่น กะเพราหมูสับไข่ดาว 65, ต้มยำกุ้งน้ำข้น 180, ชาไทยเย็น 45) — ห้ามใช้ "เมนู 1", "Item A", Lorem ipsum
+
+---
+
+## 18. การปรับปรุงความปลอดภัยและประสิทธิภาพระดับสูง (Hardening & Concurrency: v0.5.0 – v0.6.0)
+
+เพื่อรองรับการใช้งานระดับพาณิชย์จริง ระบบได้รับการปรับปรุงเชิงลึก (ข้อ 2.1 – 2.12) ครบถ้วนดังนี้:
+1. **Secret & Environment Protection (2.1)**: บังคับระบุ `JWT_SECRET` ปราศจาก fallback string และลบไฟล์ `.env` ออกจาก Git tracking ถาวร
+2. **Error Message Sanitization (2.2)**: ซ่อน Database Internal Errors ทั้งหมด ส่งเฉพาะ Correlation ID และข้อความภาษาไทยที่เข้าใจง่าย
+3. **Timezone & Business Day Range (2.3)**: ตั้งค่าเวลา `Asia/Bangkok` (+07:00) และคำนวณช่วงเวลาวันทำการผ่าน `getBusinessDayRange()` โดยไม่ใช้ฟังก์ชันครอบคอลัมน์ใน SQL เพื่อให้ใช้ Index ได้ 100%
+4. **Atomic Order Counter (2.4)**: รันรหัสออเดอร์ลำดับวันผ่าน `order_code_sequences` ด้วย `INSERT ... ON DUPLICATE KEY UPDATE` ขจัดปัญหา Table Lock
+5. **Session Concurrency Guard (2.5)**: ป้องกันการแย่งเปิดบิลซ้อนด้วย Row Lock Mutex บน `dining_tables`
+6. **Permanent QR Lifecycle (2.6)**: ป้าย QR Code ประจำโต๊ะเป็นแบบถาวร โดยแยกสิทธิ์การสั่งอาหารให้ผูกกับ Session สถานะ `OPEN`
+7. **Single Source of Truth for Totals (2.7)**: คำนวณยอดเงินรวมจาก `order_items` (สถานะไม่ใช่ `CANCELLED`) แบบเรียลไทม์ ป้องกันปัญหาตัวเลขปัดเศษเพี้ยน
+8. **Batch Pricing Query (2.8)**: รวบคำสั่งตรวจราคาและสถานะอาหารเหลือคำสั่งเดียว `WHERE id IN (...)` ขจัดปัญหา N+1 Query
+9. **Composite Database Indexes (2.9)**: เพิ่ม Index บน `orders(created_at)`, `orders(status, created_at)`, `table_sessions(table_id, status)`, `order_items(order_id, status)`, `payments(paid_at)`, `tickets(status, priority)`
+10. **Sliding-Window Rate Limiter (2.10)**: จำกัดอัตราการเรียก API Login (5/min/user, 20/min/IP) และ Public Orders (10/min/token)
+11. **Upload Security & Magic Bytes (2.11)**: ตรวจสอบ Magic Bytes ไบนารีแท้จริงของรูปภาพ (JPEG, PNG, GIF, WebP, AVIF) ป้องกันสคริปต์แฝง, ตั้งชื่อไฟล์ด้วย `randomUUID()`, ป้องกัน Path Traversal และ Mount Volume ถาวรใน Docker
+12. **Strict Admin Permission Matrix (2.12)**: บังคับสิทธิ์ `ADMIN` บนการสร้าง QR Code ประจำโต๊ะใหม่ (`regenerate-qr`) ทั้งฝั่ง Backend และ Frontend
+
+---
+
+## 19. ระบบ Audit Log ป้องกันการทุจริตการยกเลิกบิล/อาหาร (Phase 2)
+
+การตัดเงินหรือยกเลิกรายการอาหารออกจากบิลเป็นช่องทางทุจริตคลาสสิกของระบบ POS ร้านอาหาร ระบบจึงกำหนดมาตรการดังนี้:
+1. **ตาราง `cancellation_audit_logs`**: บันทึกประเภทเอนทิตี (`ORDER_ITEM` หรือ `ORDER`), รหัสออเดอร์, เลขโต๊ะ, ชื่อรายการ, จำนวน, ยอดเงินที่ถูกตัดออก, เหตุผล, วันเวลา และผู้ที่ทำรายการ (`cancelled_by`)
+2. **Cancellation Reason Modal**: เมื่อพนักงานหรือแอดมินกดยกเลิกรายการอาหาร จะมีหน้าต่างบังคับระบุเหตุผล (ลูกค้าเปลี่ยนใจ, คีย์ซ้ำ, วัตถุดิบหมด, คีย์ผิดโต๊ะ, รอนาน หรือระบุเอง)
+3. **Void Order Restriction**: การกดยกเลิกทั้งบิล (Void Order) สงวนสิทธิ์เฉพาะเจ้าของร้าน (ADMIN) เท่านั้น
+4. **Cancellation Audit Report**: หน้ารายงานประวัติการยกเลิกสำหรับเจ้าของร้าน เพื่อตรวจสอบยอดเงินที่ถูกตัดออกและเหตุผลย้อนหลังได้ทุกกะ
+
+---
+
+## 20. แผนงานระบบจัดการหลายสาขา (Phase 3: Multi-Branch Architecture)
+
+> **กลยุทธ์การพัฒนา**: ระบบจัดการสาขาเป็นฟีเจอร์โครงสร้างขนาดใหญ่ จะทำการ **แยก Git Branch ใหม่ (`feat/multi-branch`) ออกมาจาก `main`** หลังจาก commit และ push เวอร์ชัน `v0.6.0` เสร็จสิ้น เพื่อรักษาความเสถียรของ Core Branch
+
+### 20.1 สถาปัตยกรรมระดับองค์กร (Enterprise Multi-Branch Design)
+1. **ตาราง `branches` (ข้อมูลสาขา)**:
+   - `id`, `code` (เช่น `BKK-SIAM`, `BKK-ARI`), `name`, `address`, `phone`, `business_day_cutoff_hour`, `is_active`, `created_at`, `updated_at`
+2. **การ Partition ข้อมูลด้วย `branch_id`**:
+   - `dining_tables (branch_id, table_no UNIQUE)`: เลขโต๊ะอ้างอิงรายสาขา
+   - `table_sessions (branch_id)`
+   - `orders (branch_id)`
+   - `order_code_sequences (business_date, branch_id)`: เลขออเดอร์รันแยกตามสาขา
+   - `payments (branch_id)`
+   - `tickets (branch_id)`
+   - `cancellation_audit_logs (branch_id)`
+   - `users (branch_id NULL)`: `SUPER_ADMIN` เข้าถึงทุกสาขา, `BRANCH_MANAGER` / `STAFF` กำหนดสิทธิ์เฉพาะสาขาของตนเอง
+3. **Master Catalog & Branch Price Overrides**:
+   - ตารางกลาง `menu_items` เป็นเมนูหลักของแบรนด์
+   - ตาราง `branch_menu_availability (branch_id, menu_item_id, price, is_available)` สำหรับตั้งราคาและเปิด/ปิดของหมดแยกรายสาขา
+4. **Zero-Friction Customer QR Experience**:
+   - ลูกค้ายังคงสแกน QR ลิงก์ `/t/[qr_token]` เช่นเดิม โดยระบบสืบค้น `branch_id` จากโต๊ะอัตโนมัติ ไม่ต้องให้ลูกค้ากดเลือกสาขาเอง
+5. **HQ Dashboard & Branch Context Switching**:
+   - เจ้าของร้านสามารถดูยอดขายรวมทุกสาขา หรือเลือกดูเจาะจงรายสาขาได้ผ่านตัวสลับสาขา (Branch Switcher) บนแถบนำทาง

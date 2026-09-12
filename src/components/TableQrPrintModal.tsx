@@ -18,6 +18,7 @@ type TableQrPrintModalProps = {
   table: TableQrData | null;
   qrImage: string;
   tableUrl: string;
+  isAdmin?: boolean;
   onClose: () => void;
   onRegenerateSuccess?: (newTable: TableQrData) => void;
 };
@@ -25,12 +26,13 @@ type TableQrPrintModalProps = {
 /**
  * Modal พิมพ์และจัดการ QR Code ของโต๊ะ
  * รองรับทั้งการพิมพ์ป้ายตั้งโต๊ะ (A4/A5 Tent Card) และสลิปสติกเกอร์ (Thermal 80mm)
- * พร้อมปุ่มสร้าง QR ใหม่ (Regenerate) และดาวน์โหลดไฟล์ภาพ
+ * พร้อมปุ่มสร้าง QR ใหม่ (เฉพาะ Admin) และดาวน์โหลดไฟล์ภาพ
  */
 export default function TableQrPrintModal({
   table,
   qrImage,
   tableUrl,
+  isAdmin = false,
   onClose,
   onRegenerateSuccess,
 }: TableQrPrintModalProps) {
@@ -209,16 +211,22 @@ export default function TableQrPrintModal({
         <div className="flex flex-col gap-2.5">
           {/* แถวเครื่องมือสร้างใหม่ & ดาวน์โหลด */}
           <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              disabled={regenerating}
-              onClick={() => setConfirmOpen(true)}
-              className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 text-xs font-bold text-amber-800 transition-all hover:bg-amber-100 disabled:opacity-50 active:scale-95 shadow-xs"
-              title="สร้าง QR Token ใหม่ ป้องกันลูกค้าเก่านำรูปไปแอบสแกนสั่งอาหาร"
-            >
-              <RefreshIcon className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
-              <span>{regenerating ? 'กำลังสร้าง…' : 'สร้าง QR Code ใหม่'}</span>
-            </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                disabled={regenerating}
+                onClick={() => setConfirmOpen(true)}
+                className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 text-xs font-bold text-amber-800 transition-all hover:bg-amber-100 disabled:opacity-50 active:scale-95 shadow-xs cursor-pointer"
+                title="สร้าง QR Token ใหม่ ป้องกันลูกค้าเก่านำรูปไปแอบสแกนสั่งอาหาร (เฉพาะแอดมิน)"
+              >
+                <RefreshIcon className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
+                <span>{regenerating ? 'กำลังสร้าง…' : 'สร้าง QR Code ใหม่'}</span>
+              </button>
+            ) : (
+              <span className="text-[11px] text-slip-dim">
+                * พนักงานสามารถดู/พิมพ์ QR ได้ (การสร้าง QR ใหม่สงวนสิทธิ์ผู้ดูแลระบบ)
+              </span>
+            )}
 
             <a
               href={qrImage || '#'}

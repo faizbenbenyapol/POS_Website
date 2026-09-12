@@ -33,11 +33,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
-  const found = await queryOne<RowDataPacket & { order_id: number; session_status: string }>(
-    `SELECT oi.order_id, s.status AS session_status
+  type ItemDetail = RowDataPacket & {
+    order_id: number;
+    item_name: string;
+    unit_price: number;
+    quantity: number;
+    session_status: string;
+    order_code: string;
+    table_no: string;
+  };
+
+  const found = await queryOne<ItemDetail>(
+    `SELECT oi.order_id, oi.item_name, oi.unit_price, oi.quantity,
+            s.status AS session_status, o.order_code, t.table_no
        FROM order_items oi
        JOIN orders o ON o.id = oi.order_id
        JOIN table_sessions s ON s.id = o.session_id
+       JOIN dining_tables t ON t.id = s.table_id
       WHERE oi.id = ? LIMIT 1`,
     [id],
   );
@@ -54,6 +66,32 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   await execute('UPDATE order_items SET status = ? WHERE id = ?', [parsed.data.status, id]);
   const orderStatus = await recalculateOrder(found.order_id);
+
+  // บันทึก Cancellation Audit Log ป้องกันการทุจริตเมื่อมีการยกเลิกรายการอาหาร
+  if (parsed.data.status === 'CANCELLED') {
+    const reason = parsed.data.reason?.trim() || 'ไม่ระบุเหตุผล';
+    const amount = Number(found.unit_price) * found.quantity;
+    try {
+      await execute(
+        `INSERT INTO cancellation_audit_logs 
+          (entity_type, entity_id, order_code, table_no, item_name, quantity, amount, reason, cancelled_by)
+         VALUES ('ORDER_ITEM', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          found.order_code,
+          found.table_no,
+          found.item_name,
+          found.quantity,
+          amount,
+          reason,
+          auth.user.id,
+        ],
+      );
+    } catch {
+      // หากตารางยังไม่ถูก migrate ในสภาพแวดล้อม dev ให้การทำงานหลักยังดำเนินต่อไปได้
+    }
+  }
+
   return apiOk({ id, status: parsed.data.status, orderStatus });
 }
 

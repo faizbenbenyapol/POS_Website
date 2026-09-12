@@ -47,6 +47,9 @@ COPY --from=builder /app/db ./db
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# สร้างและกำหนดสิทธิ์ไดเรกทอรี uploads สำหรับ persistent storage
+RUN mkdir -p ./public/uploads && chown -R nextjs:nodejs ./public
+
 USER nextjs
 
 EXPOSE 3000

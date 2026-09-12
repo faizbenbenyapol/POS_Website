@@ -121,9 +121,11 @@ export const ORDER_STATUSES = ['PENDING', 'PREPARING', 'SERVED', 'CANCELLED'] as
 
 /**
  * ตรวจคำสั่งเปลี่ยนสถานะออเดอร์หรือรายการอาหาร
+ * รองรับการระบุเหตุผล (reason) เมื่อสถานะเปลี่ยนเป็น CANCELLED
  */
 export const orderStatusSchema = z.object({
   status: z.enum(ORDER_STATUSES),
+  reason: z.string().trim().max(255, 'เหตุผลยาวเกิน 255 ตัวอักษร').optional(),
 });
 
 /**

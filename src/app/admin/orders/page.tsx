@@ -6,6 +6,8 @@ import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
 import PromptPayQR from '@/components/PromptPayQR';
 import ReceiptPrintModal, { ReceiptData } from '@/components/ReceiptPrintModal';
+import CancelReasonModal from '@/components/CancelReasonModal';
+import CancellationAuditModal from '@/components/CancellationAuditModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { SelectField } from '@/components/Field';
 import { useToast } from '@/components/Toast';
@@ -142,6 +144,8 @@ export default function OrdersBoardPage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [currentUser, setCurrentUser] = useState<{ role: string; fullName: string } | null>(null);
   const [cancelConfirmOrder, setCancelConfirmOrder] = useState<BoardOrder | null>(null);
+  const [cancelItemTarget, setCancelItemTarget] = useState<{ item: BoardItem; order: BoardOrder } | null>(null);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
   const { warning: toastWarning } = useToast();
   const knownOrderIdsRef = useRef<Set<number> | null>(null);
 
@@ -227,12 +231,13 @@ export default function OrdersBoardPage() {
    *
    * @param order - ใบสั่งที่จะเปลี่ยนสถานะ
    * @param status - สถานะใหม่
+   * @param reason - เหตุผลการยกเลิก (ถ้ามี)
    * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือเขียนสถานะลงฐานข้อมูลและรีโหลดกระดาน
    */
-  async function changeOrderStatus(order: BoardOrder, status: string) {
+  async function changeOrderStatus(order: BoardOrder, status: string, reason?: string) {
     const result = await apiFetch(`/api/admin/orders/${order.id}`, {
       method: 'PATCH',
-      body: jsonBody({ status }),
+      body: jsonBody({ status, reason }),
     });
     if (!result.ok) {
       setNotice({ tone: 'error', message: result.message });
@@ -246,12 +251,13 @@ export default function OrdersBoardPage() {
    *
    * @param item - รายการอาหารที่จะเปลี่ยนสถานะ
    * @param status - สถานะใหม่
+   * @param reason - เหตุผลการยกเลิก (ถ้ามี)
    * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือเขียนสถานะลงฐานข้อมูลและรีโหลดกระดาน
    */
-  async function changeItemStatus(item: BoardItem, status: string) {
+  async function changeItemStatus(item: BoardItem, status: string, reason?: string) {
     const result = await apiFetch(`/api/admin/order-items/${item.id}`, {
       method: 'PATCH',
-      body: jsonBody({ status }),
+      body: jsonBody({ status, reason }),
     });
     if (!result.ok) {
       setNotice({ tone: 'error', message: result.message });
@@ -349,9 +355,20 @@ export default function OrdersBoardPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold text-slip">กระดานออเดอร์</h1>
-        <p className="text-slip-dim">อัปเดตอัตโนมัติทุก 10 วินาที ใบสั่งใหม่ขึ้นบนสุด</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slip">กระดานออเดอร์</h1>
+          <p className="text-slip-dim">อัปเดตอัตโนมัติทุก 10 วินาที ใบสั่งใหม่ขึ้นบนสุด</p>
+        </div>
+        {currentUser?.role === 'ADMIN' && (
+          <button
+            type="button"
+            onClick={() => setAuditModalOpen(true)}
+            className="flex min-h-[42px] items-center gap-1.5 rounded-xl border border-rule bg-white px-4 text-xs font-bold text-slip transition-colors hover:bg-zinc-50 shadow-xs cursor-pointer"
+          >
+            <span>📜 บันทึกประวัติการยกเลิก (Audit Log)</span>
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg bg-griddle px-3 py-3 shadow-sm">
@@ -503,8 +520,8 @@ export default function OrdersBoardPage() {
                           )}
                           <button
                             type="button"
-                            onClick={() => changeItemStatus(item, 'CANCELLED')}
-                            className="min-h-[44px] rounded-lg bg-void/10 px-3 text-void"
+                            onClick={() => setCancelItemTarget({ item, order })}
+                            className="min-h-[44px] rounded-lg bg-void/10 px-3 text-void hover:bg-void/20 transition-colors cursor-pointer"
                           >
                             ยกเลิกจานนี้
                           </button>
@@ -641,24 +658,40 @@ export default function OrdersBoardPage() {
         data={printData}
       />
 
-      <ConfirmModal
-        open={cancelConfirmOrder !== null}
-        title="ยืนยันยกเลิกออเดอร์ทั้งใบ"
-        message={
-          cancelConfirmOrder
-            ? `คุณต้องการยกเลิกออเดอร์ ${cancelConfirmOrder.order_code} ของโต๊ะ ${cancelConfirmOrder.table_no} ทั้งใบใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`
-            : ''
-        }
-        confirmText="ยกเลิกออเดอร์นี้"
-        cancelText="กลับไปก่อน"
-        tone="danger"
-        onConfirm={() => {
-          if (cancelConfirmOrder) {
-            changeOrderStatus(cancelConfirmOrder, 'CANCELLED');
+      {/* Modal บังคับระบุเหตุผลการยกเลิกอาหารรายจาน เพื่อบันทึก Audit Log */}
+      {cancelItemTarget && (
+        <CancelReasonModal
+          open={Boolean(cancelItemTarget)}
+          title={`ยกเลิกรายการ: ${cancelItemTarget.item.item_name} (×${cancelItemTarget.item.quantity})`}
+          subtitle={`โต๊ะ ${cancelItemTarget.order.table_no} · ออเดอร์ ${cancelItemTarget.order.order_code}`}
+          amountText={`฿${formatBaht(Number(cancelItemTarget.item.unit_price) * cancelItemTarget.item.quantity)}`}
+          onConfirm={(reason) => {
+            changeItemStatus(cancelItemTarget.item, 'CANCELLED', reason);
+            setCancelItemTarget(null);
+          }}
+          onClose={() => setCancelItemTarget(null)}
+        />
+      )}
+
+      {/* Modal บังคับระบุเหตุผลการ Void ยกเลิกออเดอร์ทั้งใบ (เฉพาะ ADMIN) */}
+      {cancelConfirmOrder && (
+        <CancelReasonModal
+          open={Boolean(cancelConfirmOrder)}
+          title={`ยกเลิกออเดอร์ทั้งใบ: ${cancelConfirmOrder.order_code}`}
+          subtitle={`โต๊ะ ${cancelConfirmOrder.table_no} · มูลค่ารวมทั้งใบ`}
+          amountText={`฿${formatBaht(cancelConfirmOrder.total_amount)}`}
+          onConfirm={(reason) => {
+            changeOrderStatus(cancelConfirmOrder, 'CANCELLED', reason);
             setCancelConfirmOrder(null);
-          }
-        }}
-        onClose={() => setCancelConfirmOrder(null)}
+          }}
+          onClose={() => setCancelConfirmOrder(null)}
+        />
+      )}
+
+      {/* Modal ดูประวัติการยกเลิกย้อนหลังสำหรับผู้จัดการ/เจ้าของร้าน */}
+      <CancellationAuditModal
+        open={auditModalOpen}
+        onClose={() => setAuditModalOpen(false)}
       />
     </div>
   );
