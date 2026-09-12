@@ -283,24 +283,34 @@ export default function BranchMenuPage({ params }: PageProps) {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setAvailabilities((prev) => ({ ...prev, [item.id]: !isAvail }))
-                          }
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer ${
-                            isAvail
-                              ? 'bg-green-50 text-green-700 hover:bg-green-100'
-                              : 'bg-red-50 text-red-700 hover:bg-red-100'
-                          }`}
-                        >
+                        {item.base_is_available === 0 ? (
                           <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              isAvail ? 'bg-green-600' : 'bg-red-600'
+                            className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-500"
+                            title="ปิดจำหน่ายจากเมนูหลักส่วนกลาง (HQ) สาขาจึงไม่สามารถเปิดขายได้"
+                          >
+                            <span className="h-1.5 w-1.5 rounded-full bg-zinc-400" />
+                            <span>ปิดขายจากส่วนกลาง (HQ)</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAvailabilities((prev) => ({ ...prev, [item.id]: !isAvail }))
+                            }
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer ${
+                              isAvail
+                                ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                                : 'bg-red-50 text-red-700 hover:bg-red-100'
                             }`}
-                          />
-                          <span>{isAvail ? 'เปิดขายปกติ' : 'ของหมดในสาขา'}</span>
-                        </button>
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                isAvail ? 'bg-green-600' : 'bg-red-600'
+                              }`}
+                            />
+                            <span>{isAvail ? 'เปิดขายปกติ' : 'ของหมดในสาขา'}</span>
+                          </button>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
