@@ -51,6 +51,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   const targetBranchId = auth.user.branchId ?? branchId ?? currentTable.branch_id;
 
+  const branchExists = await queryOne<RowDataPacket & { id: number }>(
+    'SELECT id FROM branches WHERE id = ? LIMIT 1',
+    [targetBranchId],
+  );
+  if (!branchExists) {
+    return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบสาขาที่ระบุ', 404);
+  }
+
   const duplicate = await queryOne<RowDataPacket & { id: number }>(
     'SELECT id FROM dining_tables WHERE branch_id = ? AND table_no = ? AND id <> ? LIMIT 1',
     [targetBranchId, tableNo, id],

@@ -81,6 +81,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (targetBranchId !== null) {
+    const branchExists = await queryOne<RowDataPacket & { id: number }>(
+      'SELECT id FROM branches WHERE id = ? LIMIT 1',
+      [targetBranchId],
+    );
+    if (!branchExists) {
+      return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบสาขาที่ระบุ', 404);
+    }
+  }
+
   const result = await execute(
     'INSERT INTO users (username, password_hash, full_name, role, branch_id, is_active) VALUES (?, ?, ?, ?, ?, ?)',
     [username, await hashPassword(password), fullName, role, targetBranchId, isActive ? 1 : 0],

@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
-import { execute, query } from '@/lib/db';
+import { execute, query, queryOne } from '@/lib/db';
 import { tableSchema, firstErrorMessage } from '@/lib/validation';
 import { getEffectiveBranchId } from '@/lib/branch';
 
@@ -86,6 +86,14 @@ export async function POST(request: NextRequest) {
     if (reqBranchId && reqBranchId !== auth.user.branchId) {
       return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์สร้างโต๊ะให้สาขาอื่น', 403);
     }
+  }
+
+  const branchExists = await queryOne<RowDataPacket & { id: number }>(
+    'SELECT id FROM branches WHERE id = ? LIMIT 1',
+    [targetBranchId],
+  );
+  if (!branchExists) {
+    return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบสาขาที่ระบุ', 404);
   }
 
   const duplicate = await query<RowDataPacket & { id: number }>(
