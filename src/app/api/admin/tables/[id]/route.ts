@@ -39,7 +39,17 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบโต๊ะนี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
   }
 
-  const targetBranchId = branchId ?? currentTable.branch_id;
+  // ตรวจสอบ tenant isolation: แอดมินประจำสาขาไม่สามารถแก้ไขโต๊ะของสาขาอื่น หรือย้ายโต๊ะข้ามสาขา
+  if (auth.user.branchId !== null && auth.user.branchId !== undefined) {
+    if (currentTable.branch_id !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์แก้ไขโต๊ะของสาขาอื่น', 403);
+    }
+    if (branchId && branchId !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่สามารถย้ายโต๊ะไปสาขาอื่นได้', 403);
+    }
+  }
+
+  const targetBranchId = auth.user.branchId ?? branchId ?? currentTable.branch_id;
 
   const duplicate = await queryOne<RowDataPacket & { id: number }>(
     'SELECT id FROM dining_tables WHERE branch_id = ? AND table_no = ? AND id <> ? LIMIT 1',
@@ -77,6 +87,22 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   const id = parseId((await context.params).id);
   if (!id) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, 'รหัสโต๊ะไม่ถูกต้อง กรุณากลับไปเลือกใหม่');
+  }
+
+  // ตรวจสอบว่าโต๊ะมีอยู่จริงและสังกัดสาขาใด
+  const currentTable = await queryOne<RowDataPacket & { branch_id: number }>(
+    'SELECT branch_id FROM dining_tables WHERE id = ? LIMIT 1',
+    [id],
+  );
+  if (!currentTable) {
+    return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบโต๊ะนี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
+  }
+
+  // ตรวจสอบ tenant isolation: แอดมินประจำสาขาไม่สามารถลบโต๊ะของสาขาอื่น
+  if (auth.user.branchId !== null && auth.user.branchId !== undefined) {
+    if (currentTable.branch_id !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์ลบโต๊ะของสาขาอื่น', 403);
+    }
   }
 
   // นับทั้งรอบการนั่งและ ticket ที่ผูกโต๊ะนี้ เพราะทั้งสองตารางอ้างถึง dining_tables ด้วย foreign key

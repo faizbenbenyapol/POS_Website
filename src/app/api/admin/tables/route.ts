@@ -79,7 +79,14 @@ export async function POST(request: NextRequest) {
 
   const { tableNo, seats, isActive, branchId: reqBranchId } = parsed.data;
   const effectiveBranchId = await getEffectiveBranchId(request, auth.user);
-  const targetBranchId = reqBranchId ?? effectiveBranchId ?? 1;
+  const targetBranchId = auth.user.branchId ?? reqBranchId ?? effectiveBranchId ?? 1;
+
+  // ตรวจสอบ tenant isolation: แอดมินประจำสาขาไม่สามารถสร้างโต๊ะให้สาขาอื่น
+  if (auth.user.branchId !== null && auth.user.branchId !== undefined) {
+    if (reqBranchId && reqBranchId !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์สร้างโต๊ะให้สาขาอื่น', 403);
+    }
+  }
 
   const duplicate = await query<RowDataPacket & { id: number }>(
     'SELECT id FROM dining_tables WHERE branch_id = ? AND table_no = ? LIMIT 1',

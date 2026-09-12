@@ -122,9 +122,12 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
       });
     } else {
       setEditing(null);
+      const defaultBranchId = currentUser?.branchId
+        ? String(currentUser.branchId)
+        : (branches[0] ? String(branches[0].id) : '');
       setForm({
         ...EMPTY_FORM,
-        branchId: branches[0] ? String(branches[0].id) : '',
+        branchId: defaultBranchId,
       });
     }
     setFormError('');
@@ -390,6 +393,7 @@ export default function TableManager({ baseUrl }: { baseUrl: string }) {
               label="สาขาประจำโต๊ะ"
               value={form.branchId || String(branches[0]?.id || 1)}
               onChange={(value) => setForm({ ...form, branchId: value })}
+              disabled={Boolean(currentUser?.branchId)}
               options={branches.map((b) => ({
                 value: String(b.id),
                 label: `🏢 ${b.name} (${b.code})`,

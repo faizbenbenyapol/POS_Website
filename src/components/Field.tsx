@@ -112,12 +112,14 @@ export function SelectField({
   value,
   onChange,
   options,
+  disabled,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
+  disabled?: boolean;
 }) {
   return (
     <CustomSelect
@@ -126,6 +128,7 @@ export function SelectField({
       value={value}
       onChange={onChange}
       options={options}
+      disabled={disabled}
     />
   );
 }
