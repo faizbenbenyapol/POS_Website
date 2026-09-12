@@ -22,6 +22,7 @@ export default function BranchMenuPage({ params }: PageProps) {
   const [search, setSearch] = useState('');
   const [activeCat, setActiveCat] = useState<number | 'ALL'>('ALL');
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [savingAll, setSavingAll] = useState(false);
 
   // Local edit states
   const [customPrices, setCustomPrices] = useState<Record<number, string>>({});
@@ -84,6 +85,36 @@ export default function BranchMenuPage({ params }: PageProps) {
     }
   }
 
+  async function handleSaveAll() {
+    if (items.length === 0 || savingAll) return;
+    setSavingAll(true);
+    try {
+      const payloadItems = items.map((item) => {
+        const rawPrice = customPrices[item.id]?.trim();
+        const customPrice = rawPrice ? Number(rawPrice) : null;
+        const isAvailable = availabilities[item.id] ?? true;
+        return { menuItemId: item.id, customPrice, isAvailable };
+      });
+
+      const res = await fetch(`/api/admin/branches/${branchId}/menu`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: payloadItems }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        showErrorToast(json.message || 'บันทึกไม่สำเร็จ');
+        return;
+      }
+      showSuccessToast('บันทึกการตั้งค่าเมนูทั้งหมดเรียบร้อยแล้ว');
+      loadData();
+    } catch {
+      showErrorToast('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+    } finally {
+      setSavingAll(false);
+    }
+  }
+
   const categories = Array.from(
     new Map(items.map((i) => [i.category_id, i.category_name])).entries(),
   );
@@ -116,6 +147,17 @@ export default function BranchMenuPage({ params }: PageProps) {
           <p className="text-xs text-slip-dim mt-0.5">
             ปรับราคาพิเศษเฉพาะสาขา (หากเว้นว่างจะใช้ราคาหลัก) และเปิด/ปิดของหมดเฉพาะสาขานี้
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={savingAll || loading}
+            onClick={handleSaveAll}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition cursor-pointer"
+          >
+            <CheckIcon className="w-4 h-4" />
+            <span>{savingAll ? 'กำลังบันทึก…' : 'บันทึกการเปลี่ยนแปลงทั้งหมด'}</span>
+          </button>
         </div>
       </div>
 

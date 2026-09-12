@@ -72,15 +72,40 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์แก้ไขเมนูของสาขาอื่น', 403);
   }
 
-  const parsed = branchMenuOverrideSchema.safeParse(await request.json().catch(() => null));
+  const body = await request.json().catch(() => null);
+
+  // รองรับการบันทึกแบบกลุ่ม (Batch Update)
+  if (body && Array.isArray(body.items)) {
+    for (const item of body.items) {
+      const parsed = branchMenuOverrideSchema.safeParse(item);
+      if (parsed.success) {
+        const { menuItemId, customPrice, isAvailable } = parsed.data;
+        await execute(
+          `INSERT INTO branch_menu_availability (branch_id, menu_item_id, custom_price, is_available)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             custom_price = VALUES(custom_price),
+             is_available = VALUES(is_available)`,
+          [
+            branchId,
+            menuItemId,
+            customPrice !== undefined && customPrice !== null ? customPrice : null,
+            isAvailable ? 1 : 0,
+          ],
+        );
+      }
+    }
+    return apiOk({ branchId, updatedCount: body.items.length });
+  }
+
+  // รองรับการบันทึกทีละรายการ (Single Item)
+  const parsed = branchMenuOverrideSchema.safeParse(body);
   if (!parsed.success) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
   const { menuItemId, customPrice, isAvailable } = parsed.data;
 
-  // หากไม่มี customPrice (เป็น null/undefined) และ isAvailable ตรงกับค่า default หรือต้องการ reset
-  // เราใช้ INSERT ... ON DUPLICATE KEY UPDATE
   await execute(
     `INSERT INTO branch_menu_availability (branch_id, menu_item_id, custom_price, is_available)
      VALUES (?, ?, ?, ?)
