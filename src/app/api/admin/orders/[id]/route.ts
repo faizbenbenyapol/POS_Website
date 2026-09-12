@@ -51,6 +51,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!order) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบออเดอร์นี้ กรุณารีเฟรชกระดานใหม่', 404);
   }
+  // ตรวจสอบ tenant isolation: พนักงานประจำสาขาไม่สามารถแก้ไขออเดอร์ของสาขาอื่นได้
+  if (auth.user.branchId && auth.user.branchId !== order.branch_id) {
+    return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์จัดการออเดอร์ของสาขาอื่น', 403);
+  }
   if (order.session_status === 'CLOSED') {
     return apiError(
       ERROR_CODES.VALIDATION_ERROR,

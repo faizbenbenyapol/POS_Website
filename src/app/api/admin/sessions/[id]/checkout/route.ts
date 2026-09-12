@@ -9,7 +9,7 @@ import { checkoutSchema, firstErrorMessage } from '@/lib/validation';
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** เหตุผลที่ปิดบิลไม่ได้ แยกรหัสเพื่อให้หน้าจอบอกพนักงานได้ตรงกรณี */
-type CheckoutFailure = 'NOT_FOUND' | 'ALREADY_CLOSED' | 'NOTHING_TO_PAY';
+type CheckoutFailure = 'NOT_FOUND' | 'ALREADY_CLOSED' | 'NOTHING_TO_PAY' | 'FORBIDDEN';
 
 /**
  * รวมยอดที่ต้องเก็บของรอบการนั่งหนึ่ง โดยไม่นับรายการที่ถูกยกเลิก
@@ -65,6 +65,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
     const session = sessions[0];
     if (!session) return { ok: false, reason: 'NOT_FOUND' };
+    // ตรวจสอบ tenant isolation: พนักงานประจำสาขาไม่สามารถปิดบิลของสาขาอื่นได้
+    if (auth.user.branchId && auth.user.branchId !== session.branch_id) {
+      return { ok: false, reason: 'FORBIDDEN' };
+    }
     if (session.status === 'CLOSED') return { ok: false, reason: 'ALREADY_CLOSED' };
 
     const total = await sumSessionTotal(conn, sessionId);
@@ -82,6 +86,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   });
 
   if (!result.ok) {
+    if (result.reason === 'FORBIDDEN') {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์ปิดบิลของสาขาอื่น', 403);
+    }
     if (result.reason === 'ALREADY_CLOSED') {
       return apiError(
         ERROR_CODES.VALIDATION_ERROR,

@@ -44,12 +44,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  const current = await queryOne<RowDataPacket & { status: string }>(
-    'SELECT status FROM tickets WHERE id = ? LIMIT 1',
+  const current = await queryOne<RowDataPacket & { status: string; branch_id: number }>(
+    'SELECT status, branch_id FROM tickets WHERE id = ? LIMIT 1',
     [id],
   );
   if (!current) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบเรื่องแจ้งปัญหานี้ กรุณารีเฟรชหน้า', 404);
+  }
+
+  // ตรวจสอบ tenant isolation: พนักงานประจำสาขาไม่สามารถจัดการตั๋วของสาขาอื่นได้
+  if (auth.user.branchId && auth.user.branchId !== current.branch_id) {
+    return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์จัดการเรื่องแจ้งปัญหาของสาขาอื่น', 403);
   }
 
   // ตรวจว่าผู้รับผิดชอบที่เลือกยังมีอยู่และยังใช้งานได้ ก่อนเขียนลงคอลัมน์ที่มี foreign key

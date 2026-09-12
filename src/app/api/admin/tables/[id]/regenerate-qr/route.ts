@@ -28,13 +28,18 @@ export async function POST(_request: NextRequest, context: RouteContext) {
   }
 
   // ตรวจสอบว่าโต๊ะมีจริงในระบบ
-  const table = await queryOne<RowDataPacket & { id: number; table_no: string; is_active: number }>(
-    'SELECT id, table_no, is_active FROM dining_tables WHERE id = ? LIMIT 1',
+  const table = await queryOne<RowDataPacket & { id: number; table_no: string; is_active: number; branch_id: number }>(
+    'SELECT id, table_no, is_active, branch_id FROM dining_tables WHERE id = ? LIMIT 1',
     [id],
   );
 
   if (!table) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบโต๊ะนี้ อาจถูกลบไปแล้ว กรุณารีเฟรชหน้า', 404);
+  }
+
+  // ตรวจสอบ tenant isolation: แอดมินประจำสาขาไม่สามารถเปลี่ยน QR ของสาขาอื่นได้
+  if (auth.user.branchId && auth.user.branchId !== table.branch_id) {
+    return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์จัดการโต๊ะของสาขาอื่น', 403);
   }
 
   // สุ่ม token ใหม่ 32 ตัวอักษร

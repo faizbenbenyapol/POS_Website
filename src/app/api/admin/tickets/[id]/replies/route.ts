@@ -30,12 +30,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
-  const ticket = await queryOne<RowDataPacket & { status: string }>(
-    'SELECT status FROM tickets WHERE id = ? LIMIT 1',
+  const ticket = await queryOne<RowDataPacket & { status: string; branch_id: number }>(
+    'SELECT status, branch_id FROM tickets WHERE id = ? LIMIT 1',
     [id],
   );
   if (!ticket) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบเรื่องแจ้งปัญหานี้ กรุณารีเฟรชหน้า', 404);
+  }
+
+  // ตรวจสอบ tenant isolation: พนักงานประจำสาขาไม่สามารถตอบกลับเรื่องของสาขาอื่นได้
+  if (auth.user.branchId && auth.user.branchId !== ticket.branch_id) {
+    return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์ตอบกลับเรื่องแจ้งปัญหาของสาขาอื่น', 403);
   }
   if (ticket.status === 'CLOSED') {
     return apiError(

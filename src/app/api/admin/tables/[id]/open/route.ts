@@ -27,12 +27,16 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
   try {
     // ตรวจว่าโต๊ะมีอยู่จริงและเปิดใช้งานอยู่
-    const table = await queryOne<RowDataPacket & { is_active: number }>(
-      'SELECT is_active FROM dining_tables WHERE id = ? LIMIT 1',
+    const table = await queryOne<RowDataPacket & { is_active: number; branch_id: number }>(
+      'SELECT is_active, branch_id FROM dining_tables WHERE id = ? LIMIT 1',
       [tableId],
     );
     if (!table) {
       return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบโต๊ะนี้ กรุณารีเฟรชรายการโต๊ะ', 404);
+    }
+    // ตรวจสอบ tenant isolation: พนักงานประจำสาขาไม่สามารถเปิดโต๊ะของสาขาอื่นได้
+    if (auth.user.branchId && auth.user.branchId !== table.branch_id) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์เปิดโต๊ะของสาขาอื่น', 403);
     }
     if (table.is_active !== 1) {
       return apiError(

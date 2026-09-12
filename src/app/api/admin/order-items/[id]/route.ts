@@ -57,6 +57,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!found) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบรายการอาหารนี้ กรุณารีเฟรชกระดานใหม่', 404);
   }
+  // ตรวจสอบ tenant isolation: พนักงานประจำสาขาไม่สามารถแก้ไขรายการอาหารของสาขาอื่นได้
+  if (auth.user.branchId && auth.user.branchId !== found.branch_id) {
+    return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์จัดการรายการอาหารของสาขาอื่น', 403);
+  }
   if (found.session_status === 'CLOSED') {
     return apiError(
       ERROR_CODES.VALIDATION_ERROR,
