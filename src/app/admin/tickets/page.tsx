@@ -356,6 +356,11 @@ export default function TicketsPage() {
           <div className="flex flex-col gap-4">
             <div className="rounded-lg bg-char px-3 py-2">
               <p className="text-sm text-slip-dim">
+                {detail.branch_name && (
+                  <span className="mr-1.5 inline-block rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600">
+                    {detail.branch_name}
+                  </span>
+                )}
                 {TICKET_CATEGORY_LABELS[detail.category]} ·{' '}
                 {TICKET_PRIORITY_LABELS[detail.priority]} ·{' '}
                 {detail.source === 'CUSTOMER'

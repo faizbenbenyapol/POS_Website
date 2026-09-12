@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
-import { query, withTransaction } from '@/lib/db';
+import { query, queryOne, withTransaction } from '@/lib/db';
 import { generateTicketCode } from '@/lib/ticket';
 import { staffTicketSchema, firstErrorMessage } from '@/lib/validation';
 import { getEffectiveBranchId } from '@/lib/branch';
@@ -92,7 +92,23 @@ export async function POST(request: NextRequest) {
 
   const { category, subject, detail, priority, tableId } = parsed.data;
   const effectiveBranchId = await getEffectiveBranchId(request, auth.user);
-  const targetBranchId = effectiveBranchId ?? auth.user.branchId ?? 1;
+  let targetBranchId = effectiveBranchId ?? auth.user.branchId ?? 1;
+
+  if (tableId) {
+    const table = await queryOne<RowDataPacket & { id: number; branch_id: number }>(
+      'SELECT id, branch_id FROM dining_tables WHERE id = ?',
+      [tableId],
+    );
+    if (!table) {
+      return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบโต๊ะที่ระบุ');
+    }
+    if (auth.user.branchId && table.branch_id !== auth.user.branchId) {
+      return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์เปิดเรื่องแจ้งปัญหาสำหรับโต๊ะของสาขาอื่น');
+    }
+    if (!effectiveBranchId) {
+      targetBranchId = table.branch_id;
+    }
+  }
 
   const created = await withTransaction(async (conn) => {
     const ticketCode = await generateTicketCode(conn);

@@ -60,14 +60,21 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   // ตรวจว่าผู้รับผิดชอบที่เลือกยังมีอยู่และยังใช้งานได้ ก่อนเขียนลงคอลัมน์ที่มี foreign key
   // ถ้าปล่อยให้ชนที่ระดับฐานข้อมูล ผู้ใช้จะเห็นแค่หน้าพัง ไม่รู้ว่าต้องแก้อะไร
   if (assignedTo) {
-    const assignee = await queryOne<RowDataPacket & { id: number }>(
-      'SELECT id FROM users WHERE id = ? AND is_active = 1 LIMIT 1',
+    const assignee = await queryOne<RowDataPacket & { id: number; branch_id: number | null }>(
+      'SELECT id, branch_id FROM users WHERE id = ? AND is_active = 1 LIMIT 1',
       [assignedTo],
     );
     if (!assignee) {
       return apiError(
         ERROR_CODES.VALIDATION_ERROR,
         'ผู้รับผิดชอบที่เลือกไม่มีอยู่แล้วหรือถูกปิดใช้งาน กรุณาเลือกคนใหม่จากรายการ',
+      );
+    }
+    // ไม่อนุญาตให้มอบหมายงานให้พนักงานที่สังกัดสาขาอื่น (เว้นแต่เป็นผู้ใช้ส่วนกลาง HQ)
+    if (assignee.branch_id !== null && current.branch_id && assignee.branch_id !== current.branch_id) {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'ไม่สามารถมอบหมายงานให้พนักงานต่างสาขาได้',
       );
     }
   }
