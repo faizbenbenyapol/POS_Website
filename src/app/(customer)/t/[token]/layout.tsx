@@ -50,7 +50,9 @@ export default async function CustomerLayout({ children, params }: LayoutProps) 
               <UtensilsIcon className="w-4 h-4" />
             </span>
             <div className="min-w-0">
-              <p className="text-[11px] font-medium text-white/80 leading-tight truncate">{found.branchName || SHOP_NAME}</p>
+              <p className="text-[11px] font-medium text-white/80 leading-tight truncate">
+                {found.branchName ? `${SHOP_NAME} (${found.branchName})` : SHOP_NAME}
+              </p>
               <h2 className="text-xs font-bold text-white leading-tight truncate">สั่งอาหารออนไลน์</h2>
             </div>
           </div>
