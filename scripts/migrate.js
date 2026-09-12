@@ -35,11 +35,17 @@ async function runMigrations() {
           error.code === 'ER_DUP_FIELDNAME' ||
           error.code === 'ER_DUP_KEYNAME' ||
           error.code === 'ER_TABLE_EXISTS_ERROR' ||
+          error.code === 'ER_DUP_ENTRY' ||
+          error.code === 'ER_FK_DUP_NAME' ||
+          error.code === 'ER_MULTIPLE_PRI_KEY' ||
           error.errno === 1060 ||
           error.errno === 1061 ||
-          error.errno === 1050
+          error.errno === 1050 ||
+          error.errno === 1062 ||
+          error.errno === 1826 ||
+          error.errno === 1068
         ) {
-          console.log(`[Migration] ${file} already applied (skipped).`);
+          console.log(`[Migration] ${file} already applied or constraint exists (skipped).`);
         } else {
           console.warn(`[Migration] Warning in ${file}:`, error.message);
         }
