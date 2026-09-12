@@ -18,29 +18,47 @@ USE pos_qr;
 DELETE FROM ticket_replies;
 DELETE FROM tickets;
 DELETE FROM payments;
+DELETE FROM cancellation_audit_logs;
 DELETE FROM order_items;
 DELETE FROM orders;
+DELETE FROM order_counters;
 DELETE FROM table_sessions;
+DELETE FROM branch_menu_availability;
 DELETE FROM menu_items;
 DELETE FROM categories;
 DELETE FROM dining_tables;
 DELETE FROM users;
+DELETE FROM branches;
 
--- ผู้ใช้ระบบฝั่งร้าน
-INSERT INTO users (username, password_hash, full_name, role) VALUES
-  ('admin',   '$2b$10$1b.K/eL6x6APFfWwlLQZIukpxCbUuqBd2ZUMxpD/4c2NWKnX6l6xu', 'เจ้าของร้าน', 'ADMIN'),
-  ('staff01', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'พนักงานหน้าร้าน', 'STAFF');
+-- ข้อมูลสาขา (เริ่มต้น 2 สาขา)
+INSERT INTO branches (id, code, name, address, phone, business_day_cutoff_hour, is_active) VALUES
+  (1, 'HQ-SIAM', 'สาขาสยาม (สำนักงานใหญ่)', '999/9 ถ.พระราม 1 ปทุมวัน กทม.', '02-123-4567', 4, 1),
+  (2, 'BKK-ARI', 'สาขาอารีย์', '12 ซอยอารีย์ พญาไท กทม.', '02-987-6543', 4, 1);
 
--- โต๊ะ 8 โต๊ะ พร้อม qr_token สุ่มไว้แล้ว (ลิงก์ QR คือ /t/{qr_token})
-INSERT INTO dining_tables (table_no, seats, qr_token) VALUES
-  ('A1', 2, '508146d7b4653bd6a4ee151228802674'),
-  ('A2', 2, '8bda159b2ae11cb68821f3591317e70d'),
-  ('A3', 4, '05a6bee89e9205198538f2da28a9db7f'),
-  ('A4', 4, '13efc3c9da15866cc171405b7fb9a842'),
-  ('B1', 4, 'b5c30e2cbd8d447745fe3b4ebd5b6a68'),
-  ('B2', 6, 'b4c834f5661d4eeb92592d8ef57dd9c7'),
-  ('B3', 6, 'b493bfb211b76f824da701797341590a'),
-  ('B4', 8, 'fd3c3d77c829611fd31c4d2c9a472809');
+-- ผู้ใช้ระบบฝั่งร้าน (admin เป็น HQ เข้าถึงทุกสาขา, staff01 ประจำสยาม, staff02 ประจำอารีย์)
+INSERT INTO users (username, password_hash, full_name, role, branch_id) VALUES
+  ('admin',   '$2b$10$1b.K/eL6x6APFfWwlLQZIukpxCbUuqBd2ZUMxpD/4c2NWKnX6l6xu', 'เจ้าของร้าน (HQ)', 'ADMIN', NULL),
+  ('staff01', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'พนักงานสาขาสยาม', 'STAFF', 1),
+  ('staff02', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'พนักงานสาขาอารีย์', 'STAFF', 2);
+
+-- โต๊ะประจำแต่ละสาขา พร้อม qr_token ประจำโต๊ะ
+-- สาขาที่ 1 (HQ-SIAM): 8 โต๊ะ
+INSERT INTO dining_tables (branch_id, table_no, seats, qr_token) VALUES
+  (1, 'A1', 2, '508146d7b4653bd6a4ee151228802674'),
+  (1, 'A2', 2, '8bda159b2ae11cb68821f3591317e70d'),
+  (1, 'A3', 4, '05a6bee89e9205198538f2da28a9db7f'),
+  (1, 'A4', 4, '13efc3c9da15866cc171405b7fb9a842'),
+  (1, 'B1', 4, 'b5c30e2cbd8d447745fe3b4ebd5b6a68'),
+  (1, 'B2', 6, 'b4c834f5661d4eeb92592d8ef57dd9c7'),
+  (1, 'B3', 6, 'b493bfb211b76f824da701797341590a'),
+  (1, 'B4', 8, 'fd3c3d77c829611fd31c4d2c9a472809');
+
+-- สาขาที่ 2 (BKK-ARI): 4 โต๊ะ
+INSERT INTO dining_tables (branch_id, table_no, seats, qr_token) VALUES
+  (2, 'A1', 2, 'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1'),
+  (2, 'A2', 2, 'a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2'),
+  (2, 'B1', 4, 'b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1'),
+  (2, 'B2', 6, 'b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2');
 
 -- หมวดหมู่เมนู เรียงตามลำดับที่อยากให้ลูกค้าเห็นบนแถบหมวดหมู่
 INSERT INTO categories (name, sort_order) VALUES
@@ -73,3 +91,9 @@ INSERT INTO menu_items (category_id, name, description, price, image_url) VALUES
   ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'น้ำมะนาวโซดา',         'สดชื่น ไม่หวานมาก',                           50.00, 'https://images.unsplash.com/photo-1580217593608-61931cefc821?w=480&h=360&fit=crop&q=70&auto=format'),
   ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'น้ำเปล่า',             'ขวด 600 มล.',                                 15.00, NULL),
   ((SELECT id FROM categories WHERE name='เครื่องดื่ม'), 'โซดา',                 'ขวดแก้ว',                                     25.00, NULL);
+
+-- ข้อมูลตั้งค่าราคาและสถานะสินค้าเฉพาะสาขา (Demo Branch Overrides)
+-- ตัวอย่าง: สาขาที่ 2 (อารีย์) ขายกะเพราหมูสับไข่ดาวราคาพิเศษ 75 บาท (ราคาปกติ 65) และหมูสะเต๊ะของหมดชั่วคราว
+INSERT INTO branch_menu_availability (branch_id, menu_item_id, custom_price, is_available) VALUES
+  (2, (SELECT id FROM menu_items WHERE name='กะเพราหมูสับไข่ดาว' LIMIT 1), 75.00, 1),
+  (2, (SELECT id FROM menu_items WHERE name='หมูสะเต๊ะ 6 ไม้' LIMIT 1), NULL, 0);

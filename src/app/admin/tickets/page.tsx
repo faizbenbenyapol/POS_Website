@@ -16,6 +16,8 @@ import {
 /** เรื่องแจ้งปัญหา 1 เรื่องตามที่ GET /api/admin/tickets คืนมา */
 type Ticket = {
   id: number;
+  branch_id?: number | null;
+  branch_name?: string | null;
   ticket_code: string;
   source: string;
   table_no: string | null;
@@ -328,6 +330,11 @@ export default function TicketsPage() {
                 </div>
                 <p className="mt-1 text-slip">{ticket.subject}</p>
                 <p className="text-sm text-slip-dim">
+                  {ticket.branch_name && (
+                    <span className="mr-1.5 inline-block rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600">
+                      {ticket.branch_name}
+                    </span>
+                  )}
                   {TICKET_CATEGORY_LABELS[ticket.category]} ·{' '}
                   {ticket.source === 'CUSTOMER'
                     ? `ลูกค้าโต๊ะ ${ticket.table_no ?? '-'}`

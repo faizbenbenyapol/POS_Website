@@ -28,6 +28,8 @@ import {
 /** ออเดอร์ 1 ใบบนกระดาน */
 type BoardOrder = {
   id: number;
+  branch_id?: number | null;
+  branch_name?: string | null;
   order_code: string;
   status: string;
   total_amount: string;
@@ -323,6 +325,7 @@ export default function OrdersBoardPage() {
     const filename = `orders-report-${dateFilter || 'all'}.csv`;
     const headers = [
       'รหัสออเดอร์',
+      'สาขา',
       'เลขโต๊ะ',
       'วันเวลาที่สั่ง',
       'สถานะออเดอร์',
@@ -341,6 +344,7 @@ export default function OrdersBoardPage() {
 
       return [
         order.order_code,
+        order.branch_name || '-',
         order.table_no,
         formatThaiTime(order.created_at),
         statusObj.label,
@@ -482,7 +486,14 @@ export default function OrdersBoardPage() {
                     {order.table_no}
                   </span>
                   <div>
-                    <span className="font-bold text-sm text-slip">โต๊ะ {order.table_no}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-sm text-slip">โต๊ะ {order.table_no}</span>
+                      {order.branch_name && (
+                        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600">
+                          {order.branch_name}
+                        </span>
+                      )}
+                    </div>
                     <p className="num text-xs text-slip-dim">{order.order_code} · {formatThaiTime(order.created_at)}</p>
                   </div>
                 </div>
