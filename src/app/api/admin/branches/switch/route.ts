@@ -1,6 +1,8 @@
 import type { NextRequest } from 'next/server';
+import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
+import { queryOne } from '@/lib/db';
 import { setActiveBranchCookie } from '@/lib/branch';
 
 /**
@@ -24,6 +26,16 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const rawId = body?.branchId;
   const branchId = typeof rawId === 'number' && rawId > 0 ? rawId : null;
+
+  if (branchId) {
+    const branch = await queryOne<RowDataPacket & { id: number; name: string }>(
+      'SELECT id, name FROM branches WHERE id = ? LIMIT 1',
+      [branchId],
+    );
+    if (!branch) {
+      return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบสาขาที่ต้องการสลับไปใช้งาน', 404);
+    }
+  }
 
   await setActiveBranchCookie(branchId);
 
