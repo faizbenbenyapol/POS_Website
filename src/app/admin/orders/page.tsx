@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import Modal from '@/components/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
 import PromptPayQR from '@/components/PromptPayQR';
-import ReceiptPrintModal, { ReceiptData } from '@/components/ReceiptPrintModal';
+import ReceiptPrintModal, { ReceiptData, isBarItem } from '@/components/ReceiptPrintModal';
 import CancelReasonModal from '@/components/CancelReasonModal';
 import CancellationAuditModal from '@/components/CancellationAuditModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
@@ -30,6 +30,9 @@ import {
   ListIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  DrinkIcon,
+  VolumeIcon,
+  VolumeMuteIcon,
 } from '@/components/Icons';
 
 /** ออเดอร์ 1 ใบบนกระดาน */
@@ -57,6 +60,7 @@ type BoardItem = {
   quantity: number;
   note: string | null;
   status: string;
+  category_name?: string | null;
 };
 
 /** คำอธิบายสถานะภาษาไทย มีข้อความกำกับเสมอ ไม่สื่อความหมายด้วยสีอย่างเดียว */
@@ -95,11 +99,17 @@ function todayInputValue(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/** โทนเสียงแจ้งเตือนออเดอร์ */
+export type SoundTone = 'CHIME' | 'BELL' | 'ALERT';
+
 /**
  * สังเคราะห์เสียงสัญญาณเตือนเมื่อมีออเดอร์ใหม่เข้ามาด้วย Web Audio API
- * ไม่ต้องพึ่งพาไฟล์เสียงภายนอก (.mp3)
+ * รองรับ 3 โทนเสียง พร้อมระดับเสียงที่ปรับได้ ไม่ต้องพึ่งพาไฟล์เสียงภายนอก (.mp3)
+ *
+ * @param tone - โทนเสียง ('CHIME' | 'BELL' | 'ALERT')
+ * @param volume - ระดับความดัง (0.0 ถึง 1.0)
  */
-function playNewOrderSound() {
+function playNewOrderSound(tone: SoundTone = 'CHIME', volume: number = 0.6) {
   try {
     const AudioContextClass =
       window.AudioContext ||
@@ -107,21 +117,66 @@ function playNewOrderSound() {
     if (!AudioContextClass) return;
 
     const ctx = new AudioContextClass();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    const masterGain = Math.max(0, Math.min(1, volume));
 
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+    if (tone === 'BELL') {
+      // โทนกระดิ่งโลหะก้องกังวาน (Kitchen Service Bell)
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc1.type = 'sine';
+      osc2.type = 'triangle';
+      osc1.frequency.setValueAtTime(1046.5, ctx.currentTime); // C6
+      osc2.frequency.setValueAtTime(2093, ctx.currentTime); // C7 overtone
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(masterGain * 0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.65);
 
-    osc.start();
-    osc.stop(ctx.currentTime + 0.35);
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start();
+      osc2.start();
+      osc1.stop(ctx.currentTime + 0.65);
+      osc2.stop(ctx.currentTime + 0.65);
+    } else if (tone === 'ALERT') {
+      // โทนสัญญาณเตือนฉุกเฉิน 3 สเต็ป (Urgent Tri-Tone)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, ctx.currentTime); // A4
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2); // A5
+
+      gain.gain.setValueAtTime(masterGain * 0.35, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } else {
+      // CHIME: เสียงกระดิ่งสองโทนละมุน (Default Two-Tone Chime)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+
+      gain.gain.setValueAtTime(masterGain * 0.35, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + 0.4);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    }
   } catch {
     // ป้องกันการทำงานล้มเหลวหากเบราว์เซอร์ยังไม่เปิดให้เล่นเสียงอัตโนมัติก่อนคลิก
   }
@@ -180,17 +235,23 @@ type PrepItem = {
   name: string;
   quantity: number;
   tables: string[];
+  isBar: boolean;
 };
 
 /**
  * รวมรายการอาหารที่ยังค้างปรุง (PENDING และ PREPARING) จากทุกใบสั่ง
- * เพื่อให้พ่อครัวเห็นภาพรวมจำนวนจานที่ต้องทำทันทีโดยไม่ต้องอ่านทีละใบ
+ * รองรับการกรองตามสถานี (ครัวอาหาร หรือ บาร์น้ำ)
  *
  * @param orders - รายการออเดอร์ทั้งหมดบนกระดาน
  * @param items - รายการอาหารทั้งหมดบนกระดาน
+ * @param stationFilter - ตัวกรองสถานี ('ALL' | 'KITCHEN' | 'BAR')
  * @returns รายการเมนูค้างปรุง เรียงจากจำนวนจานมากไปหาน้อย
  */
-function computeKitchenPrepSummary(orders: BoardOrder[] | null, items: BoardItem[]): PrepItem[] {
+function computeKitchenPrepSummary(
+  orders: BoardOrder[] | null,
+  items: BoardItem[],
+  stationFilter: 'ALL' | 'KITCHEN' | 'BAR' = 'ALL',
+): PrepItem[] {
   if (!orders || orders.length === 0 || items.length === 0) return [];
 
   const activeOrderMap = new Map<number, BoardOrder>();
@@ -200,13 +261,26 @@ function computeKitchenPrepSummary(orders: BoardOrder[] | null, items: BoardItem
     }
   }
 
-  const prepMap = new Map<string, { quantity: number; tables: Set<string> }>();
+  const prepMap = new Map<string, { quantity: number; tables: Set<string>; isBar: boolean }>();
 
   for (const item of items) {
     const parentOrder = activeOrderMap.get(item.order_id);
     if (!parentOrder) continue;
     if (item.status === 'PENDING' || item.status === 'PREPARING') {
-      const existing = prepMap.get(item.item_name) || { quantity: 0, tables: new Set<string>() };
+      const isBar = isBarItem({
+        itemName: item.item_name,
+        quantity: item.quantity,
+        categoryName: item.category_name,
+      });
+
+      if (stationFilter === 'KITCHEN' && isBar) continue;
+      if (stationFilter === 'BAR' && !isBar) continue;
+
+      const existing = prepMap.get(item.item_name) || {
+        quantity: 0,
+        tables: new Set<string>(),
+        isBar,
+      };
       existing.quantity += item.quantity;
       existing.tables.add(parentOrder.table_no);
       prepMap.set(item.item_name, existing);
@@ -220,6 +294,7 @@ function computeKitchenPrepSummary(orders: BoardOrder[] | null, items: BoardItem
       tables: Array.from(data.tables).sort((a, b) =>
         a.localeCompare(b, undefined, { numeric: true }),
       ),
+      isBar: data.isBar,
     }))
     .sort((a, b) => b.quantity - a.quantity);
 }
@@ -249,14 +324,70 @@ function OrdersBoardContent() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printType, setPrintType] = useState<'KITCHEN' | 'RECEIPT'>('KITCHEN');
+  const [printStation, setPrintStation] = useState<'ALL' | 'KITCHEN' | 'BAR'>('ALL');
   const [printData, setPrintData] = useState<ReceiptData | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundTone, setSoundTone] = useState<SoundTone>('CHIME');
+  const [soundVolume, setSoundVolume] = useState<number>(0.6);
+  const [showSoundSettings, setShowSoundSettings] = useState<boolean>(false);
   const [currentUser, setCurrentUser] = useState<{ role: string; fullName: string } | null>(null);
   const [cancelConfirmOrder, setCancelConfirmOrder] = useState<BoardOrder | null>(null);
   const [cancelItemTarget, setCancelItemTarget] = useState<{ item: BoardItem; order: BoardOrder } | null>(null);
   const [auditModalOpen, setAuditModalOpen] = useState(false);
   const { warning: toastWarning } = useToast();
   const knownOrderIdsRef = useRef<Set<number> | null>(null);
+
+  // ตัวกรองสถานีครัว vs บาร์
+  const [stationFilter, setStationFilter] = useState<'ALL' | 'KITCHEN' | 'BAR'>('ALL');
+
+  // โหลดการตั้งค่าเสียงจาก localStorage ตอนเปิดหน้า
+  useEffect(() => {
+    try {
+      const savedTone = localStorage.getItem('pos_order_sound_tone') as SoundTone | null;
+      if (savedTone && (savedTone === 'CHIME' || savedTone === 'BELL' || savedTone === 'ALERT')) {
+        setSoundTone(savedTone);
+      }
+      const savedVol = localStorage.getItem('pos_order_sound_vol');
+      if (savedVol !== null) {
+        setSoundVolume(Math.max(0, Math.min(1, Number(savedVol))));
+      }
+      const savedEnabled = localStorage.getItem('pos_order_sound_enabled');
+      if (savedEnabled !== null) {
+        setSoundEnabled(savedEnabled === 'true');
+      }
+    } catch {
+      // ป้องกันกรณีเบราว์เซอร์ไม่อนุญาต localStorage
+    }
+  }, []);
+
+  /** สลับเปิด/ปิดเสียงเตือน พร้อมบันทึกสถานะ */
+  function handleToggleSound() {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('pos_order_sound_enabled', String(next));
+      } catch {}
+      if (next) playNewOrderSound(soundTone, soundVolume);
+      return next;
+    });
+  }
+
+  /** เปลี่ยนโทนเสียงเตือน พร้อมบันทึกและเล่นตัวอย่าง */
+  function handleChangeTone(tone: SoundTone) {
+    setSoundTone(tone);
+    try {
+      localStorage.setItem('pos_order_sound_tone', tone);
+    } catch {}
+    playNewOrderSound(tone, soundVolume);
+  }
+
+  /** ปรับระดับความดัง พร้อมบันทึก */
+  function handleChangeVolume(vol: number) {
+    setSoundVolume(vol);
+    try {
+      localStorage.setItem('pos_order_sound_vol', String(vol));
+    } catch {}
+  }
 
   // การแสดงผลและการควบคุมการรีเฟรช
   const [viewMode, setViewMode] = useState<'LIST' | 'KDS'>('LIST');
@@ -272,8 +403,14 @@ function OrdersBoardContent() {
    *
    * @param order - ข้อมูลใบสั่งอาหาร
    * @param orderItems - รายการอาหารในใบสั่ง
+   * @param targetStation - สถานีที่ต้องการพิมพ์ ('ALL' | 'KITCHEN' | 'BAR')
    */
-  function handleOpenKitchenPrint(order: BoardOrder, orderItems: BoardItem[]) {
+  function handleOpenKitchenPrint(
+    order: BoardOrder,
+    orderItems: BoardItem[],
+    targetStation: 'ALL' | 'KITCHEN' | 'BAR' = 'ALL',
+  ) {
+    setPrintStation(targetStation);
     setPrintType('KITCHEN');
     setPrintData({
       branchName: order.branch_name || undefined,
@@ -288,6 +425,7 @@ function OrdersBoardContent() {
           itemName: i.item_name,
           quantity: i.quantity,
           note: i.note,
+          categoryName: i.category_name,
         })),
     });
     setPrintModalOpen(true);
@@ -328,7 +466,7 @@ function OrdersBoardContent() {
       if (knownOrderIdsRef.current !== null && soundEnabled) {
         const hasNewOrder = newOrders.some((o) => !knownOrderIdsRef.current!.has(o.id));
         if (hasNewOrder) {
-          playNewOrderSound();
+          playNewOrderSound(soundTone, soundVolume);
           setNotice({
             tone: 'success',
             message: 'มีออเดอร์ใหม่เข้ามาที่หน้ากระดาน!',
@@ -340,7 +478,7 @@ function OrdersBoardContent() {
       setOrders(newOrders);
       setItems(result.data.items);
     },
-    [statusFilter, dateFilter, tableFilter, soundEnabled, refreshIntervalSec],
+    [statusFilter, dateFilter, tableFilter, soundEnabled, soundTone, soundVolume, refreshIntervalSec],
   );
 
   useEffect(() => {
@@ -501,8 +639,51 @@ function OrdersBoardContent() {
     downloadCsvFile(filename, headers, rows);
   }
 
-  const prepSummary = computeKitchenPrepSummary(orders, items);
+  const prepSummary = computeKitchenPrepSummary(orders, items, stationFilter);
   const totalPrepDishes = prepSummary.reduce((sum, p) => sum + p.quantity, 0);
+
+  // คำนวณยอดค้างทำแยกตามแผนกสำหรับป้าย Badge บนแท็บสถานี
+  const kitchenPendingCount = items
+    .filter(
+      (i) =>
+        (i.status === 'PENDING' || i.status === 'PREPARING') &&
+        !isBarItem({
+          itemName: i.item_name,
+          quantity: i.quantity,
+          categoryName: i.category_name,
+        }),
+    )
+    .reduce((sum, i) => sum + i.quantity, 0);
+
+  const barPendingCount = items
+    .filter(
+      (i) =>
+        (i.status === 'PENDING' || i.status === 'PREPARING') &&
+        isBarItem({
+          itemName: i.item_name,
+          quantity: i.quantity,
+          categoryName: i.category_name,
+        }),
+    )
+    .reduce((sum, i) => sum + i.quantity, 0);
+
+  const totalPendingDishes = kitchenPendingCount + barPendingCount;
+
+  // กรองออเดอร์ตามสถานีที่เลือก
+  const displayOrders = orders
+    ? orders.filter((o) => {
+        if (stationFilter === 'ALL') return true;
+        const orderItems = items.filter((i) => i.order_id === o.id);
+        return orderItems.some((i) => {
+          const isBar = isBarItem({
+            itemName: i.item_name,
+            quantity: i.quantity,
+            categoryName: i.category_name,
+          });
+          return stationFilter === 'BAR' ? isBar : !isBar;
+        });
+      })
+    : null;
 
   /**
    * เรนเดอร์การ์ดออเดอร์ 1 ใบ รองรับทั้งมุมมองรายการปกติและมุมมองกระดานครัว (KDS)
@@ -513,6 +694,22 @@ function OrdersBoardContent() {
     const closed = order.session_status === 'CLOSED';
     const ageInfo = getOrderAge(order.created_at);
     const showAge = !closed && order.status !== 'SERVED' && order.status !== 'CANCELLED';
+
+    const hasKitchen = orderItems.some(
+      (i) =>
+        !isBarItem({
+          itemName: i.item_name,
+          quantity: i.quantity,
+          categoryName: i.category_name,
+        }),
+    );
+    const hasBar = orderItems.some((i) =>
+      isBarItem({
+        itemName: i.item_name,
+        quantity: i.quantity,
+        categoryName: i.category_name,
+      }),
+    );
 
     return (
       <article
@@ -561,13 +758,38 @@ function OrdersBoardContent() {
         <ul className="px-3 py-2 divide-y divide-rule/60">
           {orderItems.map((item) => {
             const itemStatus = STATUS_LABELS[item.status] ?? STATUS_LABELS.PENDING;
+            const isBar = isBarItem({
+              itemName: item.item_name,
+              quantity: item.quantity,
+              categoryName: item.category_name,
+            });
+            const matchesActiveStation =
+              stationFilter === 'ALL' ||
+              (stationFilter === 'BAR' && isBar) ||
+              (stationFilter === 'KITCHEN' && !isBar);
+
             return (
               <li
                 key={item.id}
-                className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 py-1.5 first:pt-0 last:pb-0"
+                className={`flex flex-wrap items-center gap-x-2.5 gap-y-1.5 py-1.5 first:pt-0 last:pb-0 transition-opacity ${
+                  matchesActiveStation ? 'opacity-100' : 'opacity-40 bg-zinc-50/40 rounded px-1'
+                }`}
               >
                 <span className="num font-black text-xs text-slip-dim">×{item.quantity}</span>
-                <span className="min-w-0 flex-1 font-medium text-xs text-slip">{item.item_name}</span>
+                <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                  <span className="font-medium text-xs text-slip">{item.item_name}</span>
+                  {isBar ? (
+                    <span className="inline-flex items-center gap-0.5 rounded bg-cyan-50 px-1 py-0.2 text-[9px] font-bold text-cyan-800 border border-cyan-200 shrink-0">
+                      <DrinkIcon className="w-2.5 h-2.5" />
+                      บาร์
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1 py-0.2 text-[9px] font-bold text-amber-800 border border-amber-200 shrink-0">
+                      <CookingIcon className="w-2.5 h-2.5" />
+                      ครัว
+                    </span>
+                  )}
+                </div>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${itemStatus.className}`}>
                   {itemStatus.label}
                 </span>
@@ -601,7 +823,7 @@ function OrdersBoardContent() {
           })}
         </ul>
 
-        <footer className="flex flex-wrap gap-1.5 border-t border-rule px-3 py-2 bg-slate-50/60">
+        <footer className="flex flex-wrap items-center gap-1.5 border-t border-rule px-3 py-2 bg-slate-50/60">
           {closed ? (
             <p className="text-[11px] text-slip-dim py-1">บิลของโต๊ะนี้ปิดแล้ว แก้ไขไม่ได้</p>
           ) : (
@@ -610,7 +832,7 @@ function OrdersBoardContent() {
                 <button
                   type="button"
                   onClick={() => changeOrderStatus(order, 'PREPARING')}
-                  className="min-h-[38px] rounded-xl bg-emerald-600 px-3.5 font-bold text-xs text-white shadow-xs hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[36px] rounded-xl bg-emerald-600 px-3 font-bold text-xs text-white shadow-xs hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <CookingIcon className="w-3.5 h-3.5" />
                   <span>ครัวรับแล้ว เริ่มทำ</span>
@@ -620,7 +842,7 @@ function OrdersBoardContent() {
                 <button
                   type="button"
                   onClick={() => changeOrderStatus(order, 'SERVED')}
-                  className="min-h-[38px] rounded-xl bg-emerald-600 px-3.5 font-bold text-xs text-white shadow-xs hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[36px] rounded-xl bg-emerald-600 px-3 font-bold text-xs text-white shadow-xs hover:bg-emerald-700 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <CheckIcon className="w-3.5 h-3.5" />
                   <span>เสิร์ฟครบทั้งใบแล้ว</span>
@@ -639,19 +861,42 @@ function OrdersBoardContent() {
                     }
                     setCancelConfirmOrder(order);
                   }}
-                  className="min-h-[38px] rounded-xl bg-red-50 border border-red-200 px-2.5 font-bold text-xs text-red-700 hover:bg-red-100 transition-colors flex items-center gap-1 cursor-pointer"
+                  className="min-h-[36px] rounded-xl bg-red-50 border border-red-200 px-2 font-bold text-xs text-red-700 hover:bg-red-100 transition-colors flex items-center gap-1 cursor-pointer"
                 >
                   <CloseIcon className="w-3.5 h-3.5" />
                   <span>ยกเลิกทั้งใบ</span>
                 </button>
               )}
+              {hasKitchen && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenKitchenPrint(order, orderItems, 'KITCHEN')}
+                  className="min-h-[36px] rounded-xl border border-amber-200 bg-amber-50 px-2.5 font-bold text-[11px] text-amber-900 hover:bg-amber-100 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                  title="พิมพ์ตั๋วห้องครัว (อาหาร)"
+                >
+                  <CookingIcon className="w-3.5 h-3.5 text-amber-700" />
+                  <span>ตั๋วครัว</span>
+                </button>
+              )}
+              {hasBar && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenKitchenPrint(order, orderItems, 'BAR')}
+                  className="min-h-[36px] rounded-xl border border-cyan-200 bg-cyan-50 px-2.5 font-bold text-[11px] text-cyan-900 hover:bg-cyan-100 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                  title="พิมพ์ตั๋วบาร์เครื่องดื่ม"
+                >
+                  <DrinkIcon className="w-3.5 h-3.5 text-cyan-700" />
+                  <span>ตั๋วบาร์</span>
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => handleOpenKitchenPrint(order, orderItems)}
-                className="min-h-[38px] rounded-xl border border-rule bg-white px-2.5 font-bold text-xs text-slip hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                onClick={() => handleOpenKitchenPrint(order, orderItems, 'ALL')}
+                className="min-h-[36px] rounded-xl border border-rule bg-white px-2.5 font-bold text-[11px] text-slip hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                title="พิมพ์ตั๋วรวมทุกรายการ"
               >
                 <PrintIcon className="w-3.5 h-3.5" />
-                <span>พิมพ์ตั๋ว</span>
+                <span>ตั๋วรวม</span>
               </button>
               <button
                 type="button"
@@ -659,7 +904,7 @@ function OrdersBoardContent() {
                   setCheckoutOrder(order);
                   setPayMethod('CASH');
                 }}
-                className="min-h-[38px] rounded-xl border border-emerald-600 bg-emerald-50 px-3 font-bold text-xs text-emerald-800 hover:bg-emerald-600 hover:text-white transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                className="min-h-[36px] rounded-xl border border-emerald-600 bg-emerald-50 px-3 font-bold text-xs text-emerald-800 hover:bg-emerald-600 hover:text-white transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
               >
                 <CreditCardIcon className="w-3.5 h-3.5" />
                 <span>ปิดบิล</span>
@@ -813,41 +1058,39 @@ function OrdersBoardContent() {
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => {
-              setSoundEnabled((prev) => {
-                const next = !prev;
-                if (next) playNewOrderSound();
-                return next;
-              });
-            }}
-            className={`min-h-[44px] rounded-lg px-4 font-medium transition-colors flex items-center gap-2 ${
+            onClick={handleToggleSound}
+            className={`min-h-[44px] rounded-lg px-3.5 font-medium transition-colors flex items-center gap-2 cursor-pointer ${
               soundEnabled
-                ? 'bg-flame/10 text-flame hover:bg-flame/20'
+                ? 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
                 : 'bg-char text-slip-dim hover:bg-rule'
             }`}
+            title={soundEnabled ? 'ปิดเสียงเตือน' : 'เปิดเสียงเตือน'}
           >
             {soundEnabled ? (
               <>
-                <BellIcon className="w-5 h-5" />
-                <span>เปิดเสียงเตือน</span>
+                <BellIcon className="w-5 h-5 text-amber-700" />
+                <span className="text-xs font-bold">เปิดเสียง</span>
               </>
             ) : (
               <>
                 <BellOffIcon className="w-5 h-5" />
-                <span>ปิดเสียงเตือน</span>
+                <span className="text-xs font-bold">ปิดเสียง</span>
               </>
             )}
           </button>
-          {soundEnabled && (
-            <button
-              type="button"
-              onClick={playNewOrderSound}
-              title="ทดสอบระดับเสียงกระดิ่ง"
-              className="min-h-[44px] rounded-lg bg-char px-3 text-xs font-semibold text-slip-dim hover:bg-rule hover:text-slip transition-colors"
-            >
-              ทดสอบเสียง
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setShowSoundSettings((prev) => !prev)}
+            className={`min-h-[44px] rounded-lg border px-3 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer ${
+              showSoundSettings
+                ? 'bg-white border-zinc-400 text-zinc-900 shadow-xs'
+                : 'bg-char border-rule text-slip-dim hover:bg-rule hover:text-slip'
+            }`}
+            title="ปรับโทนเสียงและระดับความดัง"
+          >
+            <VolumeIcon className="w-4 h-4" />
+            <span>ตั้งค่าเสียง</span>
+          </button>
         </div>
         <button
           type="button"
@@ -860,7 +1103,134 @@ function OrdersBoardContent() {
         </button>
       </div>
 
-      {/* แถบสรุปรายการอาหารค้างปรุงสำหรับห้องครัว (Kitchen Batch Prep Summary) */}
+      {/* แผงควบคุมเสียงแจ้งเตือน (Interactive Audio Chime Studio) */}
+      {showSoundSettings && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800">โทนเสียง:</span>
+              <div className="flex rounded-lg bg-zinc-100 p-0.5 border border-zinc-200">
+                <button
+                  type="button"
+                  onClick={() => handleChangeTone('CHIME')}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
+                    soundTone === 'CHIME' ? 'bg-white text-zinc-900 shadow-xs font-bold' : 'text-zinc-500 hover:text-zinc-900'
+                  }`}
+                >
+                  🔔 ละมุน (Chime)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeTone('BELL')}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
+                    soundTone === 'BELL' ? 'bg-white text-amber-900 shadow-xs font-bold' : 'text-zinc-500 hover:text-zinc-900'
+                  }`}
+                >
+                  🛎️ กริ่งครัว (Bell)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleChangeTone('ALERT')}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer ${
+                    soundTone === 'ALERT' ? 'bg-white text-red-700 shadow-xs font-bold' : 'text-zinc-500 hover:text-zinc-900'
+                  }`}
+                >
+                  🚨 เตือนด่วน (Alert)
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <VolumeIcon className="w-4 h-4 text-zinc-500" />
+              <span className="text-xs font-medium text-zinc-600">ระดับเสียง: {Math.round(soundVolume * 100)}%</span>
+              <input
+                type="range"
+                min={0.1}
+                max={1.0}
+                step={0.05}
+                value={soundVolume}
+                onChange={(e) => handleChangeVolume(Number(e.target.value))}
+                className="w-24 accent-emerald-600 cursor-pointer"
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => playNewOrderSound(soundTone, soundVolume)}
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors shadow-2xs cursor-pointer"
+          >
+            <VolumeIcon className="w-3.5 h-3.5" />
+            <span>🔊 ทดสอบเสียง ({soundTone})</span>
+          </button>
+        </div>
+      )}
+
+      {/* แถบตัวกรองสถานี: ทุกแผนก / ครัวอาหาร / บาร์เครื่องดื่ม */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule pb-2">
+        <div className="flex items-center rounded-xl bg-zinc-100 p-1 border border-zinc-200 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setStationFilter('ALL')}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+              stationFilter === 'ALL'
+                ? 'bg-white text-zinc-900 shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <span>📋 ทุกแผนก</span>
+            <span className="rounded-full bg-zinc-200 px-1.5 py-0.2 text-[10px] text-zinc-700 font-mono">
+              {totalPendingDishes}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStationFilter('KITCHEN')}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+              stationFilter === 'KITCHEN'
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <CookingIcon className="w-3.5 h-3.5" />
+            <span>🍳 ครัวอาหาร</span>
+            <span
+              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                stationFilter === 'KITCHEN' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {kitchenPendingCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStationFilter('BAR')}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+              stationFilter === 'BAR'
+                ? 'bg-cyan-600 text-white shadow-xs'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <DrinkIcon className="w-3.5 h-3.5" />
+            <span>🍹 บาร์เครื่องดื่ม</span>
+            <span
+              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                stationFilter === 'BAR' ? 'bg-cyan-700 text-white' : 'bg-cyan-100 text-cyan-800'
+              }`}
+            >
+              {barPendingCount}
+            </span>
+          </button>
+        </div>
+
+        <div className="text-xs text-slip-dim">
+          {stationFilter === 'ALL' && 'แสดงรายการทั้งแผนกครัวอาหารและบาร์เครื่องดื่ม'}
+          {stationFilter === 'KITCHEN' && '🍳 แสดงเฉพาะคิวจานอาหารของครัว'}
+          {stationFilter === 'BAR' && '🍹 แสดงเฉพาะคิวแก้วเครื่องดื่มของบาร์น้ำ'}
+        </div>
+      </div>
+
+      {/* แถบสรุปรายการอาหารค้างปรุงสำหรับห้องครัวและบาร์น้ำ */}
       <div className="rounded-xl border border-amber-200/80 bg-gradient-to-r from-amber-50 to-orange-50/40 p-3 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -870,14 +1240,18 @@ function OrdersBoardContent() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm text-slate-900">
-                  สรุปคิวที่ต้องปรุงสำหรับครัว (Kitchen Batch Prep)
+                  {stationFilter === 'KITCHEN'
+                    ? 'สรุปคิวที่ต้องปรุง (ครัวอาหาร)'
+                    : stationFilter === 'BAR'
+                    ? 'สรุปคิวที่ต้องทำ (บาร์เครื่องดื่ม)'
+                    : 'สรุปคิวที่ต้องเตรียม (ครัว & บาร์)'}
                 </span>
                 <span className="rounded-full bg-amber-600 px-2 py-0.5 text-xs font-extrabold text-white">
-                  รวม {totalPrepDishes} จาน ({prepSummary.length} เมนู)
+                  รวม {totalPrepDishes} รายการ ({prepSummary.length} เมนู)
                 </span>
               </div>
               <p className="text-[11px] text-zinc-600">
-                รวบรวมรายการอาหารที่รอคิวและกำลังปรุง ช่วยให้ครัวเตรียมวัตถุดิบและปรุงพร้อมกันได้เร็วขึ้น
+                รวบรวมรายการที่รอคิวและกำลังทำ ช่วยให้ครัว/บาร์จัดเตรียมวัตถุดิบและทำพร้อมกันเป็นชุดได้เร็วขึ้น
               </p>
             </div>
           </div>
@@ -895,7 +1269,7 @@ function OrdersBoardContent() {
           <div className="mt-3 pt-2.5 border-t border-amber-200/60">
             {prepSummary.length === 0 ? (
               <p className="py-2 text-center text-xs font-medium text-emerald-800">
-                ✨ ครัวเคลียร์ออเดอร์ครบถ้วนแล้ว ไม่มีรายการอาหารค้างปรุงในขณะนี้
+                ✨ เคลียร์ออเดอร์ครบถ้วนแล้ว ไม่มีรายการค้างทำในขณะนี้
               </p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
@@ -905,9 +1279,16 @@ function OrdersBoardContent() {
                     className="flex flex-col justify-between rounded-lg border border-amber-200 bg-white p-2.5 shadow-2xs"
                   >
                     <div className="flex items-start justify-between gap-1.5">
-                      <span className="font-bold text-xs text-slate-800 line-clamp-2 leading-tight">
-                        {item.name}
-                      </span>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="font-bold text-xs text-slate-800 line-clamp-2 leading-tight">
+                          {item.name}
+                        </span>
+                        {item.isBar ? (
+                          <span className="text-[9px] font-bold text-cyan-700">🍹 บาร์น้ำ</span>
+                        ) : (
+                          <span className="text-[9px] font-bold text-amber-700">🍳 ครัว</span>
+                        )}
+                      </div>
                       <span className="flex-shrink-0 rounded-md bg-amber-600 px-1.5 py-0.5 text-xs font-black text-white">
                         ×{item.quantity}
                       </span>
@@ -945,18 +1326,34 @@ function OrdersBoardContent() {
         />
       )}
 
+      {/* เมื่อมีออเดอร์ในระบบ แต่ไม่มีออเดอร์ในสถานีที่เลือก */}
+      {!loadError && orders !== null && orders.length > 0 && displayOrders !== null && displayOrders.length === 0 && (
+        <EmptyState
+          message={`ไม่มีออเดอร์ในแผนก${stationFilter === 'KITCHEN' ? 'ครัวอาหาร' : 'บาร์เครื่องดื่ม'} ในขณะนี้`}
+          action={
+            <button
+              type="button"
+              onClick={() => setStationFilter('ALL')}
+              className="flex min-h-[44px] items-center rounded-lg bg-char px-4 text-xs font-bold text-slip shadow-sm hover:bg-rule"
+            >
+              ดูออเดอร์ทุกแผนก
+            </button>
+          }
+        />
+      )}
+
       {/* มุมมองกระดานออเดอร์: แยกตาม viewMode (LIST vs KDS) */}
-      {!loadError && orders !== null && orders.length > 0 && (
+      {!loadError && displayOrders !== null && displayOrders.length > 0 && (
         viewMode === 'LIST' ? (
           <div className="flex flex-col gap-4">
-            {orders.map((order) => renderOrderCard(order, false))}
+            {displayOrders.map((order) => renderOrderCard(order, false))}
           </div>
         ) : (
           (() => {
-            const pendingOrders = orders.filter((o) => o.status === 'PENDING');
-            const preparingOrders = orders.filter((o) => o.status === 'PREPARING');
-            const servedOrders = orders.filter((o) => o.status === 'SERVED');
-            const otherOrders = orders.filter((o) => o.status !== 'PENDING' && o.status !== 'PREPARING' && o.status !== 'SERVED');
+            const pendingOrders = displayOrders.filter((o) => o.status === 'PENDING');
+            const preparingOrders = displayOrders.filter((o) => o.status === 'PREPARING');
+            const servedOrders = displayOrders.filter((o) => o.status === 'SERVED');
+            const otherOrders = displayOrders.filter((o) => o.status !== 'PENDING' && o.status !== 'PREPARING' && o.status !== 'SERVED');
 
             return (
               <div className="flex flex-col gap-4">
@@ -1091,6 +1488,7 @@ function OrdersBoardContent() {
         onClose={() => setPrintModalOpen(false)}
         type={printType}
         data={printData}
+        initialStation={printStation}
       />
 
       {/* Modal บังคับระบุเหตุผลการยกเลิกอาหารรายจาน เพื่อบันทึก Audit Log */}

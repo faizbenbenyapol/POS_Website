@@ -14,6 +14,7 @@ import {
   LogoutIcon,
   BuildingIcon,
   ReceiptIcon,
+  UserCircleIcon,
 } from '@/components/Icons';
 import BranchSwitcher from '@/components/BranchSwitcher';
 
@@ -28,6 +29,7 @@ const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ clas
   { href: '/admin/tickets', label: 'เรื่องแจ้งปัญหา', icon: TicketIcon, adminOnly: false },
   { href: '/admin/branches', label: 'จัดการสาขา', icon: BuildingIcon, adminOnly: true },
   { href: '/admin/users', label: 'ผู้ใช้ระบบ', icon: UsersIcon, adminOnly: true },
+  { href: '/admin/profile', label: 'ข้อมูลส่วนตัว', icon: UserCircleIcon, adminOnly: false },
 ];
 
 
@@ -56,20 +58,27 @@ export default function AdminNav({ user }: { user: SessionUser }) {
 
   return (
     <nav className="flex shrink-0 flex-col border-b border-rule bg-white md:h-screen md:w-56 md:border-r md:border-b-0">
-      {/* Header — solid สีเขียว ไม่มี gradient */}
-      <div className="lm-header-solid px-4 py-3.5 text-white md:border-b md:border-white/10">
+      {/* Header — คลิกเข้าสู่หน้าโปรไฟล์ส่วนตัว */}
+      <Link
+        href="/admin/profile"
+        title="ดูโปรไฟล์และจัดการข้อมูลส่วนตัว"
+        className="lm-header-solid block px-4 py-3.5 text-white transition-opacity hover:opacity-95 md:border-b md:border-white/10 group cursor-pointer"
+      >
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-white/25 font-bold text-sm text-white">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-white/25 font-bold text-sm text-white group-hover:bg-white/35 transition-colors">
             {user.fullName.slice(0, 1)}
           </div>
-          <div className="min-w-0">
-            <p className="font-semibold text-sm leading-tight text-white truncate">{user.fullName}</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-sm leading-tight text-white truncate">{user.fullName}</p>
+              <UserCircleIcon className="w-3.5 h-3.5 text-white/70 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
             <p className="text-xs text-white/80 font-medium">
               {user.role === 'ADMIN' ? (user.branchId ? 'ผู้จัดการสาขา' : 'เจ้าของร้าน (HQ)') : 'พนักงาน'}
             </p>
           </div>
         </div>
-      </div>
+      </Link>
 
       {/* ตัวสลับสาขาสำหรับ HQ หรือป้ายสาขาสำหรับ Staff */}
       <div className="px-3 pt-2.5 pb-1">

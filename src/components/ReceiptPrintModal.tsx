@@ -1,8 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Modal from '@/components/Modal';
 import { formatBaht, formatThaiDateTime, formatThaiTime } from '@/lib/format';
-import { PrintIcon } from '@/components/Icons';
+import { PrintIcon, CookingIcon, DrinkIcon } from '@/components/Icons';
 import { printHtml } from '@/lib/print';
 
 /** ข้อมูลรายการอาหารสำหรับพิมพ์ */
@@ -11,6 +12,7 @@ export type PrintItem = {
   quantity: number;
   unitPrice?: string | number;
   note?: string | null;
+  categoryName?: string | null;
 };
 
 /** ข้อมูลการสั่งซื้อสำหรับสร้างสลิปตั๋วครัวและใบเสร็จ */
@@ -38,6 +40,8 @@ type ReceiptPrintModalProps = {
   type: 'KITCHEN' | 'RECEIPT';
   /** ข้อมูลออเดอร์ที่จะพิมพ์ */
   data: ReceiptData | null;
+  /** สถานีเริ่มต้นสำหรับตั๋วครัว */
+  initialStation?: 'ALL' | 'KITCHEN' | 'BAR';
 };
 
 /** แผนผังคำแปลวิธีชำระเงิน */
@@ -46,6 +50,19 @@ const PAYMENT_METHOD_NAMES: Record<string, string> = {
   TRANSFER: 'โอนเงิน / PromptPay',
   CARD: 'บัตรเครดิต / เดบิต',
 };
+
+/**
+ * ตรวจสอบว่ารายการนี้เป็นเครื่องดื่มหรือของหวานสำหรับสถานีบาร์น้ำหรือไม่
+ *
+ * @param item - รายการอาหาร
+ * @returns true หากจัดอยู่ในกลุ่มบาร์เครื่องดื่ม
+ */
+export function isBarItem(item: PrintItem): boolean {
+  const text = `${item.categoryName ?? ''} ${item.itemName}`.toLowerCase();
+  return /เครื่องดื่ม|น้ำ|ชา|กาแฟ|เบียร์|ไวน์|ของหวาน|ขนม|ไอศกรีม|drink|beverage|bar|dessert|coffee|tea/i.test(
+    text,
+  );
+}
 
 /**
  * คอมโพเนนต์ Modal แสดงตัวอย่างสลิปและสั่งพิมพ์ตั๋วครัว / ใบเสร็จรับเงิน
@@ -59,21 +76,47 @@ export default function ReceiptPrintModal({
   onClose,
   type,
   data,
+  initialStation = 'ALL',
 }: ReceiptPrintModalProps) {
+  const [station, setStation] = useState<'ALL' | 'KITCHEN' | 'BAR'>(initialStation);
+
+  useEffect(() => {
+    setStation(initialStation);
+  }, [initialStation, open]);
+
   if (!data) return null;
 
   const isKitchen = type === 'KITCHEN';
+
+  // รายการอาหารแยกตามสถานี
+  const kitchenCount = data.items.filter((i) => !isBarItem(i)).length;
+  const barCount = data.items.filter((i) => isBarItem(i)).length;
+
+  const activeItems = isKitchen
+    ? data.items.filter((item) => {
+        if (station === 'ALL') return true;
+        if (station === 'BAR') return isBarItem(item);
+        return !isBarItem(item);
+      })
+    : data.items;
+
+  const stationLabel =
+    station === 'KITCHEN'
+      ? 'ตั๋วห้องครัว (อาหาร)'
+      : station === 'BAR'
+      ? 'ตั๋วบาร์เครื่องดื่ม'
+      : 'ตั๋วรวมทุกแผนก';
 
   /** สั่งพิมพ์ผ่าน Print Engine อิสระ ไม่ติดปัญหา CSS transform ของ modal */
   function handlePrint() {
     if (!data) return;
 
     if (isKitchen) {
-      // ตั๋วห้องครัว
+      // ตั๋วห้องครัวหรือบาร์น้ำ
       const html = `
         <div style="width: 76mm; margin: 0 auto; padding: 4px; font-family: 'IBM Plex Sans Thai', sans-serif; color: #000000; line-height: 1.3;">
           <div style="text-align: center; border-bottom: 2px dashed #000; padding-bottom: 8px;">
-            <div style="font-size: 16px; font-weight: 800;">--- ตั๋วห้องครัว ---</div>
+            <div style="font-size: 16px; font-weight: 800;">--- ${stationLabel} ---</div>
             ${data.branchName ? `<div style="font-size: 13px; font-weight: 800; color: #000; margin-top: 2px;">สาขา: ${data.branchName}</div>` : ''}
             <div style="font-size: 32px; font-weight: 900; margin: 4px 0;">โต๊ะ ${data.tableNo}</div>
             ${data.orderCode ? `<div style="font-size: 12px; font-family: monospace;">รหัส: ${data.orderCode}</div>` : ''}
@@ -81,9 +124,12 @@ export default function ReceiptPrintModal({
           </div>
 
           <div style="margin: 10px 0; border-bottom: 2px dashed #000; padding-bottom: 8px;">
-            ${data.items
-              .map(
-                (item) => `
+            ${
+              activeItems.length === 0
+                ? '<div style="text-align:center; padding: 12px 0; font-size: 13px;">(ไม่มีรายการในแผนกนี้)</div>'
+                : activeItems
+                    .map(
+                      (item) => `
               <div style="margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 800;">
                   <span>${item.quantity}x ${item.itemName}</span>
@@ -97,18 +143,19 @@ export default function ReceiptPrintModal({
                 }
               </div>
             `,
-              )
-              .join('')}
+                    )
+                    .join('')
+            }
           </div>
 
           <div style="text-align: center; font-size: 13px; font-weight: 800; padding-top: 4px;">
-            *** รวม ${data.items.reduce((s, i) => s + i.quantity, 0)} รายการ ***
+            *** รวม ${activeItems.reduce((s, i) => s + i.quantity, 0)} รายการ ***
           </div>
         </div>
       `;
 
       printHtml(html, {
-        title: `ตั๋วครัว-โต๊ะ${data.tableNo}`,
+        title: `${stationLabel}-โต๊ะ${data.tableNo}`,
         pageStyle: '@page { margin: 2mm; size: 80mm auto; }',
       });
     } else {
@@ -182,12 +229,12 @@ export default function ReceiptPrintModal({
             ${
               totalNum > 0
                 ? `
-              <div style="font-size: 10px; color: #444; border-top: 1px dotted #aaa; padding-top: 4px; margin-top: 4px;">
-                <div style="display: flex; justify-content: space-between;">
-                  <span>มูลค่าก่อนภาษี (Pre-VAT 7%):</span>
+              <div style="border-top: 1px dotted #ccc; padding-top: 4px; font-size: 10px; color: #555;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                  <span>มูลค่าก่อนภาษี (Pre-VAT):</span>
                   <span style="font-family: monospace;">฿${formatBaht(preTaxAmount)}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-top: 1px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                   <span>ภาษีมูลค่าเพิ่ม (VAT 7%):</span>
                   <span style="font-family: monospace;">฿${formatBaht(vatAmount)}</span>
                 </div>
@@ -215,19 +262,85 @@ export default function ReceiptPrintModal({
 
   return (
     <Modal
-      title={isKitchen ? `ตั๋วครัว • โต๊ะ ${data.tableNo}` : `ใบเสร็จรับเงิน • โต๊ะ ${data.tableNo}`}
+      title={isKitchen ? `ตั๋วพิมพ์ • โต๊ะ ${data.tableNo}` : `ใบเสร็จรับเงิน • โต๊ะ ${data.tableNo}`}
       open={open}
       onClose={onClose}
     >
       <div className="flex flex-col gap-4">
+        {/* สลับแผนกสำหรับตั๋วครัว */}
+        {isKitchen && (
+          <div className="flex rounded-xl bg-zinc-100 p-1">
+            <button
+              type="button"
+              onClick={() => setStation('ALL')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-all ${
+                station === 'ALL'
+                  ? 'bg-white text-zinc-900 shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <span>📋 ทั้งหมด</span>
+              <span className="rounded-full bg-zinc-200 px-1.5 py-0.2 text-[10px] text-zinc-700">
+                {data.items.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStation('KITCHEN')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-all ${
+                station === 'KITCHEN'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <CookingIcon className="w-3.5 h-3.5" />
+              <span>ครัวอาหาร</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                  station === 'KITCHEN' ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {kitchenCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStation('BAR')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-all ${
+                station === 'BAR'
+                  ? 'bg-cyan-600 text-white shadow-xs'
+                  : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              <DrinkIcon className="w-3.5 h-3.5" />
+              <span>บาร์เครื่องดื่ม</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                  station === 'BAR' ? 'bg-cyan-700 text-white' : 'bg-cyan-100 text-cyan-800'
+                }`}
+              >
+                {barCount}
+              </span>
+            </button>
+          </div>
+        )}
+
         {/* ตัวอย่างสลิปบนหน้าจอ */}
         <div className="mx-auto w-full max-w-[80mm] rounded-xl border border-rule bg-white p-4 font-mono text-xs text-slip shadow-sm">
           {/* หัวสลิป */}
           <div className="text-center">
             {isKitchen ? (
               <>
-                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
-                  ตั๋วห้องครัว
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                    station === 'BAR'
+                      ? 'bg-cyan-100 text-cyan-800'
+                      : station === 'KITCHEN'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-zinc-100 text-zinc-800'
+                  }`}
+                >
+                  {stationLabel}
                 </span>
                 {data.branchName && (
                   <div className="mt-1 text-[11px] font-semibold text-zinc-600">
@@ -268,25 +381,31 @@ export default function ReceiptPrintModal({
 
           {/* รายการอาหาร */}
           <div className="flex flex-col gap-1.5">
-            {data.items.map((item, idx) => (
-              <div key={idx} className="flex flex-col">
-                <div className="flex justify-between font-medium">
-                  <span className="flex-1 font-bold">
-                    {item.quantity}x {item.itemName}
-                  </span>
-                  {!isKitchen && item.unitPrice !== undefined && (
-                    <span className="ml-2 num font-bold">
-                      {formatBaht(Number(item.unitPrice) * item.quantity)}
+            {activeItems.length === 0 ? (
+              <div className="py-4 text-center text-zinc-400 font-sans text-xs">
+                (ไม่มีรายการในแผนกนี้)
+              </div>
+            ) : (
+              activeItems.map((item, idx) => (
+                <div key={idx} className="flex flex-col">
+                  <div className="flex justify-between font-medium">
+                    <span className="flex-1 font-bold">
+                      {item.quantity}x {item.itemName}
+                    </span>
+                    {!isKitchen && item.unitPrice !== undefined && (
+                      <span className="ml-2 num font-bold">
+                        {formatBaht(Number(item.unitPrice) * item.quantity)}
+                      </span>
+                    )}
+                  </div>
+                  {item.note && (
+                    <span className="pl-3 text-[11px] font-bold text-amber-700">
+                      - หมายเหตุ: {item.note}
                     </span>
                   )}
                 </div>
-                {item.note && (
-                  <span className="pl-3 text-[11px] font-bold text-amber-700">
-                    - หมายเหตุ: {item.note}
-                  </span>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <hr className="my-2 border-dashed border-rule" />
@@ -294,7 +413,7 @@ export default function ReceiptPrintModal({
           {/* ท้ายสลิป */}
           {isKitchen ? (
             <div className="text-center font-bold text-xs text-slip">
-              *** ส่งห้องครัว (รวม {data.items.reduce((s, i) => s + i.quantity, 0)} รายการ) ***
+              *** {stationLabel} (รวม {activeItems.reduce((s, i) => s + i.quantity, 0)} รายการ) ***
             </div>
           ) : (
             <div className="flex flex-col gap-1">
@@ -353,11 +472,16 @@ export default function ReceiptPrintModal({
           </button>
           <button
             type="button"
+            disabled={isKitchen && activeItems.length === 0}
             onClick={handlePrint}
-            className="flex min-h-[44px] items-center gap-2 rounded-xl bg-emerald-600 px-5 font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 cursor-pointer"
+            className="flex min-h-[44px] items-center gap-2 rounded-xl bg-emerald-600 px-5 font-bold text-white shadow-xs transition-colors hover:bg-emerald-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <PrintIcon className="w-4 h-4" />
-            <span>{isKitchen ? 'พิมพ์ตั๋วครัว' : 'พิมพ์ใบเสร็จ (80mm)'}</span>
+            <span>
+              {isKitchen
+                ? `พิมพ์${stationLabel} (${activeItems.reduce((s, i) => s + i.quantity, 0)})`
+                : 'พิมพ์ใบเสร็จ (80mm)'}
+            </span>
           </button>
         </div>
       </div>

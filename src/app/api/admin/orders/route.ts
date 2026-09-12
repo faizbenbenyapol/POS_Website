@@ -32,6 +32,7 @@ export type BoardItemRow = RowDataPacket & {
   quantity: number;
   note: string | null;
   status: string;
+  category_name?: string | null;
 };
 
 /**
@@ -74,11 +75,14 @@ export async function GET(request: NextRequest) {
         [branchId, branchId, status, status, tableNo, tableNo, range.startSql, range.endSql],
       ),
       query<BoardItemRow>(
-        `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.status
+        `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.status,
+                c.name AS category_name
            FROM order_items oi
            JOIN orders o ON o.id = oi.order_id
            JOIN table_sessions s ON s.id = o.session_id
            JOIN dining_tables t ON t.id = s.table_id
+           LEFT JOIN menu_items m ON m.id = oi.menu_item_id
+           LEFT JOIN categories c ON c.id = m.category_id
           WHERE (? IS NULL OR o.branch_id = ?)
             AND (? = '' OR o.status = ?)
             AND (? = '' OR t.table_no = ?)
