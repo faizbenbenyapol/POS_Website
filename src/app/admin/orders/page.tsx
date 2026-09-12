@@ -160,6 +160,7 @@ export default function OrdersBoardPage() {
   function handleOpenKitchenPrint(order: BoardOrder, orderItems: BoardItem[]) {
     setPrintType('KITCHEN');
     setPrintData({
+      branchName: order.branch_name || undefined,
       tableNo: order.table_no,
       orderCode: order.order_code,
       createdAt: order.created_at,
@@ -298,6 +299,7 @@ export default function OrdersBoardPage() {
 
     setPrintType('RECEIPT');
     setPrintData({
+      branchName: checkoutOrder.branch_name || undefined,
       tableNo: checkoutOrder.table_no,
       createdAt: checkoutOrder.created_at,
       items: sessionItems.map((i) => ({

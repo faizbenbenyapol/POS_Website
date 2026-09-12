@@ -15,6 +15,7 @@ export type PrintItem = {
 
 /** ข้อมูลการสั่งซื้อสำหรับสร้างสลิปตั๋วครัวและใบเสร็จ */
 export type ReceiptData = {
+  branchName?: string;
   tableNo: string;
   orderCode?: string;
   createdAt: string;
@@ -71,6 +72,7 @@ export default function ReceiptPrintModal({
         <div style="width: 76mm; margin: 0 auto; padding: 4px; font-family: 'IBM Plex Sans Thai', sans-serif; color: #000000; line-height: 1.3;">
           <div style="text-align: center; border-bottom: 2px dashed #000; padding-bottom: 8px;">
             <div style="font-size: 16px; font-weight: 800;">--- ตั๋วห้องครัว ---</div>
+            ${data.branchName ? `<div style="font-size: 13px; font-weight: 800; color: #000; margin-top: 2px;">สาขา: ${data.branchName}</div>` : ''}
             <div style="font-size: 32px; font-weight: 900; margin: 4px 0;">โต๊ะ ${data.tableNo}</div>
             ${data.orderCode ? `<div style="font-size: 12px; font-family: monospace;">รหัส: ${data.orderCode}</div>` : ''}
             <div style="font-size: 11px; color: #333;">เวลาสั่ง: ${formatThaiTime(data.createdAt)} (${formatThaiDateTime(data.createdAt).split(' ')[0]})</div>
@@ -114,6 +116,7 @@ export default function ReceiptPrintModal({
           <!-- หัวร้าน -->
           <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
             <h1 style="font-size: 18px; font-weight: 900; margin: 0;">ครัวบ้านไร่</h1>
+            ${data.branchName ? `<p style="font-size: 12px; font-weight: 700; margin: 2px 0;">สาขา: ${data.branchName}</p>` : ''}
             <p style="font-size: 11px; margin-top: 2px;">ใบเสร็จรับเงินอย่างย่อ / Receipt</p>
             <p style="font-size: 10px; color: #444;">โทร. 081-234-5678</p>
           </div>
@@ -202,11 +205,19 @@ export default function ReceiptPrintModal({
                 <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
                   ตั๋วห้องครัว
                 </span>
+                {data.branchName && (
+                  <div className="mt-1 text-[11px] font-semibold text-zinc-600">
+                    สาขา: {data.branchName}
+                  </div>
+                )}
                 <div className="mt-1 text-2xl font-black text-slip">โต๊ะ {data.tableNo}</div>
               </>
             ) : (
               <>
                 <h2 className="text-base font-bold text-slip">ครัวบ้านไร่</h2>
+                {data.branchName && (
+                  <p className="text-xs font-semibold text-zinc-700">สาขา: {data.branchName}</p>
+                )}
                 <p className="text-[11px] text-slip-dim">ใบเสร็จรับเงินอย่างย่อ / Receipt</p>
                 <div className="mt-2 flex justify-between border-b border-dashed border-rule pb-2 text-[11px]">
                   <span>โต๊ะ: {data.tableNo}</span>
