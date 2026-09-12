@@ -93,6 +93,7 @@ async function priceItems(
     `SELECT m.id, m.name,
             COALESCE(bma.custom_price, m.price) AS price,
             CASE
+              WHEN m.is_available = 0 THEN 0
               WHEN bma.is_available IS NOT NULL THEN bma.is_available
               ELSE m.is_available
             END AS is_available

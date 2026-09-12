@@ -48,10 +48,8 @@ export async function GET(request: NextRequest) {
            LEFT JOIN branch_menu_availability bma
              ON bma.menu_item_id = m.id AND bma.branch_id = ?
           WHERE c.is_active = 1
-            AND (
-              (bma.is_available IS NULL AND m.is_available = 1)
-              OR (bma.is_available = 1)
-            )
+            AND m.is_available = 1
+            AND COALESCE(bma.is_available, 1) = 1
           ORDER BY c.sort_order, m.name`,
         [branchId],
       );
