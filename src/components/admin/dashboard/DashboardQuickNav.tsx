@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { CartIcon, TableIcon, FoodMenuIcon, TicketIcon } from '@/components/Icons';
+import { CartIcon, TableIcon, FoodMenuIcon, TicketIcon, ReceiptIcon } from '@/components/Icons';
 
 const QUICK_LINKS = [
   {
@@ -9,6 +9,12 @@ const QUICK_LINKS = [
     icon: CartIcon,
     label: 'กระดานออเดอร์',
     sub: 'ติดตามสถานะอาหาร',
+  },
+  {
+    href: '/admin/settlement',
+    icon: ReceiptIcon,
+    label: 'สรุปปิดยอด',
+    sub: 'ปิดกะ / Z-Report',
   },
   {
     href: '/admin/tables',
@@ -32,7 +38,8 @@ const QUICK_LINKS = [
 
 export default function DashboardQuickNav() {
   return (
-    <section className="grid gap-2 sm:grid-cols-2 md:grid-cols-4">
+    <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+
       {QUICK_LINKS.map(({ href, icon: Icon, label, sub }) => (
         <Link
           key={href}

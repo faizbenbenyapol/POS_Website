@@ -9,6 +9,7 @@ import {
   FoodMenuIcon,
   InfoIcon,
   BuildingIcon,
+  ReceiptIcon,
 } from '@/components/Icons';
 import DashboardAlertBanners from './DashboardAlertBanners';
 import type { StaffDashboardData } from './types';
@@ -68,57 +69,52 @@ export default function StaffOperationalView({ data }: StaffOperationalViewProps
             </span>
           </div>
           <p className="num mt-2 text-3xl font-black text-slip">
-            {data.openTableCount} <span className="text-xs font-normal text-slip-dim">โต๊ะ</span>
+            {data.openTableCount}
+            <span className="text-xs font-normal text-slip-dim ml-1.5">โต๊ะ</span>
           </p>
-          <Link
-            href="/admin/tables"
-            className="mt-3 inline-flex items-center text-xs font-bold text-emerald-700 hover:underline"
-          >
-            ดูโต๊ะและ QR →
-          </Link>
+          <p className="mt-1 text-[11px] text-slip-dim">
+            กำลังเปิดให้บริการและรอเช็คบิล
+          </p>
         </div>
 
         <div className="rounded-2xl border border-rule bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slip-dim">ออเดอร์วันนี้</span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
               <CartIcon className="w-5 h-5" />
             </span>
           </div>
-          <p className="num mt-2 text-3xl font-black text-slip">
-            {data.todayOrderCount} <span className="text-xs font-normal text-slip-dim">รายการ</span>
+          <p className="num mt-2 text-3xl font-black text-blue-700">
+            {data.todayOrderCount}
+            <span className="text-xs font-normal text-slip-dim ml-1.5">ใบสั่ง</span>
           </p>
-          <Link
-            href="/admin/orders"
-            className="mt-3 inline-flex items-center text-xs font-bold text-blue-600 hover:underline"
-          >
-            ไปกระดานออเดอร์ →
-          </Link>
+          <p className="mt-1 text-[11px] text-slip-dim">
+            จำนวนออเดอร์ทั้งหมดในวันทำการนี้
+          </p>
         </div>
+
 
         <div className="rounded-2xl border border-rule bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slip-dim">เรื่องแจ้งปัญหาที่รอ</span>
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+            <span className="text-xs font-bold text-slip-dim">เรื่องแจ้งปัญหาที่รอดำเนินการ</span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-700">
               <TicketIcon className="w-5 h-5" />
             </span>
           </div>
-          <p className="num mt-2 text-3xl font-black text-slip">
-            {data.openTicketCount} <span className="text-xs font-normal text-slip-dim">เรื่อง</span>
+          <p className="num mt-2 text-3xl font-black text-red-700">
+            {data.urgentOpenTicketCount}
+            <span className="text-xs font-normal text-slip-dim ml-1.5">เรื่อง</span>
           </p>
-          <Link
-            href="/admin/tickets"
-            className="mt-3 inline-flex items-center text-xs font-bold text-amber-600 hover:underline"
-          >
-            ดูเรื่องแจ้งปัญหา →
-          </Link>
+          <p className="mt-1 text-[11px] text-slip-dim">
+            คำขอความช่วยเหลือจากลูกค้าและพนักงาน
+          </p>
         </div>
       </div>
 
-      {/* Quick Action Buttons */}
+      {/* Quick Action Navigation for Staff */}
       <div className="rounded-2xl border border-rule bg-white p-5 shadow-xs">
         <h3 className="text-sm font-bold text-slip mb-3">เมนูลัดสำหรับพนักงาน</h3>
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           <Link
             href="/admin/orders"
             className="flex items-center gap-3 rounded-xl border border-rule p-3 hover:bg-zinc-50 hover:border-slate-300 transition-all group"
@@ -129,6 +125,19 @@ export default function StaffOperationalView({ data }: StaffOperationalViewProps
             <div>
               <p className="text-xs font-bold text-slip">กระดานออเดอร์ & ครัว</p>
               <p className="text-[11px] text-slip-dim">เช็คบิล / รับเงิน / เสิร์ฟ</p>
+            </div>
+          </Link>
+
+          <Link
+            href="/admin/settlement"
+            className="flex items-center gap-3 rounded-xl border border-rule p-3 hover:bg-zinc-50 hover:border-slate-300 transition-all group"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 group-hover:scale-105 transition-transform">
+              <ReceiptIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slip">สรุปปิดยอด (Z-Report)</p>
+              <p className="text-[11px] text-slip-dim">พิมพ์ใบปิดกะ / ตรวจนับเงินสด</p>
             </div>
           </Link>
 

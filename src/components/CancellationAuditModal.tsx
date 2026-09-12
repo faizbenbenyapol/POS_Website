@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Modal from '@/components/Modal';
 import { apiFetch } from '@/lib/client';
-import { formatBaht, formatThaiTime } from '@/lib/format';
+import { downloadCsvFile } from '@/lib/exportCsv';
+import { formatBaht, formatThaiTime, formatThaiDateTime } from '@/lib/format';
+import { DownloadIcon, RefreshIcon } from '@/components/Icons';
 import type { CancellationLogRow } from '@/app/api/admin/cancellations/route';
 
 type CancellationAuditModalProps = {
@@ -11,9 +13,18 @@ type CancellationAuditModalProps = {
   onClose: () => void;
 };
 
+/** ตัวเลือกเหตุผลการยกเลิกมาตรฐาน */
+const COMMON_REASONS = [
+  'ลูกค้าเปลี่ยนใจ',
+  'คีย์ผิด/คีย์ซ้ำ',
+  'อาหารหมด/ยกเลิกจากครัว',
+  'ลูกค้ารอนาน',
+  'ลูกค้าขอยกเลิกทั้งบิล',
+];
+
 /**
  * Modal แสดงประวัติการยกเลิกอาหารและบิล (Cancellation Audit Report)
- * ให้เจ้าของร้านตรวจสอบการตัดเงินย้อนหลัง พร้อมสรุปยอดเงินที่ถูกยกเลิก
+ * ให้เจ้าของร้านตรวจสอบการตัดเงินย้อนหลัง พร้อมระบบกรองวันที่/เหตุผล และส่งออก CSV
  */
 export default function CancellationAuditModal({
   open,
@@ -22,32 +33,152 @@ export default function CancellationAuditModal({
   const [logs, setLogs] = useState<CancellationLogRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [filterDate, setFilterDate] = useState('');
+  const [filterReason, setFilterReason] = useState('');
+
+  const fetchLogs = useCallback(async (date: string, reason: string) => {
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    if (reason) params.set('reason', reason);
+
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    const res = await apiFetch<CancellationLogRow[]>(`/api/admin/cancellations${queryStr}`);
+    if (res.ok) {
+      setLogs(res.data);
+    } else {
+      setError(res.message);
+    }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
-    setLoading(true);
-    setError('');
-    apiFetch<CancellationLogRow[]>('/api/admin/cancellations')
-      .then((res) => {
-        if (res.ok) setLogs(res.data);
-        else setError(res.message);
-      })
-      .finally(() => setLoading(false));
-  }, [open]);
+    fetchLogs(filterDate, filterReason);
+  }, [open, filterDate, filterReason, fetchLogs]);
 
   if (!open) return null;
 
   const totalVoided =
     logs?.reduce((sum, log) => sum + Number(log.amount || 0), 0) ?? 0;
 
+  /** ส่งออกข้อมูลประวัติการยกเลิกเป็นไฟล์ CSV */
+  function handleExportCsv() {
+    if (!logs || logs.length === 0) return;
+    const filename = `cancellation-audit-${filterDate || 'all'}.csv`;
+    const headers = [
+      'รหัสบันทึก',
+      'เวลาทำรายการ',
+      'สาขา',
+      'โต๊ะ',
+      'ประเภท',
+      'รายการ / รหัสออเดอร์',
+      'จำนวน',
+      'ยอดเงินที่ตัดออก (บาท)',
+      'เหตุผล',
+      'ผู้ทำรายการ',
+    ];
+
+    const rows = logs.map((log) => [
+      log.id,
+      formatThaiDateTime(log.created_at),
+      log.branch_name || '-',
+      log.table_no,
+      log.entity_type,
+      log.entity_type === 'ORDER' ? `ยกเลิกทั้งบิล (${log.order_code || '-'})` : (log.item_name || '-'),
+      log.quantity || 1,
+      Number(log.amount || 0),
+      log.reason,
+      log.cancelled_by_name,
+    ]);
+
+    downloadCsvFile(filename, headers, rows);
+  }
+
+  function handleSetToday() {
+    const now = new Date();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    setFilterDate(`${now.getFullYear()}-${m}-${d}`);
+  }
+
   return (
     <Modal
       title="บันทึกประวัติการยกเลิก (Cancellation Audit Log)"
       open={open}
       onClose={onClose}
-      maxWidth="max-w-2xl"
+      maxWidth="max-w-3xl"
     >
       <div className="flex flex-col gap-4">
+        {/* แถบตัวกรองวันที่และเหตุผล */}
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-zinc-50 border border-rule p-2.5 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slip-dim font-medium">วันที่:</span>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="rounded-lg border border-rule bg-white px-2 py-1 text-xs text-slip focus:border-zinc-400 focus:outline-none"
+            />
+            {filterDate ? (
+              <button
+                type="button"
+                onClick={() => setFilterDate('')}
+                className="rounded-md px-1.5 py-1 text-[11px] text-slip-dim hover:text-slip cursor-pointer"
+              >
+                ล้าง
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSetToday}
+                className="rounded-md bg-zinc-200 px-2 py-1 text-[11px] font-medium text-slip hover:bg-zinc-300 cursor-pointer"
+              >
+                วันนี้
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 ml-auto sm:ml-2">
+            <span className="text-slip-dim font-medium">เหตุผล:</span>
+            <select
+              value={filterReason}
+              onChange={(e) => setFilterReason(e.target.value)}
+              className="rounded-lg border border-rule bg-white px-2 py-1 text-xs text-slip focus:border-zinc-400 focus:outline-none"
+            >
+              <option value="">ทุกเหตุผล</option>
+              {COMMON_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button
+              type="button"
+              onClick={() => fetchLogs(filterDate, filterReason)}
+              disabled={loading}
+              className="inline-flex items-center gap-1 rounded-lg border border-rule bg-white px-2.5 py-1 text-xs font-medium text-slip hover:bg-zinc-100 disabled:opacity-50 cursor-pointer"
+              title="รีเฟรช"
+            >
+              <RefreshIcon className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>รีเฟรช</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={!logs || logs.length === 0}
+              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-40 cursor-pointer"
+            >
+              <DownloadIcon className="w-3.5 h-3.5" />
+              <span>ส่งออก CSV</span>
+            </button>
+          </div>
+        </div>
+
         {/* สรุปยอดรวมที่ถูกตัดออก */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-zinc-50 border border-rule p-3.5 text-xs">
           <div>
@@ -78,7 +209,7 @@ export default function CancellationAuditModal({
 
         {!loading && !error && logs && logs.length === 0 && (
           <div className="py-8 text-center text-xs text-slip-dim">
-            ยังไม่มีประวัติการยกเลิกรายการอาหารในระบบ
+            ไม่พบประวัติการยกเลิกรายการอาหารตามเงื่อนไขที่เลือก
           </div>
         )}
 
@@ -150,3 +281,4 @@ export default function CancellationAuditModal({
     </Modal>
   );
 }
+

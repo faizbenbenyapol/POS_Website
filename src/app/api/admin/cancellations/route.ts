@@ -3,7 +3,8 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, serverError, authFailureResponse } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { getEffectiveBranchId } from '@/lib/branch';
+import { getEffectiveBranchId, getActiveBranch } from '@/lib/branch';
+import { getBusinessDayRangeFromDateString } from '@/lib/format';
 
 export type CancellationLogRow = RowDataPacket & {
   id: number;
@@ -25,10 +26,10 @@ export type CancellationLogRow = RowDataPacket & {
 /**
  * ดึงรายการบันทึกประวัติการยกเลิกอาหารและออเดอร์ (Cancellation Audit Logs)
  * สำหรับให้ผู้จัดการ/เจ้าของร้านตรวจสอบการตัดเงินย้อนหลัง
- * รองรับการกรองตามสาขาที่เลือก (หรือแสดงทุกสาขาสำหรับ HQ Admin)
+ * รองรับการกรองตามสาขา, วันที่ (คำนวณตาม cutoffHour), โต๊ะ และสาเหตุการยกเลิก
  *
- * @param request - คำขอที่อาจระบุ date, tableNo หรือ branchId ใน query string
- * @returns รายการ audit logs 50 รายการล่าสุด
+ * @param request - คำขอที่อาจระบุ date, reason, tableNo หรือ branchId ใน query string
+ * @returns รายการ audit logs สูงสุด 200 รายการ
  */
 export async function GET(request: NextRequest) {
   try {
@@ -36,8 +37,22 @@ export async function GET(request: NextRequest) {
     if (!auth.ok) return authFailureResponse(auth.reason);
 
     const branchId = await getEffectiveBranchId(request, auth.user);
+    const activeBranch = await getActiveBranch(request, auth.user);
+    const cutoffHour = activeBranch?.businessDayCutoffHour;
+
     const params = request.nextUrl.searchParams;
     const tableNo = (params.get('tableNo') ?? '').trim();
+    const reason = (params.get('reason') ?? '').trim();
+    const dateStr = (params.get('date') ?? '').trim();
+
+    let dateStartSql: string | null = null;
+    let dateEndSql: string | null = null;
+
+    if (dateStr) {
+      const range = getBusinessDayRangeFromDateString(dateStr, cutoffHour);
+      dateStartSql = range.startSql;
+      dateEndSql = range.endSql;
+    }
 
     const rows = await query<CancellationLogRow>(
       `SELECT c.id, c.branch_id, b.name AS branch_name, c.entity_type, c.entity_id,
@@ -48,9 +63,21 @@ export async function GET(request: NextRequest) {
          LEFT JOIN branches b ON b.id = c.branch_id
         WHERE (? IS NULL OR c.branch_id = ?)
           AND (? = '' OR c.table_no = ?)
+          AND (? = '' OR c.reason = ?)
+          AND (? IS NULL OR (c.created_at >= ? AND c.created_at < ?))
         ORDER BY c.id DESC
-        LIMIT 50`,
-      [branchId, branchId, tableNo, tableNo],
+        LIMIT 200`,
+      [
+        branchId,
+        branchId,
+        tableNo,
+        tableNo,
+        reason,
+        reason,
+        dateStartSql,
+        dateStartSql,
+        dateEndSql,
+      ],
     );
 
     return apiOk(rows);
@@ -58,3 +85,4 @@ export async function GET(request: NextRequest) {
     return serverError(err, 'GET /api/admin/cancellations');
   }
 }
+

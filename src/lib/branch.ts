@@ -148,3 +148,19 @@ export async function getBranchById(branchId: number): Promise<Branch | null> {
     isActive: row.is_active === 1,
   };
 }
+
+/**
+ * ดึงข้อมูลสาขาที่มีผลบังคับใช้สำหรับคำขอปัจจุบัน
+ * หากผู้ใช้เป็นพนักงาน จะคืนค่าสาขาของพนักงาน
+ * หากเป็น HQ Admin และเลือกสาขาไว้ จะคืนค่าสาขานั้น
+ * หากเลือกดูทุกสาขา จะคืนค่า null
+ */
+export async function getActiveBranch(
+  request?: NextRequest | null,
+  user?: SessionUser | null,
+): Promise<Branch | null> {
+  const branchId = await getEffectiveBranchId(request, user);
+  if (!branchId) return null;
+  return getBranchById(branchId);
+}
+

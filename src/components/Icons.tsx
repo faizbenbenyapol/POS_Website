@@ -386,3 +386,12 @@ export function GlobeAltIcon({ className = 'w-4 h-4', ...props }: IconProps) {
     </svg>
   );
 }
+
+export function ReceiptIcon({ className = 'w-5 h-5', ...props }: IconProps) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 14h6m-6-4h6m2 9.5l-2.5-1.5L12 19.5 9.5 18 7 19.5V5a2 2 0 012-2h6a2 2 0 012 2v14.5z" />
+    </svg>
+  );
+}
+

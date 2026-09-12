@@ -13,6 +13,7 @@ import {
   UsersIcon,
   LogoutIcon,
   BuildingIcon,
+  ReceiptIcon,
 } from '@/components/Icons';
 import BranchSwitcher from '@/components/BranchSwitcher';
 
@@ -20,6 +21,7 @@ import BranchSwitcher from '@/components/BranchSwitcher';
 const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ className?: string }>; adminOnly: boolean }[] = [
   { href: '/admin', label: 'ภาพรวมร้าน', icon: ChartIcon, adminOnly: false },
   { href: '/admin/orders', label: 'กระดานออเดอร์', icon: CookingIcon, adminOnly: false },
+  { href: '/admin/settlement', label: 'สรุปปิดยอด', icon: ReceiptIcon, adminOnly: false },
   { href: '/admin/menu', label: 'เมนูอาหาร', icon: FoodMenuIcon, adminOnly: false },
   { href: '/admin/categories', label: 'หมวดหมู่', icon: TagIcon, adminOnly: true },
   { href: '/admin/tables', label: 'โต๊ะและ QR', icon: TableIcon, adminOnly: false },
@@ -27,6 +29,7 @@ const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ clas
   { href: '/admin/branches', label: 'จัดการสาขา', icon: BuildingIcon, adminOnly: true },
   { href: '/admin/users', label: 'ผู้ใช้ระบบ', icon: UsersIcon, adminOnly: true },
 ];
+
 
 /**
  * แถบเมนูหลังบ้าน แสดงชื่อผู้ใช้ที่ล็อกอินอยู่และปุ่มออกจากระบบ
