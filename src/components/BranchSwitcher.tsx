@@ -68,7 +68,7 @@ export default function BranchSwitcher({ user }: { user: SessionUser }) {
       });
       if (res.ok) {
         setActiveBranchId(newId);
-        router.refresh();
+        window.location.reload();
       }
     } finally {
       setLoading(false);
