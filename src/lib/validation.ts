@@ -183,6 +183,23 @@ export const checkoutSchema = z.object({
   method: z.enum(['CASH', 'TRANSFER', 'CARD']),
 });
 
+/**
+ * ตรวจข้อมูลการปิดยอดประจำวัน (Z-Report)
+ * countedCash คือเงินสดที่แคชเชียร์นับได้จริงในลิ้นชัก ไม่กรอกก็ปิดยอดได้แต่จะไม่มีตัวเลขขาด/เกิน
+ */
+export const closeSettlementSchema = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD'),
+  countedCash: z
+    .number()
+    .min(0, 'ยอดเงินสดที่นับได้ต้องไม่ติดลบ')
+    .max(9999999.99, 'ยอดเงินสดที่นับได้สูงเกินกว่าที่ระบบรองรับ')
+    .nullable()
+    .optional(),
+  note: z.string().trim().max(255, 'หมายเหตุยาวเกิน 255 ตัวอักษร').optional(),
+});
+
 /** หมวดปัญหาที่แจ้งได้ ตรงกับ ENUM ในตาราง tickets */
 export const TICKET_CATEGORIES = ['ORDER', 'FOOD', 'PAYMENT', 'SYSTEM', 'OTHER'] as const;
 

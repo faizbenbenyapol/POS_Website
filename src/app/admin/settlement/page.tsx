@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/client';
+import { apiFetch, jsonBody } from '@/lib/client';
 import { downloadCsvFile } from '@/lib/exportCsv';
 import { printHtml } from '@/lib/print';
 import { formatBaht, formatThaiDate, formatThaiDateTime, formatThaiTime } from '@/lib/format';
@@ -18,7 +18,9 @@ import {
   AlertTriangleIcon,
   ChartIcon,
   CheckCircleIcon,
+  LockIcon,
 } from '@/components/Icons';
+import Modal from '@/components/Modal';
 import type { DailySettlementReport } from '@/app/api/admin/settlement/route';
 
 /**
@@ -45,6 +47,18 @@ function getYesterdayDateString(): string {
 }
 
 /**
+ * แปลงผลต่างเงินสดเป็นข้อความไทยบอกว่าเงินตรง ขาด หรือเกินอยู่เท่าไร
+ *
+ * @param difference - ผลต่างหน่วยบาท (เงินสดที่นับได้จริง ลบด้วยเงินสดตามระบบ)
+ * @returns ข้อความสรุปผลต่างพร้อมจำนวนเงิน
+ */
+function describeCashDifference(difference: number): string {
+  if (difference === 0) return 'ตรงกับระบบพอดี';
+  if (difference > 0) return `เกิน ฿${formatBaht(difference)}`;
+  return `ขาด ฿${formatBaht(Math.abs(difference))}`;
+}
+
+/**
  * หน้าจอสรุปปิดยอดประจำวัน (End-of-Day Settlement / Z-Report)
  * รองรับทั้งพนักงานแคชเชียร์ (STAFF) และผู้ดูแลระบบ (ADMIN)
  */
@@ -54,6 +68,11 @@ export default function DailySettlementPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [countedCashInput, setCountedCashInput] = useState('');
+  const [closeNote, setCloseNote] = useState('');
+  const [isClosing, setIsClosing] = useState(false);
+  const [closeError, setCloseError] = useState('');
 
   const fetchSettlement = useCallback(async (date: string, showSkeleton = true) => {
     if (showSkeleton) {
@@ -82,6 +101,42 @@ export default function DailySettlementPage() {
     fetchSettlement(selectedDate, true);
   }, [selectedDate, fetchSettlement]);
 
+  /**
+   * ส่งคำขอปิดยอดประจำวันไปยังเซิร์ฟเวอร์ แล้วแทนที่รายงานบนหน้าจอด้วยฉบับที่ถูกแช่แข็งแล้ว
+   * ช่องเงินสดที่นับได้ไม่บังคับ ถ้าเว้นว่างระบบจะไม่คำนวณยอดขาด/เกิน
+   */
+  async function handleCloseSettlement() {
+    if (!report) return;
+
+    const trimmed = countedCashInput.trim();
+    const countedCash = trimmed === '' ? null : Number(trimmed);
+    if (countedCash !== null && (!Number.isFinite(countedCash) || countedCash < 0)) {
+      setCloseError('ยอดเงินสดที่นับได้ต้องเป็นตัวเลขและต้องไม่ติดลบ');
+      return;
+    }
+
+    setIsClosing(true);
+    setCloseError('');
+    const res = await apiFetch<DailySettlementReport>('/api/admin/settlement', {
+      method: 'POST',
+      body: jsonBody({
+        date: report.businessDate,
+        countedCash,
+        note: closeNote.trim() || undefined,
+      }),
+    });
+    setIsClosing(false);
+
+    if (res.ok) {
+      setReport(res.data);
+      setCloseModalOpen(false);
+      setCountedCashInput('');
+      setCloseNote('');
+    } else {
+      setCloseError(res.message);
+    }
+  }
+
   /** ส่งออกรายงานสรุปปิดกะประจำวันเป็นไฟล์ CSV */
   function handleExportCsv() {
     if (!report) return;
@@ -94,6 +149,20 @@ export default function DailySettlementPage() {
       ['วันที่ทำการ (Business Date)', thaiDate, report.businessDate],
       ['ช่วงเวลาวันทำการ', `${report.startTime} ถึง ${report.endTime}`, `ตัดรอบ ${report.cutoffHour}:00 น.`],
       ['เวลาออกรายงาน', formatThaiDateTime(report.generatedAt), ''],
+      [
+        'สถานะการปิดยอด',
+        report.closure
+          ? `ปิดยอดแล้ว - ใบที่ Z-${report.closure.zNumber}`
+          : 'ยังไม่ปิดยอด (ตัวเลขยังเปลี่ยนได้)',
+        '',
+      ],
+      ...(report.closure
+        ? [
+            ['ผู้ปิดยอด', report.closure.closedByName, ''],
+            ['เวลาที่ปิดยอด', formatThaiDateTime(report.closure.closedAt), ''],
+            ['หมายเหตุการปิดกะ', report.closure.note || '-', ''],
+          ]
+        : []),
       ['', '', ''],
       ['--- สรุปยอดขายรวม (Sales Summary) ---', '', ''],
       ['ยอดขายสุทธิรวม (Net Sales)', 'ยอดรวมทุกช่องทางชำระเงิน', report.totalRevenue],
@@ -109,8 +178,22 @@ export default function DailySettlementPage() {
       ['', '', ''],
       ['--- การตรวจนับเงินสดในลิ้นชัก (Cash Drawer Audit) ---', '', ''],
       ['เงินสดตามระบบที่ต้องส่งมอบ', 'ยอดเงินสดที่เก็บจริงในวันทำการ', report.cashTotal],
-      ['เงินสดที่นับได้จริงในลิ้นชัก', 'ช่องกรอกของแคชเชียร์', ''],
-      ['ผลต่างเงินสดขาด/เกิน', 'ส่วนต่าง', ''],
+      [
+        'เงินสดที่นับได้จริงในลิ้นชัก',
+        report.closure
+          ? report.closure.countedCash === null
+            ? 'ปิดยอดแล้วแต่ไม่ได้บันทึกยอดนับเงิน'
+            : `นับและบันทึกโดย ${report.closure.closedByName}`
+          : 'ยังไม่ปิดยอด จึงยังไม่มียอดนับเงิน',
+        report.closure?.countedCash ?? '',
+      ],
+      [
+        'ผลต่างเงินสดขาด/เกิน',
+        report.closure?.cashDifference == null
+          ? '-'
+          : describeCashDifference(report.closure.cashDifference),
+        report.closure?.cashDifference ?? '',
+      ],
       ['', '', ''],
       ['--- รายการยกเลิกและมูลค่าสูญเสีย (Void Loss) ---', '', ''],
       ['จำนวนรายการที่ถูกยกเลิก', 'รวมทุกรายการที่ยกเลิก', report.totalVoidCount],
@@ -157,6 +240,13 @@ export default function DailySettlementPage() {
           <p style="font-size: 13px; font-weight: 700; margin: 2px 0;">สาขา: ${report.branchName}</p>
           <div style="font-size: 14px; font-weight: 800; margin-top: 4px; border: 1px solid #000; padding: 2px 4px; display: inline-block;">
             ใบสรุปยอดปิดกะ / ปิดวัน (Z-REPORT)
+          </div>
+          <div style="font-size: 13px; font-weight: 900; margin-top: 5px;">
+            ${
+              report.closure
+                ? `เลขที่ใบปิดยอด: Z-${report.closure.zNumber}`
+                : '*** ฉบับร่าง - ยังไม่ได้ปิดยอด ***'
+            }
           </div>
           <div style="font-size: 11px; margin-top: 6px; color: #111;">
             <div>วันที่ทำการ: <strong>${thaiDate}</strong></div>
@@ -233,11 +323,19 @@ export default function DailySettlementPage() {
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px;">
             <span>ยอดนับจริง (Actual Cash):</span>
-            <span>......................... บาท</span>
+            <span>${
+              report.closure && report.closure.countedCash !== null
+                ? `฿${formatBaht(report.closure.countedCash)}`
+                : '......................... บาท'
+            }</span>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px;">
             <span>ผลต่าง (+เกิน / -ขาด):</span>
-            <span>......................... บาท</span>
+            <span>${
+              report.closure && report.closure.cashDifference !== null
+                ? describeCashDifference(report.closure.cashDifference)
+                : '......................... บาท'
+            }</span>
           </div>
         </div>
 
@@ -282,6 +380,15 @@ export default function DailySettlementPage() {
 
         <!-- Sign-off Section -->
         <div style="padding-top: 8px; font-size: 11px; text-align: center;">
+          ${
+            report.closure
+              ? `<div style="margin-bottom: 10px; font-size: 11px; font-weight: 700;">
+                  ปิดยอดโดย ${report.closure.closedByName}<br/>
+                  เมื่อ ${formatThaiDateTime(report.closure.closedAt)}
+                  ${report.closure.note ? `<br/>หมายเหตุ: ${report.closure.note}` : ''}
+                </div>`
+              : ''
+          }
           <div style="margin-bottom: 16px;">
             <div>ลงชื่อแคชเชียร์ผู้ส่งมอบเงิน</div>
             <div style="margin-top: 24px;">(......................................................)</div>
@@ -298,7 +405,9 @@ export default function DailySettlementPage() {
     `;
 
     printHtml(html, {
-      title: `Z-Report-${report.branchCode}-${report.businessDate}`,
+      title: `Z-Report-${report.branchCode}-${report.businessDate}-${
+        report.closure ? `Z${report.closure.zNumber}` : 'DRAFT'
+      }`,
       pageStyle: '@page { margin: 2mm; size: 80mm auto; }',
     });
   }
@@ -391,6 +500,29 @@ export default function DailySettlementPage() {
             <DownloadIcon className="w-4 h-4" />
             <span>ส่งออก CSV</span>
           </button>
+
+          <Link
+            href="/admin/settlement/history"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-rule bg-white px-3.5 py-1.5 text-xs font-bold text-slip hover:bg-zinc-50"
+          >
+            <ChartIcon className="w-4 h-4" />
+            <span>ประวัติการปิดยอด</span>
+          </Link>
+
+          {report && !report.closure && (
+            <button
+              type="button"
+              onClick={() => {
+                setCloseError('');
+                setCloseModalOpen(true);
+              }}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 cursor-pointer"
+            >
+              <LockIcon className="w-4 h-4" />
+              <span>ปิดยอดประจำวัน</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -424,6 +556,49 @@ export default function DailySettlementPage() {
               >
                 ดูโต๊ะที่เปิดค้างอยู่ →
               </Link>
+            </div>
+          )}
+
+          {/* Z-Report Closed Banner */}
+          {report.closure && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-200 text-emerald-900">
+                  <LockIcon className="w-5 h-5" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-bold">
+                    ปิดยอดประจำวันแล้ว - ใบที่ Z-{report.closure.zNumber}
+                  </h2>
+                  <p className="text-xs text-emerald-800">
+                    ปิดโดย {report.closure.closedByName} เมื่อ{' '}
+                    {formatThaiDateTime(report.closure.closedAt)} ตัวเลขชุดนี้ถูกบันทึกถาวรแล้ว
+                    จะไม่เปลี่ยนตามการแก้ข้อมูลภายหลัง และรับชำระเงินเพิ่มในวันทำการนี้ไม่ได้อีก
+                  </p>
+                  {report.closure.note && (
+                    <p className="mt-1 text-xs text-emerald-800">
+                      หมายเหตุ: {report.closure.note}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {report.closure.countedCash !== null && (
+                <div className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-right">
+                  <p className="text-[11px] font-semibold text-emerald-800">เงินสดที่นับได้จริง</p>
+                  <p className="num text-base font-black text-emerald-900">
+                    ฿{formatBaht(report.closure.countedCash)}
+                  </p>
+                  <p
+                    className={`num text-[11px] font-bold ${
+                      (report.closure.cashDifference ?? 0) === 0
+                        ? 'text-emerald-700'
+                        : 'text-red-700'
+                    }`}
+                  >
+                    {describeCashDifference(report.closure.cashDifference ?? 0)}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -751,6 +926,109 @@ export default function DailySettlementPage() {
           </div>
         </>
       )}
+
+      {/* Close Business Day (Z-Report) Modal */}
+      <Modal
+        title="ปิดยอดประจำวัน (Z-Report)"
+        open={closeModalOpen}
+        onClose={() => setCloseModalOpen(false)}
+        maxWidth="max-w-md"
+      >
+        {report && (
+          <div className="flex flex-col gap-4 text-sm">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 leading-relaxed">
+              เมื่อกดยืนยัน ตัวเลขของวันทำการ{' '}
+              <strong>{formatThaiDate(report.businessDate)}</strong> จะถูกบันทึกถาวร
+              แก้ไขภายหลังไม่ได้ และจะรับชำระเงินเพิ่มในวันทำการนี้ไม่ได้อีก
+            </div>
+
+            <div className="divide-y divide-rule rounded-xl border border-rule overflow-hidden">
+              <div className="flex items-center justify-between p-3">
+                <span className="text-xs text-slip-dim">ยอดขายสุทธิ</span>
+                <span className="num font-bold text-slip">฿{formatBaht(report.totalRevenue)}</span>
+              </div>
+              <div className="flex items-center justify-between p-3">
+                <span className="text-xs text-slip-dim">จำนวนบิลที่ปิดแล้ว</span>
+                <span className="num font-bold text-slip">{report.totalBills} บิล</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-emerald-50/60">
+                <span className="text-xs font-semibold text-emerald-900">
+                  เงินสดตามระบบที่ต้องส่งมอบ
+                </span>
+                <span className="num font-black text-emerald-900">
+                  ฿{formatBaht(report.cashTotal)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label htmlFor="counted-cash" className="text-sm text-slip-dim">
+                เงินสดที่นับได้จริงในลิ้นชัก (ไม่บังคับ)
+              </label>
+              <input
+                id="counted-cash"
+                type="number"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                value={countedCashInput}
+                onChange={(e) => setCountedCashInput(e.target.value)}
+                placeholder="เช่น 12450.00"
+                className="num min-h-[44px] w-full rounded-lg bg-char px-3 text-slip placeholder:text-slip-dim"
+              />
+              {countedCashInput.trim() !== '' && Number.isFinite(Number(countedCashInput)) && (
+                <p className="num text-xs font-bold text-slip">
+                  ผลต่างเทียบระบบ:{' '}
+                  {describeCashDifference(
+                    Number((Number(countedCashInput) - report.cashTotal).toFixed(2)),
+                  )}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label htmlFor="close-note" className="text-sm text-slip-dim">
+                หมายเหตุการปิดกะ (ไม่บังคับ)
+              </label>
+              <textarea
+                id="close-note"
+                rows={2}
+                maxLength={255}
+                value={closeNote}
+                onChange={(e) => setCloseNote(e.target.value)}
+                placeholder="เช่น เงินขาดเพราะทอนผิดโต๊ะ B2"
+                className="w-full rounded-lg bg-char px-3 py-2 text-slip placeholder:text-slip-dim"
+              />
+            </div>
+
+            {closeError && (
+              <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">
+                {closeError}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 border-t border-rule pt-4">
+              <button
+                type="button"
+                onClick={() => setCloseModalOpen(false)}
+                disabled={isClosing}
+                className="rounded-xl border border-rule bg-white px-4 py-2.5 text-xs font-semibold text-slip-dim hover:bg-zinc-50 hover:text-slip disabled:opacity-50 cursor-pointer"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseSettlement}
+                disabled={isClosing}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 px-5 py-2.5 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 cursor-pointer"
+              >
+                <LockIcon className="w-4 h-4" />
+                <span>{isClosing ? 'กำลังปิดยอด...' : 'ยืนยันปิดยอดประจำวัน'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

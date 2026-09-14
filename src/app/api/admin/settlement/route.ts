@@ -1,9 +1,11 @@
 import type { NextRequest } from 'next/server';
-import type { RowDataPacket } from 'mysql2/promise';
-import { apiOk, serverError, authFailureResponse } from '@/lib/api';
+import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { apiOk, apiError, serverError, authFailureResponse, ERROR_CODES } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { query, withTransaction } from '@/lib/db';
 import { getEffectiveBranchId, getActiveBranch } from '@/lib/branch';
+import { findSettlement, type SettlementRow } from '@/lib/settlement';
+import { closeSettlementSchema, firstErrorMessage } from '@/lib/validation';
 import {
   businessDayRange,
   getBusinessDayRangeFromDateString,
@@ -49,6 +51,16 @@ export type VoidReasonSummary = {
   total: number;
 };
 
+/** ข้อมูลการปิดยอดที่ถูกบันทึกถาวรแล้ว (null = วันทำการนี้ยังไม่ถูกปิด) */
+export type SettlementClosure = {
+  zNumber: number;
+  closedAt: string;
+  closedByName: string;
+  countedCash: number | null;
+  cashDifference: number | null;
+  note: string | null;
+};
+
 /** ข้อมูลสรุปปิดยอดประจำวันเต็มรูปแบบ */
 export type DailySettlementReport = {
   branchId: number | null;
@@ -83,29 +95,28 @@ export type DailySettlementReport = {
   totalVoidCount: number;
   totalVoidAmount: number;
   voidReasons: VoidReasonSummary[];
+  // สถานะการปิดยอด ถ้าไม่ใช่ null แปลว่าตัวเลขชุดนี้ถูกแช่แข็งแล้วแก้ไม่ได้
+  closure: SettlementClosure | null;
 };
 
 /**
- * ดึงรายงานสรุปปิดยอดประจำวัน (End-of-Day Settlement / Z-Report)
- * คำนวณยอดขายตามช่วงวันทำการ (Business Day Cutoff Hour) ของสาขา
+ * คำนวณรายงานสรุปปิดยอดประจำวันแบบสดจากข้อมูลในฐานข้อมูล ณ ขณะที่เรียก
+ * แยกเป็นฟังก์ชันกลางเพราะทั้ง GET (เปิดดูรายงาน) และ POST (กดปิดยอด) ต้องใช้ตัวเลขชุดเดียวกัน
  *
- * @param request - คำขอที่อาจระบุ query string date=YYYY-MM-DD
- * @returns รายงานสรุปปิดยอดประจำวันสมบูรณ์
+ * @param branchId - รหัสสาขาที่ต้องการสรุป ส่ง null เพื่อรวมทุกสาขา
+ * @param branchName - ชื่อสาขาที่จะแสดงบนหัวรายงาน
+ * @param branchCode - รหัสย่อสาขาที่ใช้ตั้งชื่อไฟล์ส่งออก
+ * @param cutoffHour - ชั่วโมงตัดรอบวันทำการของสาขา (0-23)
+ * @param targetDate - วันทำการที่ต้องการสรุป รูปแบบ YYYY-MM-DD
+ * @returns รายงานสรุปปิดยอดประจำวัน โดย closure เป็น null เสมอ ให้ผู้เรียกเติมเองถ้าวันนั้นปิดแล้ว
  */
-export async function GET(request: NextRequest) {
-  try {
-    const auth = await requireStaff();
-    if (!auth.ok) return authFailureResponse(auth.reason);
-
-    const branchId = await getEffectiveBranchId(request, auth.user);
-    const activeBranch = await getActiveBranch(request, auth.user);
-    const cutoffHour = activeBranch?.businessDayCutoffHour ?? getBusinessCutoffHour();
-
-    const params = request.nextUrl.searchParams;
-    const rawDate = (params.get('date') ?? '').trim();
-
-    // หากไม่ระบุวันที่ ให้ใช้วันทำการปัจจุบันของสาขา
-    const targetDate = rawDate || businessDayRange(undefined, cutoffHour).businessDate;
+async function buildSettlementReport(
+  branchId: number | null,
+  branchName: string,
+  branchCode: string,
+  cutoffHour: number,
+  targetDate: string,
+): Promise<DailySettlementReport> {
     const range = getBusinessDayRangeFromDateString(targetDate, cutoffHour);
 
     // 1. สรุปยอดเงินตามช่องทางชำระ
@@ -318,10 +329,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const report: DailySettlementReport = {
+    return {
       branchId,
-      branchName: activeBranch?.name ?? 'ทุกสาขา (ภาพรวมส่วนกลาง)',
-      branchCode: activeBranch?.code ?? 'ALL',
+      branchName,
+      branchCode,
       cutoffHour,
       businessDate: range.businessDate,
       startTime: range.startSql,
@@ -344,10 +355,199 @@ export async function GET(request: NextRequest) {
       totalVoidCount,
       totalVoidAmount,
       voidReasons,
+      closure: null,
     };
+}
 
+/**
+ * แปลงแถวในตาราง settlements ให้เป็นข้อมูลสถานะการปิดยอดที่หน้าจอใช้แสดงผล
+ *
+ * @param row - แถวผลปิดยอดที่อ่านมาจากฐานข้อมูล
+ * @returns ข้อมูลการปิดยอด เลขที่ Z คนที่กดปิด และผลต่างเงินสด
+ */
+function toClosure(row: SettlementRow): SettlementClosure {
+  return {
+    zNumber: Number(row.z_number),
+    closedAt: new Date(row.closed_at).toISOString(),
+    closedByName: row.closed_by_name,
+    countedCash: row.counted_cash === null ? null : Number(row.counted_cash),
+    cashDifference: row.cash_difference === null ? null : Number(row.cash_difference),
+    note: row.note,
+  };
+}
+
+/**
+ * ดึงรายงานสรุปปิดยอดประจำวัน (End-of-Day Settlement / Z-Report)
+ * ถ้าวันทำการนั้นถูกปิดยอดไปแล้ว จะคืนตัวเลขชุดที่แช่แข็งไว้ตอนกดปิด ไม่คำนวณใหม่
+ * เพื่อไม่ให้รายงานย้อนหลังขยับตามการแก้ข้อมูลที่เกิดขึ้นทีหลัง
+ *
+ * @param request - คำขอที่อาจระบุ query string date=YYYY-MM-DD
+ * @returns รายงานสรุปปิดยอดประจำวันพร้อมสถานะการปิดยอดในฟิลด์ closure
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await requireStaff();
+    if (!auth.ok) return authFailureResponse(auth.reason);
+
+    const branchId = await getEffectiveBranchId(request, auth.user);
+    const activeBranch = await getActiveBranch(request, auth.user);
+    const cutoffHour = activeBranch?.businessDayCutoffHour ?? getBusinessCutoffHour();
+    const branchName = activeBranch?.name ?? 'ทุกสาขา (ภาพรวมส่วนกลาง)';
+    const branchCode = activeBranch?.code ?? 'ALL';
+
+    const rawDate = (request.nextUrl.searchParams.get('date') ?? '').trim();
+    // หากไม่ระบุวันที่ ให้ใช้วันทำการปัจจุบันของสาขา
+    const targetDate = rawDate || businessDayRange(undefined, cutoffHour).businessDate;
+
+    // มุมมองรวมทุกสาขา (branchId เป็น null) ไม่มีใบปิดยอดของตัวเอง จึงคำนวณสดเสมอ
+    const settled = branchId ? await findSettlement(branchId, targetDate) : null;
+    if (settled) {
+      const frozen = JSON.parse(settled.report_json) as DailySettlementReport;
+      frozen.closure = toClosure(settled);
+      return apiOk(frozen);
+    }
+
+    const report = await buildSettlementReport(
+      branchId,
+      branchName,
+      branchCode,
+      cutoffHour,
+      targetDate,
+    );
     return apiOk(report);
   } catch (err) {
     return serverError(err, 'GET /api/admin/settlement');
+  }
+}
+
+/**
+ * ปิดยอดประจำวันแล้วบันทึกรายงาน (Z-Report) ลงตาราง settlements แบบถาวร
+ * ปิดได้ครั้งเดียวต่อสาขาต่อวันทำการ และเมื่อปิดแล้ววันทำการนั้นจะรับชำระเงินเพิ่มไม่ได้อีก
+ *
+ * @param request - คำขอที่มี body เป็น JSON { date, countedCash?, note? }
+ * @returns เลขที่ Z-Report และรายงานที่ถูกแช่แข็ง หรือ error พร้อมข้อความไทยบอกสาเหตุที่ปิดไม่ได้
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await requireStaff();
+    if (!auth.ok) return authFailureResponse(auth.reason);
+
+    const branchId = await getEffectiveBranchId(request, auth.user);
+    const activeBranch = await getActiveBranch(request, auth.user);
+    if (!branchId || !activeBranch) {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'กรุณาเลือกสาขาที่ต้องการปิดยอดก่อน ระบบไม่อนุญาตให้ปิดยอดจากมุมมองรวมทุกสาขา',
+      );
+    }
+
+    const parsed = closeSettlementSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
+    }
+
+    const cutoffHour = activeBranch.businessDayCutoffHour ?? getBusinessCutoffHour();
+    const targetDate = parsed.data.date;
+    const currentBusinessDate = businessDayRange(undefined, cutoffHour).businessDate;
+
+    // ห้ามปิดยอดล่วงหน้า เพราะวันทำการนั้นยังไม่เริ่มเก็บเงิน
+    if (targetDate > currentBusinessDate) {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'ยังปิดยอดของวันทำการในอนาคตไม่ได้ กรุณาเลือกวันทำการปัจจุบันหรือย้อนหลัง',
+      );
+    }
+
+    const existing = await findSettlement(branchId, targetDate);
+    if (existing) {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        `วันทำการนี้ปิดยอดไปแล้วเป็นใบที่ Z-${existing.z_number} โดย ${existing.closed_by_name} ปิดซ้ำไม่ได้`,
+        409,
+      );
+    }
+
+    const report = await buildSettlementReport(
+      branchId,
+      activeBranch.name,
+      activeBranch.code,
+      cutoffHour,
+      targetDate,
+    );
+
+    // ปิดยอดของวันทำการปัจจุบันได้ต่อเมื่อเก็บเงินครบทุกโต๊ะแล้ว
+    // (วันย้อนหลังไม่ต้องเช็ค เพราะโต๊ะที่เปิดค้างอยู่ตอนนี้เป็นของวันทำการปัจจุบัน)
+    if (targetDate === currentBusinessDate && report.unpaidSessionsCount > 0) {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        `ยังมีโต๊ะที่ยังไม่เช็คบิลอยู่ ${report.unpaidSessionsCount} โต๊ะ กรุณาปิดบิลให้ครบก่อนปิดยอดประจำวัน`,
+        409,
+      );
+    }
+
+    const countedCash = parsed.data.countedCash ?? null;
+    const cashDifference =
+      countedCash === null ? null : Number((countedCash - report.cashTotal).toFixed(2));
+    const note = parsed.data.note?.trim() || null;
+    const reportJson = JSON.stringify(report);
+
+    const zNumber = await withTransaction(async (conn) => {
+      // ล็อกแถวของสาขานี้ไว้ก่อนออกเลขที่ใบปิดยอด กันสองเครื่องกดปิดพร้อมกันแล้วได้เลขซ้ำ
+      const [maxRows] = await conn.execute<(RowDataPacket & { next_z: number })[]>(
+        'SELECT COALESCE(MAX(z_number), 0) + 1 AS next_z FROM settlements WHERE branch_id = ? FOR UPDATE',
+        [branchId],
+      );
+      const nextZ = Number(maxRows[0]?.next_z ?? 1);
+
+      await conn.execute<ResultSetHeader>(
+        `INSERT INTO settlements
+           (branch_id, business_date, z_number, cutoff_hour, period_start, period_end,
+            total_revenue, total_bills, cash_total, transfer_total, card_total,
+            void_count, void_amount, counted_cash, cash_difference, note, report_json, closed_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          branchId,
+          targetDate,
+          nextZ,
+          cutoffHour,
+          report.startTime,
+          report.endTime,
+          report.totalRevenue,
+          report.totalBills,
+          report.cashTotal,
+          report.transferTotal,
+          report.cardTotal,
+          report.totalVoidCount,
+          report.totalVoidAmount,
+          countedCash,
+          cashDifference,
+          note,
+          reportJson,
+          auth.user.id,
+        ],
+      );
+      return nextZ;
+    });
+
+    report.closure = {
+      zNumber,
+      closedAt: new Date().toISOString(),
+      closedByName: auth.user.fullName,
+      countedCash,
+      cashDifference,
+      note,
+    };
+
+    return apiOk(report, 201);
+  } catch (err) {
+    // ชน UNIQUE KEY แปลว่ามีคนกดปิดยอดวันเดียวกันสำเร็จไปก่อนเสี้ยววินาที
+    if ((err as { code?: string }).code === 'ER_DUP_ENTRY') {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'วันทำการนี้เพิ่งถูกปิดยอดโดยผู้ใช้อื่น กรุณารีเฟรชหน้าจอเพื่อดูใบปิดยอดล่าสุด',
+        409,
+      );
+    }
+    return serverError(err, 'POST /api/admin/settlement');
   }
 }

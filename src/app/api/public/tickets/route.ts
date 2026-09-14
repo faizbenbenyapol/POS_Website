@@ -5,6 +5,10 @@ import { withTransaction } from '@/lib/db';
 import { findTableSession, sessionErrorMessage } from '@/lib/session';
 import { generateTicketCode } from '@/lib/ticket';
 import { customerTicketSchema, firstErrorMessage } from '@/lib/validation';
+import { createRateLimiter } from '@/lib/rateLimit';
+
+/** จำกัดการแจ้งปัญหา 5 ครั้ง/นาที ต่อ token กันลูกค้าหรือสคริปต์ยิงซ้ำจนตารางบวม */
+const ticketByToken = createRateLimiter('ticket-token', { maxRequests: 5, windowMs: 60000 });
 
 /**
  * รับเรื่องแจ้งปัญหาจากลูกค้าที่นั่งอยู่ที่โต๊ะ แล้วคืนรหัส ticket ให้เก็บไว้อ้างอิง
@@ -20,6 +24,17 @@ export async function POST(request: NextRequest) {
     const parsed = customerTicketSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
+    }
+
+    // ตรวจ rate limit ก่อนแตะฐานข้อมูล เพื่อไม่ให้การยิงซ้ำกินทรัพยากรเซิร์ฟเวอร์
+    const tokenCheck = ticketByToken(parsed.data.token);
+    if (!tokenCheck.allowed) {
+      const waitSec = Math.ceil(tokenCheck.retryAfterMs / 1000);
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        `แจ้งปัญหาถี่เกินไป กรุณารอ ${waitSec} วินาทีแล้วลองใหม่`,
+        429,
+      );
     }
 
     const found = await findTableSession(parsed.data.token);

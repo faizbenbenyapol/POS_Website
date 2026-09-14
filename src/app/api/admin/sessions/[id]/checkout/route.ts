@@ -4,12 +4,19 @@ import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/li
 import { requireStaff } from '@/lib/auth';
 import { withTransaction } from '@/lib/db';
 import { checkoutSchema, firstErrorMessage } from '@/lib/validation';
+import { findSettlement } from '@/lib/settlement';
+import { businessDayRange, getBusinessCutoffHour } from '@/lib/format';
 
 /** พารามิเตอร์เส้นทางของ Next.js 15 เป็น Promise จึงต้อง await ก่อนใช้ */
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** เหตุผลที่ปิดบิลไม่ได้ แยกรหัสเพื่อให้หน้าจอบอกพนักงานได้ตรงกรณี */
-type CheckoutFailure = 'NOT_FOUND' | 'ALREADY_CLOSED' | 'NOTHING_TO_PAY' | 'FORBIDDEN';
+type CheckoutFailure =
+  | 'NOT_FOUND'
+  | 'ALREADY_CLOSED'
+  | 'NOTHING_TO_PAY'
+  | 'FORBIDDEN'
+  | 'DAY_CLOSED';
 
 /**
  * รวมยอดที่ต้องเก็บของรอบการนั่งหนึ่ง โดยไม่นับรายการที่ถูกยกเลิก
@@ -57,7 +64,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const result = await withTransaction<
-    { ok: true; total: number } | { ok: false; reason: CheckoutFailure }
+    { ok: true; total: number } | { ok: false; reason: CheckoutFailure; zNumber?: number }
   >(async (conn) => {
     const [sessions] = await conn.execute<(RowDataPacket & { status: string; branch_id: number })[]>(
       'SELECT status, branch_id FROM table_sessions WHERE id = ? FOR UPDATE',
@@ -70,6 +77,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return { ok: false, reason: 'FORBIDDEN' };
     }
     if (session.status === 'CLOSED') return { ok: false, reason: 'ALREADY_CLOSED' };
+
+    // วันทำการที่ปิดยอด (Z-Report) ไปแล้ว ห้ามรับเงินเพิ่มอีก
+    // ไม่อย่างนั้นรายงานที่แช่แข็งไว้จะไม่ตรงกับเงินที่เก็บได้จริง
+    const branchOfSession = session.branch_id ?? 1;
+    const [branchRows] = await conn.execute<
+      (RowDataPacket & { business_day_cutoff_hour: number })[]
+    >('SELECT business_day_cutoff_hour FROM branches WHERE id = ?', [branchOfSession]);
+    const cutoffHour = Number(
+      branchRows[0]?.business_day_cutoff_hour ?? getBusinessCutoffHour(),
+    );
+    const settled = await findSettlement(
+      branchOfSession,
+      businessDayRange(undefined, cutoffHour).businessDate,
+      conn,
+    );
+    if (settled) {
+      return { ok: false, reason: 'DAY_CLOSED', zNumber: Number(settled.z_number) };
+    }
 
     const total = await sumSessionTotal(conn, sessionId);
     if (total <= 0) return { ok: false, reason: 'NOTHING_TO_PAY' };
@@ -88,6 +113,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!result.ok) {
     if (result.reason === 'FORBIDDEN') {
       return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์ปิดบิลของสาขาอื่น', 403);
+    }
+    if (result.reason === 'DAY_CLOSED') {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        `วันทำการนี้ปิดยอดประจำวันไปแล้ว (ใบที่ Z-${result.zNumber}) จึงรับชำระเงินเพิ่มไม่ได้ หากต้องเก็บเงินโต๊ะนี้จริง กรุณาแจ้งผู้ดูแลระบบ`,
+        409,
+      );
     }
     if (result.reason === 'ALREADY_CLOSED') {
       return apiError(

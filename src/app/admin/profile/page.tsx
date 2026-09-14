@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { useToast } from '@/components/Toast';
+import { ErrorState } from '@/components/DataState';
 import { formatBaht, formatThaiDateTime } from '@/lib/format';
 import {
   UserCircleIcon,
@@ -46,6 +47,7 @@ export default function ProfilePage() {
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<UserProfileData | null>(null);
+  const [loadError, setLoadError] = useState('');
 
   // ข้อมูลฟอร์มชื่อ-นามสกุล
   const [fullName, setFullName] = useState('');
@@ -63,12 +65,15 @@ export default function ProfilePage() {
   /** โหลดข้อมูลโปรไฟล์จาก API */
   async function loadProfile() {
     setLoading(true);
+    setLoadError('');
     const result = await apiFetch<UserProfileData>('/api/admin/users/profile');
     setLoading(false);
     if (result.ok) {
       setData(result.data);
       setFullName(result.data.profile.fullName);
     } else {
+      // เก็บข้อความไว้แสดงบนหน้าจอพร้อมปุ่มลองใหม่ ไม่ใช่แค่ toast ที่หายไปใน 3 วินาที
+      setLoadError(result.message);
       toastError('โหลดข้อมูลไม่สำเร็จ', result.message);
     }
   }
@@ -148,6 +153,10 @@ export default function ProfilePage() {
     } else {
       toastError('เปลี่ยนรหัสผ่านไม่สำเร็จ', result.message);
     }
+  }
+
+  if (!loading && loadError) {
+    return <ErrorState message={loadError} onRetry={loadProfile} />;
   }
 
   if (loading) {
