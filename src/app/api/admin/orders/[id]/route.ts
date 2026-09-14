@@ -34,6 +34,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const order = await queryOne<
     RowDataPacket & {
+      status: string;
       session_status: string;
       total_amount: string;
       order_code: string;
@@ -41,7 +42,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       branch_id: number;
     }
   >(
-    `SELECT o.id, o.order_code, o.total_amount, o.branch_id, s.status AS session_status, t.table_no
+    `SELECT o.id, o.order_code, o.status, o.total_amount, o.branch_id, s.status AS session_status, t.table_no
        FROM orders o
        JOIN table_sessions s ON s.id = o.session_id
        JOIN dining_tables t ON t.id = s.table_id
@@ -86,6 +87,26 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       WHERE id = ?`,
     [status, id],
   );
+
+  // บันทึกว่าใครเปลี่ยนสถานะออเดอร์ใบนี้ ใช้ตรวจย้อนหลังว่าใครรับออเดอร์และใครกดเสิร์ฟ
+  try {
+    await execute(
+      `INSERT INTO order_status_logs
+        (branch_id, order_id, order_code, table_no, from_status, to_status, changed_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        order.branch_id ?? 1,
+        id,
+        order.order_code,
+        order.table_no,
+        order.status,
+        status,
+        auth.user.id,
+      ],
+    );
+  } catch {
+    // หากตารางยังไม่ถูก migrate ในสภาพแวดล้อม dev ให้การทำงานหลักยังดำเนินต่อไปได้
+  }
 
   // บันทึก Cancellation Audit Log ป้องกันการทุจริตเมื่อมีการ Void ออเดอร์ทั้งใบ
   if (status === 'CANCELLED') {

@@ -19,6 +19,12 @@ const PRESET_NOTES = [
   { label: 'ไม่หวาน', value: 'ไม่หวาน' },
 ];
 
+/** ตัวเลือกประเภทออเดอร์ที่ลูกค้ากดเลือกก่อนยืนยันสั่ง */
+const ORDER_TYPE_CHOICES = [
+  { value: 'DINE_IN' as const, label: 'ทานที่ร้าน' },
+  { value: 'TAKEAWAY' as const, label: 'กลับบ้าน' },
+];
+
 /**
  * สลับ/เพิ่ม/ลดข้อความด่วนลงในหมายเหตุของรายการอาหาร
  *
@@ -55,6 +61,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
   const [errorMessage, setErrorMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [tableOpen, setTableOpen] = useState(true);
+  const [orderType, setOrderType] = useState<'DINE_IN' | 'TAKEAWAY'>('DINE_IN');
 
   /** ตรวจว่าโต๊ะเปิดรอบการนั่งอยู่หรือไม่ เพื่อตัดสินใจว่าจะปล่อยให้กดยืนยันได้ไหม */
   const checkSession = useCallback(async () => {
@@ -126,6 +133,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
       method: 'POST',
       body: jsonBody({
         token,
+        orderType,
         items: items.map((item) => ({
           menuItemId: item.menuItemId,
           quantity: item.quantity,
@@ -240,6 +248,28 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
 
       <div className="fixed inset-x-0 bottom-16 z-20 px-4">
         <div className="mx-auto flex max-w-md flex-col gap-2.5 rounded-2xl bg-white border border-zinc-200 p-4 shadow-xl">
+          {/* เลือกว่าจะทานที่ร้านหรือสั่งกลับบ้าน แยกเป็นคนละออเดอร์ */}
+          <div className="grid grid-cols-2 gap-2">
+            {ORDER_TYPE_CHOICES.map((choice) => {
+              const isSelected = orderType === choice.value;
+              return (
+                <button
+                  key={choice.value}
+                  type="button"
+                  onClick={() => setOrderType(choice.value)}
+                  aria-pressed={isSelected}
+                  className={`min-h-[46px] rounded-xl border px-3 text-xs font-bold transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                      : 'border-rule bg-white text-slip-dim hover:bg-slate-50'
+                  }`}
+                >
+                  {choice.label}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="flex items-baseline justify-between">
             <span className="text-xs font-bold text-slip-dim">ยอดเงินรวมสุทธิ</span>
             <span className="num text-xl font-black text-emerald-700">
@@ -272,7 +302,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
           >
             {submitting
               ? 'กำลังส่งไปที่ครัว...'
-              : `ยืนยันสั่งอาหาร (${formatBahtWithSign(cartTotal(items))})`}
+              : `ยืนยันสั่ง${orderType === 'TAKEAWAY' ? 'กลับบ้าน' : 'ทานที่ร้าน'} (${formatBahtWithSign(cartTotal(items))})`}
           </button>
         </div>
       </div>

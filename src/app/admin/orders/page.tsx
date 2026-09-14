@@ -43,6 +43,7 @@ type BoardOrder = {
   branch_address?: string | null;
   branch_phone?: string | null;
   order_code: string;
+  order_type?: string | null;
   status: string;
   total_amount: string;
   created_at: string;
@@ -320,6 +321,7 @@ function OrdersBoardContent() {
     message: '',
   });
   const [checkoutOrder, setCheckoutOrder] = useState<BoardOrder | null>(null);
+  const [unservedAcknowledged, setUnservedAcknowledged] = useState(false);
   const [payMethod, setPayMethod] = useState('CASH');
   const [cashTendered, setCashTendered] = useState<string>('');
   const [checkingOut, setCheckingOut] = useState(false);
@@ -603,6 +605,7 @@ function OrdersBoardContent() {
     });
     setCheckoutOrder(null);
     setCashTendered('');
+    setUnservedAcknowledged(false);
     setPrintModalOpen(true);
     load(false);
   }
@@ -736,6 +739,11 @@ function OrdersBoardContent() {
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-xs text-slip">โต๊ะ {order.table_no}</span>
+                {order.order_type === 'TAKEAWAY' && (
+                  <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">
+                    กลับบ้าน
+                  </span>
+                )}
                 {order.branch_name && (
                   <span className="rounded bg-zinc-100 px-1 py-0.5 text-[9px] font-semibold text-zinc-600">
                     {order.branch_name}
@@ -912,6 +920,7 @@ function OrdersBoardContent() {
                   setCheckoutOrder(order);
                   setPayMethod('CASH');
                   setCashTendered('');
+                  setUnservedAcknowledged(false);
                 }}
                 className="min-h-[36px] rounded-xl border border-emerald-600 bg-emerald-50 px-3 font-bold text-xs text-emerald-800 hover:bg-emerald-600 hover:text-white transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
               >
@@ -1449,6 +1458,7 @@ function OrdersBoardContent() {
         onClose={() => {
           setCheckoutOrder(null);
           setCashTendered('');
+          setUnservedAcknowledged(false);
         }}
       >
         {checkoutOrder && (() => {
@@ -1456,6 +1466,11 @@ function OrdersBoardContent() {
           const sessionOrderIds = new Set(sessionOrders.map((o) => o.id));
           const sessionItems = items.filter((i) => sessionOrderIds.has(i.order_id) && i.status !== 'CANCELLED');
           const checkoutTotal = sessionItems.reduce((sum, i) => sum + Number(i.unit_price) * i.quantity, 0);
+
+          // รายการที่ครัวยังทำค้างอยู่ ปิดบิลไปแล้วจะแก้ไม่ได้อีก จึงต้องเตือนก่อน
+          const unservedItems = sessionItems.filter(
+            (i) => i.status === 'PENDING' || i.status === 'PREPARING',
+          );
 
           const tenderNum = parseFloat(cashTendered) || 0;
           const isShort = payMethod === 'CASH' && cashTendered !== '' && tenderNum < checkoutTotal;
@@ -1476,6 +1491,62 @@ function OrdersBoardContent() {
                   ฿{formatBaht(checkoutTotal)}
                 </span>
               </div>
+
+              {/* เตือนพนักงานเมื่อยังมีอาหารค้างไม่เสิร์ฟ */}
+              {unservedItems.length > 0 && (
+                <div className="flex flex-col gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3.5">
+                  <p className="font-bold text-xs text-amber-900">
+                    ยังมีอาหารค้างไม่เสิร์ฟ {unservedItems.length} รายการ
+                    กรุณาแจ้งลูกค้าก่อนเก็บเงิน
+                  </p>
+                  <ul className="flex flex-col gap-1.5">
+                    {unservedItems.map((item) => {
+                      const itemOrder = sessionOrders.find((o) => o.id === item.order_id);
+                      const itemStatus = STATUS_LABELS[item.status] ?? STATUS_LABELS.PENDING;
+                      return (
+                        <li
+                          key={item.id}
+                          className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5"
+                        >
+                          <span className="num shrink-0 text-[11px] font-bold text-slip-dim">
+                            ×{item.quantity}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slip">
+                            {item.item_name}
+                          </span>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${itemStatus.className}`}>
+                            {itemStatus.label}
+                          </span>
+                          {itemOrder && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // ปิด modal ปิดบิลก่อน แล้วเปิดหน้าระบุเหตุผลการยกเลิก
+                                setCheckoutOrder(null);
+                                setCashTendered('');
+                                setUnservedAcknowledged(false);
+                                setCancelItemTarget({ item, order: itemOrder });
+                              }}
+                              className="shrink-0 rounded-lg border border-void/40 px-2 py-1 text-[11px] font-bold text-void hover:bg-void/10 transition-colors cursor-pointer"
+                            >
+                              ลูกค้าไม่รับแล้ว
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <label className="flex items-start gap-2 text-xs font-semibold text-amber-900 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={unservedAcknowledged}
+                      onChange={(e) => setUnservedAcknowledged(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-amber-600"
+                    />
+                    <span>แจ้งลูกค้าแล้วและลูกค้ายืนยันชำระเงินทั้งที่อาหารยังไม่ครบ</span>
+                  </label>
+                </div>
+              )}
 
               <SelectField
                 id="checkout-method"
@@ -1594,6 +1665,7 @@ function OrdersBoardContent() {
                   onClick={() => {
                     setCheckoutOrder(null);
                     setCashTendered('');
+                    setUnservedAcknowledged(false);
                   }}
                   className="min-h-[44px] rounded-lg bg-char px-4 text-xs font-semibold text-slip hover:bg-zinc-200 transition-colors"
                 >
@@ -1602,7 +1674,11 @@ function OrdersBoardContent() {
                 <button
                   type="button"
                   onClick={handleCheckout}
-                  disabled={checkingOut || !isCashValid}
+                  disabled={
+                    checkingOut ||
+                    !isCashValid ||
+                    (unservedItems.length > 0 && !unservedAcknowledged)
+                  }
                   className="min-h-[44px] rounded-lg bg-emerald-600 px-5 font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
                 >
                   {checkingOut ? 'กำลังปิดบิล…' : 'ยืนยันปิดบิล'}

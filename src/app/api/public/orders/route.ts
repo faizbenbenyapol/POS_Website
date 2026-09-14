@@ -29,6 +29,7 @@ type PricedItem = {
 type OrderRow = RowDataPacket & {
   id: number;
   order_code: string;
+  order_type: string;
   status: string;
   total_amount: string;
   created_at: string;
@@ -174,8 +175,15 @@ export async function POST(request: NextRequest) {
       );
 
       const [orderResult] = await conn.execute<ResultSetHeader>(
-        'INSERT INTO orders (session_id, branch_id, order_code, status, total_amount) VALUES (?, ?, ?, ?, ?)',
-        [session.session.sessionId, branchId, orderCode, 'PENDING', total],
+        'INSERT INTO orders (session_id, branch_id, order_code, order_type, status, total_amount) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          session.session.sessionId,
+          branchId,
+          orderCode,
+          parsed.data.orderType,
+          'PENDING',
+          total,
+        ],
       );
 
       for (const item of priced) {
@@ -231,7 +239,7 @@ export async function GET(request: NextRequest) {
     }
 
     const orders = await query<OrderRow>(
-      `SELECT id, order_code, status, total_amount, created_at
+      `SELECT id, order_code, order_type, status, total_amount, created_at
          FROM orders WHERE session_id = ? ORDER BY id`,
       [found.sessionId],
     );

@@ -11,6 +11,7 @@ import { formatBaht, formatBahtWithSign, formatThaiTime } from '@/lib/format';
 type Order = {
   id: number;
   order_code: string;
+  order_type?: string | null;
   status: string;
   total_amount: string;
   created_at: string;
@@ -120,7 +121,19 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
       {orders.map((order, index) => (
         <section key={order.id} className="lm-card overflow-hidden">
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-rule bg-char px-4 py-3">
-            <p className="font-bold text-sm text-slip">ใบสั่งที่ {index + 1}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-bold text-sm text-slip">ใบสั่งที่ {index + 1}</p>
+              {/* ป้ายประเภทใบสั่ง ลูกค้าจะได้รู้ว่าใบไหนสั่งกลับบ้าน */}
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  order.order_type === 'TAKEAWAY'
+                    ? 'bg-orange-100 text-orange-700'
+                    : 'bg-emerald-50 text-emerald-700'
+                }`}
+              >
+                {order.order_type === 'TAKEAWAY' ? 'กลับบ้าน' : 'ทานที่ร้าน'}
+              </span>
+            </div>
             <p className="num text-xs font-medium text-slip-dim">
               {order.order_code} · {formatThaiTime(order.created_at)}
             </p>

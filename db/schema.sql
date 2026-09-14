@@ -19,6 +19,7 @@ USE pos_qr;
 DROP TABLE IF EXISTS ticket_replies;
 DROP TABLE IF EXISTS tickets;
 DROP TABLE IF EXISTS cancellation_audit_logs;
+DROP TABLE IF EXISTS order_status_logs;
 DROP TABLE IF EXISTS branch_menu_availability;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS order_items;
@@ -148,6 +149,7 @@ CREATE TABLE orders (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   branch_id    INT           NOT NULL DEFAULT 1,
   session_id   INT           NOT NULL,
+  order_type   ENUM('DINE_IN','TAKEAWAY') NOT NULL DEFAULT 'DINE_IN',
   order_code   VARCHAR(12)   NOT NULL UNIQUE,
   status       ENUM('PENDING','PREPARING','SERVED','CANCELLED') NOT NULL DEFAULT 'PENDING',
   total_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -170,6 +172,23 @@ CREATE TABLE order_items (
   status       ENUM('PENDING','PREPARING','SERVED','CANCELLED') NOT NULL DEFAULT 'PENDING',
   FOREIGN KEY (order_id)     REFERENCES orders(id) ON DELETE CASCADE,
   FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- บันทึกการเปลี่ยนสถานะออเดอร์ ใช้ตรวจว่าใครรับออเดอร์และใครกดเสิร์ฟ
+CREATE TABLE order_status_logs (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  branch_id   INT NOT NULL DEFAULT 1,
+  order_id    INT NOT NULL,
+  order_code  VARCHAR(12) NOT NULL,
+  table_no    VARCHAR(10) NOT NULL,
+  from_status ENUM('PENDING','PREPARING','SERVED','CANCELLED') NULL,
+  to_status   ENUM('PENDING','PREPARING','SERVED','CANCELLED') NOT NULL,
+  changed_by  INT NOT NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_order_logs_branch_created (branch_id, created_at),
+  INDEX idx_order_logs_user (changed_by),
+  FOREIGN KEY (order_id)   REFERENCES orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (changed_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- การชำระเงินเมื่อปิดบิล

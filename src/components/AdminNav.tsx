@@ -14,6 +14,7 @@ import {
   LogoutIcon,
   BuildingIcon,
   ReceiptIcon,
+  ClockIcon,
   UserCircleIcon,
 } from '@/components/Icons';
 import BranchSwitcher from '@/components/BranchSwitcher';
@@ -29,6 +30,7 @@ const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ clas
   { href: '/admin/tickets', label: 'เรื่องแจ้งปัญหา', icon: TicketIcon, adminOnly: false },
   { href: '/admin/branches', label: 'จัดการสาขา', icon: BuildingIcon, adminOnly: true },
   { href: '/admin/users', label: 'ผู้ใช้ระบบ', icon: UsersIcon, adminOnly: true },
+  { href: '/admin/logs', label: 'บันทึกการทำงาน', icon: ClockIcon, adminOnly: true },
   { href: '/admin/profile', label: 'ข้อมูลส่วนตัว', icon: UserCircleIcon, adminOnly: false },
 ];
 

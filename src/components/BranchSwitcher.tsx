@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SessionUser } from '@/lib/auth';
-import { BuildingIcon, GlobeAltIcon, ChevronDownIcon } from '@/components/Icons';
+import { BuildingIcon, GlobeAltIcon } from '@/components/Icons';
+import CustomSelect, { type SelectOption } from '@/components/Select';
 
 type BranchOption = {
   id: number;
@@ -56,9 +57,14 @@ export default function BranchSwitcher({ user }: { user: SessionUser }) {
     );
   }
 
-  async function handleSwitch(e: React.ChangeEvent<HTMLSelectElement>) {
-    const val = e.target.value;
-    const newId = val === 'all' || val === '0' ? null : Number(val);
+  /**
+   * สลับสาขาที่กำลังดูอยู่ แล้วรีโหลดหน้าเพื่อให้ข้อมูลทุกส่วนอิงสาขาใหม่
+   *
+   * @param value - ค่าจาก dropdown: 'all' คือดูภาพรวมทุกสาขา นอกนั้นเป็น id สาขาในรูป string
+   * ผลข้างเคียง: ยิง POST ไปตั้งค่า cookie สาขาที่ฝั่งเซิร์ฟเวอร์ และรีโหลดหน้าเมื่อสำเร็จ
+   */
+  async function handleSwitch(value: string) {
+    const newId = value === 'all' || value === '0' ? null : Number(value);
     setLoading(true);
     try {
       const res = await fetch('/api/admin/branches/switch', {
@@ -75,31 +81,34 @@ export default function BranchSwitcher({ user }: { user: SessionUser }) {
     }
   }
 
+  // รายการตัวเลือกสาขา: ภาพรวมทุกสาขาไว้บนสุด ตามด้วยสาขาที่เปิดใช้งาน
+  const options: SelectOption[] = [
+    {
+      value: 'all',
+      label: 'ทุกสาขา (ภาพรวมองค์กร)',
+      icon: <GlobeAltIcon className="w-4 h-4 text-blue-600" />,
+    },
+    ...branches.map((b) => ({
+      value: String(b.id),
+      label: `${b.name} (${b.code})`,
+      icon: <BuildingIcon className="w-4 h-4 text-green-600" />,
+    })),
+  ];
+
   return (
-    <div className="relative">
-      <label htmlFor="branch-switcher-select" className="sr-only">เลือกสาขา</label>
-      <div className="flex items-center gap-1.5 rounded-lg border border-rule bg-zinc-50 px-2 py-1 text-xs transition-colors hover:bg-zinc-100/80">
-        {activeBranchId ? (
-          <BuildingIcon className="w-3.5 h-3.5 text-green-600 shrink-0" />
+    <CustomSelect
+      id="branch-switcher-select"
+      value={activeBranchId === null ? 'all' : String(activeBranchId)}
+      onChange={handleSwitch}
+      options={options}
+      disabled={loading}
+      icon={
+        activeBranchId ? (
+          <BuildingIcon className="w-4 h-4 text-green-600" />
         ) : (
-          <GlobeAltIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-        )}
-        <select
-          id="branch-switcher-select"
-          value={activeBranchId ?? 'all'}
-          onChange={handleSwitch}
-          disabled={loading}
-          className="w-full bg-transparent font-medium text-zinc-700 focus:outline-none cursor-pointer py-0.5 truncate appearance-none pr-4"
-        >
-          <option value="all">ทุกสาขา (ภาพรวมองค์กร)</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name} ({b.code})
-            </option>
-          ))}
-        </select>
-        <ChevronDownIcon className="w-3 h-3 text-zinc-400 pointer-events-none absolute right-2" />
-      </div>
-    </div>
+          <GlobeAltIcon className="w-4 h-4 text-blue-600" />
+        )
+      }
+    />
   );
 }

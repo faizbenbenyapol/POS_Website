@@ -16,6 +16,7 @@ export type BoardOrderRow = RowDataPacket & {
   branch_address: string | null;
   branch_phone: string | null;
   order_code: string;
+  order_type: string;
   status: string;
   total_amount: string;
   created_at: string;
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
     const [orders, items] = await Promise.all([
       query<BoardOrderRow>(
         `SELECT o.id, o.branch_id, b.name AS branch_name, b.address AS branch_address, b.phone AS branch_phone,
-                o.order_code, o.status, o.total_amount, o.created_at, o.session_id, s.status AS session_status,
+                o.order_code, o.order_type, o.status, o.total_amount, o.created_at, o.session_id, s.status AS session_status,
                 t.table_no
            FROM orders o
            JOIN table_sessions s ON s.id = o.session_id
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
             AND (? = '' OR o.status = ?)
             AND (? = '' OR t.table_no = ?)
             AND o.created_at >= ? AND o.created_at < ?
-          ORDER BY o.id DESC
+          ORDER BY (o.order_type = 'DINE_IN') DESC, o.id DESC
           LIMIT 100`,
         [branchId, branchId, status, status, tableNo, tableNo, range.startSql, range.endSql],
       ),

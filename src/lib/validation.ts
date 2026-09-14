@@ -136,12 +136,16 @@ const MAX_QUANTITY_PER_ITEM = 99;
 /** จำนวนรายการสูงสุดต่อ 1 ออเดอร์ กันการยิงข้อมูลก้อนใหญ่เข้ามา */
 const MAX_ITEMS_PER_ORDER = 50;
 
+/** ประเภทออเดอร์ที่ลูกค้าเลือกได้ ตรงกับ ENUM order_type ในฐานข้อมูล */
+export const ORDER_TYPES = ['DINE_IN', 'TAKEAWAY'] as const;
+
 /**
  * ตรวจตะกร้าที่ลูกค้ากดยืนยันสั่ง
  * ตรวจ token ที่นี่ด้วยเพราะเป็นสิ่งเดียวที่ยืนยันว่าคนสั่งนั่งอยู่โต๊ะไหน
  */
 export const createOrderSchema = z.object({
   token: z.string().trim().length(32, 'ลิงก์โต๊ะไม่ถูกต้อง กรุณาสแกน QR บนโต๊ะอีกครั้ง'),
+  orderType: z.enum(ORDER_TYPES).default('DINE_IN'),
   items: z
     .array(
       z.object({
