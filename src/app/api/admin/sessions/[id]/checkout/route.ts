@@ -6,6 +6,14 @@ import { withTransaction } from '@/lib/db';
 import { checkoutSchema, firstErrorMessage } from '@/lib/validation';
 import { findSettlement } from '@/lib/settlement';
 import { businessDayRange, getBusinessCutoffHour } from '@/lib/format';
+import {
+  calculateBill,
+  validatePayments,
+  type BillTotals,
+  type BranchMoneySettings,
+  type DiscountInput,
+  type PaymentInput,
+} from '@/lib/billing';
 
 /** พารามิเตอร์เส้นทางของ Next.js 15 เป็น Promise จึงต้อง await ก่อนใช้ */
 type RouteContext = { params: Promise<{ id: string }> };
@@ -16,38 +24,84 @@ type CheckoutFailure =
   | 'ALREADY_CLOSED'
   | 'NOTHING_TO_PAY'
   | 'FORBIDDEN'
-  | 'DAY_CLOSED';
+  | 'DAY_CLOSED'
+  | 'DISCOUNT_FORBIDDEN'
+  | 'DISCOUNT_NO_REASON'
+  | 'PAYMENT_MISMATCH';
+
+/** แถวรายการอาหารเท่าที่การคิดเงินต้องใช้ */
+type BillItemRow = RowDataPacket & {
+  unit_price: string;
+  quantity: number;
+  status: string;
+};
 
 /**
- * รวมยอดที่ต้องเก็บของรอบการนั่งหนึ่ง โดยไม่นับรายการที่ถูกยกเลิก
+ * ดึงรายการอาหารที่ต้องคิดเงินของรอบการนั่ง ไม่รวมรายการที่ถูกยกเลิก
  * คิดจาก order_items โดยตรง ไม่ใช่จาก orders.total_amount เพราะยอดในใบสั่ง
  * เป็นค่าที่คำนวณไว้ล่วงหน้า ส่วนเงินที่เก็บจริงต้องมาจากของที่เสิร์ฟจริง
  *
  * @param conn - connection ที่อยู่ใน transaction เดียวกับการปิดบิล
  * @param sessionId - รหัสรอบการนั่ง
- * @returns ยอดรวมเป็นตัวเลขบาท
+ * @returns รายการอาหารพร้อมราคาต่อหน่วยและจำนวน
  */
-async function sumSessionTotal(conn: PoolConnection, sessionId: number): Promise<number> {
-  const [rows] = await conn.execute<(RowDataPacket & { total: string | null })[]>(
-    `SELECT COALESCE(SUM(oi.unit_price * oi.quantity), 0) AS total
+async function loadBillItems(conn: PoolConnection, sessionId: number): Promise<BillItemRow[]> {
+  const [rows] = await conn.execute<BillItemRow[]>(
+    `SELECT oi.unit_price, oi.quantity, oi.status
        FROM order_items oi
        JOIN orders o ON o.id = oi.order_id
       WHERE o.session_id = ? AND oi.status <> 'CANCELLED'`,
     [sessionId],
   );
-  return Number(rows[0]?.total ?? 0);
+  return rows;
+}
+
+/**
+ * อ่านค่าตั้งเรื่อง VAT และค่าบริการของสาขา เพื่อใช้คิดบิลของรอบการนั่งนี้
+ *
+ * @param conn - connection ที่อยู่ใน transaction เดียวกับการปิดบิล
+ * @param branchId - รหัสสาขาของรอบการนั่ง
+ * @returns ค่าตั้งเรื่องเงินของสาขา
+ */
+async function loadBranchMoneySettings(
+  conn: PoolConnection,
+  branchId: number,
+): Promise<BranchMoneySettings & { cutoffHour: number }> {
+  const [rows] = await conn.execute<
+    (RowDataPacket & {
+      business_day_cutoff_hour: number;
+      vat_rate: string;
+      vat_inclusive: number;
+      service_charge_rate: string;
+    })[]
+  >(
+    `SELECT business_day_cutoff_hour, vat_rate, vat_inclusive, service_charge_rate
+       FROM branches WHERE id = ?`,
+    [branchId],
+  );
+  const row = rows[0];
+  return {
+    cutoffHour: Number(row?.business_day_cutoff_hour ?? getBusinessCutoffHour()),
+    vatRate: Number(row?.vat_rate ?? 7),
+    vatInclusive: Number(row?.vat_inclusive ?? 1) === 1,
+    serviceChargeRate: Number(row?.service_charge_rate ?? 0),
+  };
 }
 
 /**
  * ปิดบิลของรอบการนั่ง บันทึกการชำระเงินและปิด session ให้โต๊ะกลับมาว่าง
  * ทำใน transaction เดียวเพื่อไม่ให้เกิดกรณีบันทึกเงินแล้วแต่ session ยังเปิดค้าง
  *
+ * ยอดบิลทั้งใบ (ส่วนลด ค่าบริการ VAT) คำนวณใหม่ที่เซิร์ฟเวอร์เสมอ
+ * ไม่เชื่อตัวเลขที่หน้าจอส่งมา หน้าจอส่งมาเฉพาะ "เจตนา" คือส่วนลดที่ให้และเงินที่รับ
+ * แล้วเก็บผลลัพธ์แช่แข็งไว้ในแถว table_sessions เพื่อไม่ให้ยอดย้อนหลังขยับตามราคาเมนูที่แก้ทีหลัง
+ *
  * ปิดแล้วห้ามแก้ออเดอร์ของ session นั้นอีก ตามกฎในหัวข้อ 10
  * การกันไว้ที่ทั้ง endpoint เปลี่ยนสถานะออเดอร์และรายการอาหาร
  *
- * @param request - คำขอที่มี body เป็น JSON { method }
+ * @param request - คำขอที่มี body เป็น JSON { payments, discount }
  * @param context - พารามิเตอร์เส้นทางที่มี id ของรอบการนั่ง
- * @returns ยอดที่เก็บและวิธีชำระ หรือ error พร้อมข้อความไทยบอกสาเหตุ
+ * @returns ยอดบิลที่คิดได้ เงินทอน และรายการชำระเงิน หรือ error พร้อมข้อความไทยบอกสาเหตุ
  */
 export async function POST(request: NextRequest, context: RouteContext) {
   const auth = await requireStaff();
@@ -63,8 +117,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
+  const discountInput: DiscountInput = parsed.data.discount
+    ? {
+        type: parsed.data.discount.type,
+        value: parsed.data.discount.value,
+        reason: parsed.data.discount.reason ?? null,
+      }
+    : { type: 'NONE', value: 0, reason: null };
+
+  const paymentInputs: PaymentInput[] = parsed.data.payments.map((p) => ({
+    method: p.method,
+    amount: p.amount,
+    receivedAmount: p.receivedAmount ?? null,
+  }));
+
   const result = await withTransaction<
-    { ok: true; total: number } | { ok: false; reason: CheckoutFailure; zNumber?: number }
+    | { ok: true; bill: BillTotals; changeDue: number }
+    | { ok: false; reason: CheckoutFailure; zNumber?: number; message?: string }
   >(async (conn) => {
     const [sessions] = await conn.execute<(RowDataPacket & { status: string; branch_id: number })[]>(
       'SELECT status, branch_id FROM table_sessions WHERE id = ? FOR UPDATE',
@@ -78,41 +147,115 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     if (session.status === 'CLOSED') return { ok: false, reason: 'ALREADY_CLOSED' };
 
+    // ส่วนลดเป็นช่องทางทุจริตเช่นเดียวกับการยกเลิกบิล จึงสงวนสิทธิ์ให้เจ้าของร้านเท่านั้น
+    // และบังคับระบุเหตุผลทุกครั้ง ให้สอดคล้องกับนโยบายของการยกเลิกออเดอร์ทั้งใบ
+    if (discountInput.type !== 'NONE' && discountInput.value > 0) {
+      if (auth.user.role !== 'ADMIN') {
+        return { ok: false, reason: 'DISCOUNT_FORBIDDEN' };
+      }
+      if (!discountInput.reason) {
+        return { ok: false, reason: 'DISCOUNT_NO_REASON' };
+      }
+    }
+
+    const branchOfSession = session.branch_id ?? 1;
+    const settings = await loadBranchMoneySettings(conn, branchOfSession);
+
     // วันทำการที่ปิดยอด (Z-Report) ไปแล้ว ห้ามรับเงินเพิ่มอีก
     // ไม่อย่างนั้นรายงานที่แช่แข็งไว้จะไม่ตรงกับเงินที่เก็บได้จริง
-    const branchOfSession = session.branch_id ?? 1;
-    const [branchRows] = await conn.execute<
-      (RowDataPacket & { business_day_cutoff_hour: number })[]
-    >('SELECT business_day_cutoff_hour FROM branches WHERE id = ?', [branchOfSession]);
-    const cutoffHour = Number(
-      branchRows[0]?.business_day_cutoff_hour ?? getBusinessCutoffHour(),
-    );
     const settled = await findSettlement(
       branchOfSession,
-      businessDayRange(undefined, cutoffHour).businessDate,
+      businessDayRange(undefined, settings.cutoffHour).businessDate,
       conn,
     );
     if (settled) {
       return { ok: false, reason: 'DAY_CLOSED', zNumber: Number(settled.z_number) };
     }
 
-    const total = await sumSessionTotal(conn, sessionId);
-    if (total <= 0) return { ok: false, reason: 'NOTHING_TO_PAY' };
+    const items = await loadBillItems(conn, sessionId);
+    const bill = calculateBill(
+      items.map((i) => ({ unit_price: i.unit_price, quantity: i.quantity, status: i.status })),
+      settings,
+      discountInput,
+    );
+    if (bill.grandTotal <= 0) return { ok: false, reason: 'NOTHING_TO_PAY' };
 
+    const paymentCheck = validatePayments(paymentInputs, bill.grandTotal);
+    if (!paymentCheck.ok) {
+      return { ok: false, reason: 'PAYMENT_MISMATCH', message: paymentCheck.message };
+    }
+
+    for (const payment of paymentInputs) {
+      const received =
+        payment.method === 'CASH' ? (payment.receivedAmount ?? payment.amount) : null;
+      const change =
+        payment.method === 'CASH' ? Math.max(0, Number(received) - payment.amount) : 0;
+      await conn.execute(
+        `INSERT INTO payments
+           (session_id, branch_id, method, total_amount, received_amount, change_amount, received_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          sessionId,
+          branchOfSession,
+          payment.method,
+          payment.amount,
+          received,
+          change,
+          auth.user.id,
+        ],
+      );
+    }
+
+    // แช่แข็งยอดบิลไว้กับรอบการนั่ง เปิดดูย้อนหลังแล้วตัวเลขจะไม่ขยับอีก
     await conn.execute(
-      'INSERT INTO payments (session_id, branch_id, method, total_amount, received_by) VALUES (?, ?, ?, ?, ?)',
-      [sessionId, session.branch_id ?? 1, parsed.data.method, total, auth.user.id],
+      `UPDATE table_sessions
+          SET status = 'CLOSED', closed_at = NOW(), closed_by = ?,
+              subtotal_amount = ?, discount_type = ?, discount_value = ?, discount_amount = ?,
+              discount_reason = ?, discount_by = ?,
+              service_charge_rate = ?, service_charge_amount = ?,
+              vat_rate = ?, vat_inclusive = ?, vat_amount = ?, grand_total = ?
+        WHERE id = ?`,
+      [
+        auth.user.id,
+        bill.subtotal,
+        bill.discountType,
+        bill.discountValue,
+        bill.discountAmount,
+        bill.discountAmount > 0 ? discountInput.reason : null,
+        bill.discountAmount > 0 ? auth.user.id : null,
+        bill.serviceChargeRate,
+        bill.serviceChargeAmount,
+        bill.vatRate,
+        bill.vatInclusive ? 1 : 0,
+        bill.vatAmount,
+        bill.grandTotal,
+        sessionId,
+      ],
     );
-    await conn.execute(
-      "UPDATE table_sessions SET status = 'CLOSED', closed_at = NOW(), closed_by = ? WHERE id = ?",
-      [auth.user.id, sessionId],
-    );
-    return { ok: true, total };
+
+    return { ok: true, bill, changeDue: paymentCheck.changeDue };
   });
 
   if (!result.ok) {
     if (result.reason === 'FORBIDDEN') {
       return apiError(ERROR_CODES.FORBIDDEN, 'ไม่มีสิทธิ์ปิดบิลของสาขาอื่น', 403);
+    }
+    if (result.reason === 'DISCOUNT_FORBIDDEN') {
+      return apiError(
+        ERROR_CODES.FORBIDDEN,
+        'การให้ส่วนลดสงวนสิทธิ์เฉพาะเจ้าของร้าน (ADMIN) หากต้องลดราคาบิลนี้ กรุณาแจ้งผู้จัดการ',
+        403,
+      );
+    }
+    if (result.reason === 'DISCOUNT_NO_REASON') {
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        'ต้องระบุเหตุผลของส่วนลดทุกครั้ง เพื่อให้ตรวจสอบย้อนหลังได้',
+        400,
+      );
+    }
+    if (result.reason === 'PAYMENT_MISMATCH') {
+      return apiError(ERROR_CODES.VALIDATION_ERROR, result.message ?? 'ยอดชำระไม่ตรงกับยอดบิล', 409);
     }
     if (result.reason === 'DAY_CLOSED') {
       return apiError(
@@ -138,5 +281,67 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบรอบการนั่งนี้ กรุณารีเฟรชกระดานใหม่', 404);
   }
 
-  return apiOk({ sessionId, method: parsed.data.method, total: result.total }, 201);
+  return apiOk(
+    {
+      sessionId,
+      bill: result.bill,
+      changeDue: result.changeDue,
+      payments: paymentInputs,
+      // คงชื่อฟิลด์ total ไว้เพื่อให้ข้อความแจ้งผลบนกระดานออเดอร์อ่านยอดสุทธิได้เหมือนเดิม
+      total: result.bill.grandTotal,
+    },
+    201,
+  );
+}
+
+/**
+ * คืนยอดบิลปัจจุบันของรอบการนั่งแบบพรีวิว ยังไม่บันทึกอะไรลงฐานข้อมูล
+ * หน้าจอปิดบิลเรียกตอนเปิดหน้าต่าง เพื่อให้ได้ค่าตั้ง VAT และค่าบริการของสาขาที่ถูกต้อง
+ * แล้วใช้ calculateBill ตัวเดียวกันคำนวณสดขณะพนักงานพิมพ์ส่วนลด
+ *
+ * @param _request - คำขอ ไม่ได้ใช้พารามิเตอร์ใด
+ * @param context - พารามิเตอร์เส้นทางที่มี id ของรอบการนั่ง
+ * @returns ยอดบิลปัจจุบันและค่าตั้งเรื่องเงินของสาขา
+ */
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const auth = await requireStaff();
+  if (!auth.ok) return authFailureResponse(auth.reason);
+
+  const sessionId = parseId((await context.params).id);
+  if (!sessionId) {
+    return apiError(ERROR_CODES.VALIDATION_ERROR, 'รหัสรอบการนั่งไม่ถูกต้อง กรุณารีเฟรชกระดานใหม่');
+  }
+
+  const preview = await withTransaction<
+    { ok: true; bill: BillTotals; settings: BranchMoneySettings } | { ok: false }
+  >(async (conn) => {
+    const [sessions] = await conn.execute<(RowDataPacket & { branch_id: number })[]>(
+      'SELECT branch_id FROM table_sessions WHERE id = ?',
+      [sessionId],
+    );
+    const session = sessions[0];
+    if (!session) return { ok: false };
+    if (auth.user.branchId && auth.user.branchId !== session.branch_id) return { ok: false };
+
+    const settings = await loadBranchMoneySettings(conn, session.branch_id ?? 1);
+    const items = await loadBillItems(conn, sessionId);
+    const bill = calculateBill(
+      items.map((i) => ({ unit_price: i.unit_price, quantity: i.quantity, status: i.status })),
+      settings,
+    );
+    return {
+      ok: true,
+      bill,
+      settings: {
+        vatRate: settings.vatRate,
+        vatInclusive: settings.vatInclusive,
+        serviceChargeRate: settings.serviceChargeRate,
+      },
+    };
+  });
+
+  if (!preview.ok) {
+    return apiError(ERROR_CODES.NOT_FOUND, 'ไม่พบรอบการนั่งนี้ กรุณารีเฟรชกระดานใหม่', 404);
+  }
+  return apiOk({ sessionId, bill: preview.bill, settings: preview.settings });
 }

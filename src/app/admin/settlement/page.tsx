@@ -260,9 +260,25 @@ export default function DailySettlementPage() {
           <div style="font-size: 12px; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">
             === สรุปยอดขาย (SALES SUMMARY) ===
           </div>
-          <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 900;">
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333;">
+            <span>ยอดค่าอาหารก่อนส่วนลด (GROSS)</span>
+            <span>฿${formatBaht(report.grossSalesAmount)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-top: 2px;">
+            <span>หักส่วนลด (DISCOUNT)</span>
+            <span>-฿${formatBaht(report.discountAmount)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-top: 2px; margin-bottom: 3px;">
+            <span>บวกค่าบริการ (SERVICE)</span>
+            <span>฿${formatBaht(report.serviceChargeAmount)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; border-top: 1px solid #000; padding-top: 3px;">
             <span>ยอดขายสุทธิ (NET SALES)</span>
             <span>฿${formatBaht(report.totalRevenue)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-top: 2px;">
+            <span>ในยอดนี้เป็น VAT</span>
+            <span>฿${formatBaht(report.vatAmount)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 3px;">
             <span>จำนวนบิลที่ชำระแล้ว</span>
@@ -584,12 +600,12 @@ export default function DailySettlementPage() {
               </div>
               {report.closure.countedCash !== null && (
                 <div className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-right">
-                  <p className="text-[11px] font-semibold text-emerald-800">เงินสดที่นับได้จริง</p>
+                  <p className="text-xs font-semibold text-emerald-800">เงินสดที่นับได้จริง</p>
                   <p className="num text-base font-black text-emerald-900">
                     ฿{formatBaht(report.closure.countedCash)}
                   </p>
                   <p
-                    className={`num text-[11px] font-bold ${
+                    className={`num text-xs font-bold ${
                       (report.closure.cashDifference ?? 0) === 0
                         ? 'text-emerald-700'
                         : 'text-red-700'
@@ -627,7 +643,7 @@ export default function DailySettlementPage() {
               <p className="num mt-1 text-2xl font-black text-emerald-700">
                 ฿{formatBaht(report.totalRevenue)}
               </p>
-              <p className="mt-1 text-[11px] text-slip-dim">
+              <p className="mt-1 text-xs text-slip-dim">
                 จาก {report.totalBills} บิล (เฉลี่ย ฿{formatBaht(report.avgBillAmount)}/บิล)
               </p>
             </div>
@@ -641,7 +657,7 @@ export default function DailySettlementPage() {
               <p className="num mt-1 text-2xl font-black text-emerald-900">
                 ฿{formatBaht(report.cashTotal)}
               </p>
-              <p className="mt-1 text-[11px] text-emerald-700 font-medium">
+              <p className="mt-1 text-xs text-emerald-700 font-medium">
                 {report.paymentMethods.find((m) => m.method === 'CASH')?.count || 0} บิล (ต้องตรวจนับจริง)
               </p>
             </div>
@@ -652,7 +668,7 @@ export default function DailySettlementPage() {
               <p className="num mt-1 text-2xl font-black text-slip">
                 ฿{formatBaht(report.transferTotal)}
               </p>
-              <p className="mt-1 text-[11px] text-slip-dim">
+              <p className="mt-1 text-xs text-slip-dim">
                 {report.paymentMethods.find((m) => m.method === 'TRANSFER')?.count || 0} บิล
               </p>
             </div>
@@ -666,7 +682,7 @@ export default function DailySettlementPage() {
               <p className="num mt-1 text-2xl font-black text-slip">
                 ฿{formatBaht(report.cardTotal)}
               </p>
-              <p className="mt-1 text-[11px] text-slip-dim">
+              <p className="mt-1 text-xs text-slip-dim">
                 {report.paymentMethods.find((m) => m.method === 'CARD')?.count || 0} บิล
               </p>
             </div>
@@ -677,9 +693,53 @@ export default function DailySettlementPage() {
               <p className="num mt-1 text-2xl font-black text-red-700">
                 -฿{formatBaht(report.totalVoidAmount)}
               </p>
-              <p className="mt-1 text-[11px] text-red-600 font-medium">
+              <p className="mt-1 text-xs text-red-600 font-medium">
                 {report.totalVoidCount} รายการที่ถูกตัดออก
               </p>
+            </div>
+          </div>
+
+          {/* องค์ประกอบของยอดขาย ต้องกระทบยอดจากค่าอาหารลงมาถึงยอดสุทธิได้ */}
+          <div className="rounded-2xl border border-rule bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-rule pb-2">
+              <h2 className="text-sm font-bold text-slip">องค์ประกอบของยอดขาย (Sales Reconciliation)</h2>
+              {report.discountedBillCount > 0 && (
+                <span className="rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-xs font-bold text-red-700">
+                  มีส่วนลด {report.discountedBillCount} บิล
+                </span>
+              )}
+            </div>
+            <div className="mt-2.5 flex flex-col gap-1.5 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-slip-dim">ยอดรวมค่าอาหารก่อนส่วนลด</span>
+                <span className="num font-semibold text-slip">
+                  ฿{formatBaht(report.grossSalesAmount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-red-700">หักส่วนลดที่อนุมัติ</span>
+                <span className="num font-semibold text-red-700">
+                  -฿{formatBaht(report.discountAmount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slip-dim">บวกค่าบริการ (Service Charge)</span>
+                <span className="num font-semibold text-slip">
+                  ฿{formatBaht(report.serviceChargeAmount)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-rule pt-1.5">
+                <span className="font-bold text-slip">ยอดขายสุทธิที่เก็บเงินได้</span>
+                <span className="num font-black text-emerald-700">
+                  ฿{formatBaht(report.totalRevenue)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slip-dim">ในยอดนี้เป็นภาษีมูลค่าเพิ่ม</span>
+                <span className="num font-semibold text-slip-dim">
+                  ฿{formatBaht(report.vatAmount)}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -807,7 +867,7 @@ export default function DailySettlementPage() {
                           <tr key={`${c.cashierId}-${c.method}-${i}`} className="hover:bg-zinc-50/50">
                             <td className="px-3 py-2 font-medium text-slip">{c.cashierName}</td>
                             <td className="px-3 py-2">
-                              <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[10px] font-medium text-zinc-700">
+                              <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-700">
                                 {c.method}
                               </span>
                             </td>
@@ -898,7 +958,7 @@ export default function DailySettlementPage() {
                   <h3 className="text-sm font-bold text-slip">
                     รายการยกเลิกและมูลค่าสูญเสีย (Void Losses)
                   </h3>
-                  <span className="rounded-md bg-red-50 border border-red-200 px-2 py-0.5 text-[11px] font-bold text-red-700">
+                  <span className="rounded-md bg-red-50 border border-red-200 px-2 py-0.5 text-xs font-bold text-red-700">
                     รวม {report.totalVoidCount} รายการ
                   </span>
                 </div>
@@ -912,7 +972,7 @@ export default function DailySettlementPage() {
                       <div key={v.reason} className="flex items-center justify-between p-3 hover:bg-zinc-50/60">
                         <div>
                           <span className="font-semibold text-slip">{v.reason}</span>
-                          <p className="text-[11px] text-slip-dim mt-0.5">จำนวน {v.count} ครั้ง</p>
+                          <p className="text-xs text-slip-dim mt-0.5">จำนวน {v.count} ครั้ง</p>
                         </div>
                         <div className="text-right">
                           <span className="font-bold text-red-600 num">-฿{formatBaht(v.total)}</span>

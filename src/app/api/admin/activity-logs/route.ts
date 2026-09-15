@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         : Promise.resolve([]),
       wantCheckouts
         ? query<PaymentLogRow>(
-            `SELECT p.id, p.method, p.total_amount, p.created_at,
+            `SELECT p.id, p.method, p.total_amount, p.paid_at AS created_at,
                     u.full_name AS actor_name, b.name AS branch_name, t.table_no
                FROM payments p
                JOIN users u ON u.id = p.received_by
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
                JOIN dining_tables t ON t.id = s.table_id
                LEFT JOIN branches b ON b.id = p.branch_id
               WHERE (? IS NULL OR p.branch_id = ?)
-                AND p.created_at >= ? AND p.created_at < ?
+                AND p.paid_at >= ? AND p.paid_at < ?
               ORDER BY p.id DESC
               LIMIT ${MAX_LOGS}`,
             [branchId, branchId, range.startSql, range.endSql],

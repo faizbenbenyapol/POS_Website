@@ -3,6 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
 import { execute, queryOne } from '@/lib/db';
+import { restoreStock } from '@/lib/stock';
 import { orderStatusSchema, firstErrorMessage } from '@/lib/validation';
 
 /** พารามิเตอร์เส้นทางของ Next.js 15 เป็น Promise จึงต้อง await ก่อนใช้ */
@@ -37,15 +38,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     RowDataPacket & {
       order_id: number;
       order_code: string;
+      menu_item_id: number;
       item_name: string;
       unit_price: string;
       quantity: number;
+      item_status: string;
       session_status: string;
       table_no: string;
       branch_id: number;
     }
   >(
-    `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity,
+    `SELECT oi.id, oi.order_id, oi.menu_item_id, oi.item_name, oi.unit_price, oi.quantity,
+            oi.status AS item_status,
             o.order_code, o.branch_id, s.status AS session_status, t.table_no
        FROM order_items oi
        JOIN orders o ON o.id = oi.order_id
@@ -76,6 +80,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (parsed.data.status === 'CANCELLED') {
     const reason = parsed.data.reason?.trim() || 'ไม่ระบุเหตุผล';
     const amount = Number(found.unit_price) * found.quantity;
+
+    // คืนจำนวนคงเหลือให้ครัวเฉพาะครั้งแรกที่ยกเลิก กดซ้ำรายการที่ยกเลิกไปแล้วต้องไม่คืนซ้ำ
+    if (found.item_status !== 'CANCELLED') {
+      await restoreStock(
+        found.branch_id ?? 1,
+        [{ menuItemId: found.menu_item_id, quantity: found.quantity }],
+        found.order_id,
+        auth.user.id,
+        `ยกเลิกรายการอาหาร: ${reason}`,
+      );
+    }
+
     try {
       await execute(
         `INSERT INTO cancellation_audit_logs 

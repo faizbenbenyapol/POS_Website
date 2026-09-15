@@ -12,6 +12,8 @@ type MenuRow = RowDataPacket & {
   description: string | null;
   price: string;
   image_url: string | null;
+  /** จำนวนคงเหลือของสาขา null คือไม่จำกัดจำนวน */
+  stock_qty: number | null;
 };
 
 /**
@@ -42,7 +44,8 @@ export async function GET(request: NextRequest) {
       itemsPromise = query<MenuRow>(
         `SELECT m.id, m.category_id, m.name, m.description,
                 COALESCE(bma.custom_price, m.price) AS price,
-                m.image_url
+                m.image_url,
+                bma.stock_qty
            FROM menu_items m
            JOIN categories c ON c.id = m.category_id
            LEFT JOIN branch_menu_availability bma
@@ -50,13 +53,15 @@ export async function GET(request: NextRequest) {
           WHERE c.is_active = 1
             AND m.is_available = 1
             AND COALESCE(bma.is_available, 1) = 1
+            AND (bma.stock_qty IS NULL OR bma.stock_qty > 0)
           ORDER BY c.sort_order, m.name`,
         [branchId],
       );
     } else {
       // เมนูมาตรฐานของ Master Catalog
       itemsPromise = query<MenuRow>(
-        `SELECT m.id, m.category_id, m.name, m.description, m.price, m.image_url
+        `SELECT m.id, m.category_id, m.name, m.description, m.price, m.image_url,
+                NULL AS stock_qty
            FROM menu_items m
            JOIN categories c ON c.id = m.category_id
           WHERE m.is_available = 1 AND c.is_active = 1

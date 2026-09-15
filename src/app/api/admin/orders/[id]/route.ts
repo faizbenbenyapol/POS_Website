@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/lib/api';
 import { requireStaff } from '@/lib/auth';
-import { execute, queryOne } from '@/lib/db';
+import { execute, query, queryOne } from '@/lib/db';
+import { restoreStock } from '@/lib/stock';
 import { orderStatusSchema, firstErrorMessage } from '@/lib/validation';
 
 /** พารามิเตอร์เส้นทางของ Next.js 15 เป็น Promise จึงต้อง await ก่อนใช้ */
@@ -75,6 +76,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
+  // อ่านรายการที่กำลังจะถูกยกเลิกไว้ก่อนอัปเดต เพราะหลังอัปเดตแล้วจะแยกไม่ออกว่า
+  // จานไหนเพิ่งถูกยกเลิกรอบนี้ กับจานไหนถูกยกเลิกไปตั้งแต่ก่อนหน้าและคืนสต๊อกไปแล้ว
+  const itemsToRestore =
+    status === 'CANCELLED'
+      ? await query<RowDataPacket & { menu_item_id: number; quantity: number }>(
+          "SELECT menu_item_id, quantity FROM order_items WHERE order_id = ? AND status <> 'CANCELLED'",
+          [id],
+        )
+      : [];
+
   await execute(
     "UPDATE order_items SET status = ? WHERE order_id = ? AND status <> 'CANCELLED'",
     [status, id],
@@ -111,6 +122,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   // บันทึก Cancellation Audit Log ป้องกันการทุจริตเมื่อมีการ Void ออเดอร์ทั้งใบ
   if (status === 'CANCELLED') {
     const reason = parsed.data.reason?.trim() || 'ยกเลิกออเดอร์ทั้งใบ (Void Order)';
+
+    // คืนจำนวนคงเหลือของทุกจานที่เพิ่งถูกยกเลิกไปพร้อมกับใบสั่งนี้
+    await restoreStock(
+      order.branch_id ?? 1,
+      itemsToRestore.map((i) => ({ menuItemId: i.menu_item_id, quantity: i.quantity })),
+      id,
+      auth.user.id,
+      `ยกเลิกออเดอร์ทั้งใบ: ${reason}`,
+    );
+
     try {
       await execute(
         `INSERT INTO cancellation_audit_logs 

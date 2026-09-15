@@ -57,6 +57,8 @@ export default function StaffOperationalView({ data }: StaffOperationalViewProps
         urgentOpenTicketCount={data.urgentOpenTicketCount}
         staleOrders={data.staleOrders}
         stalePendingMinutes={data.stalePendingMinutes}
+        lowStockItems={data.lowStockItems}
+        lowStockThreshold={data.lowStockThreshold}
       />
 
       {/* Quick Operational Metrics */}

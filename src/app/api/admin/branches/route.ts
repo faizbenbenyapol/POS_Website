@@ -13,6 +13,9 @@ export type BranchListRow = RowDataPacket & {
   address: string | null;
   phone: string | null;
   business_day_cutoff_hour: number;
+  vat_rate: string;
+  vat_inclusive: number;
+  service_charge_rate: string;
   is_active: number;
   created_at: string;
   table_count: number;
@@ -33,6 +36,7 @@ export async function GET() {
 
   const rows = await query<BranchListRow>(
     `SELECT b.id, b.code, b.name, b.address, b.phone, b.business_day_cutoff_hour,
+            b.vat_rate, b.vat_inclusive, b.service_charge_rate,
             b.is_active, b.created_at,
             (SELECT COUNT(*) FROM dining_tables t WHERE t.branch_id = b.id) AS table_count,
             (SELECT COUNT(*) FROM orders o
@@ -69,7 +73,17 @@ export async function POST(request: NextRequest) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
   }
 
-  const { code, name, address, phone, businessDayCutoffHour, isActive } = parsed.data;
+  const {
+    code,
+    name,
+    address,
+    phone,
+    businessDayCutoffHour,
+    vatRate,
+    vatInclusive,
+    serviceChargeRate,
+    isActive,
+  } = parsed.data;
 
   const duplicate = await queryOne<RowDataPacket & { id: number }>(
     'SELECT id FROM branches WHERE code = ? LIMIT 1',
@@ -83,14 +97,19 @@ export async function POST(request: NextRequest) {
   }
 
   const result = await execute(
-    `INSERT INTO branches (code, name, address, phone, business_day_cutoff_hour, is_active)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO branches
+       (code, name, address, phone, business_day_cutoff_hour,
+        vat_rate, vat_inclusive, service_charge_rate, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       code.toUpperCase(),
       name,
       address || null,
       phone || null,
       businessDayCutoffHour,
+      vatRate,
+      vatInclusive ? 1 : 0,
+      serviceChargeRate,
       isActive ? 1 : 0,
     ],
   );

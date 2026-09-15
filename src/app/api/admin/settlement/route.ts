@@ -82,6 +82,12 @@ export type DailySettlementReport = {
   cashTotal: number;
   transferTotal: number;
   cardTotal: number;
+  // องค์ประกอบของยอดขาย ต้องกระทบยอดกันได้กับ totalRevenue
+  grossSalesAmount: number;
+  discountAmount: number;
+  serviceChargeAmount: number;
+  vatAmount: number;
+  discountedBillCount: number;
   // โต๊ะค้างชำระปัจจุบัน
   unpaidSessionsCount: number;
   unpaidEstimatedAmount: number;
@@ -148,7 +154,6 @@ async function buildSettlementReport(
     ];
 
     let totalRevenue = 0;
-    let totalBills = 0;
     let firstPaymentTime: string | null = null;
     let lastPaymentTime: string | null = null;
 
@@ -156,7 +161,6 @@ async function buildSettlementReport(
       const amt = Number(row.total_amount || 0);
       const cnt = Number(row.transaction_count || 0);
       totalRevenue += amt;
-      totalBills += cnt;
 
       const target = paymentMethods.find((m) => m.method === row.method);
       if (target) {
@@ -179,6 +183,46 @@ async function buildSettlementReport(
     const cashTotal = paymentMethods.find((m) => m.method === 'CASH')?.total ?? 0;
     const transferTotal = paymentMethods.find((m) => m.method === 'TRANSFER')?.total ?? 0;
     const cardTotal = paymentMethods.find((m) => m.method === 'CARD')?.total ?? 0;
+
+    // 1.1 องค์ประกอบของยอดขายอ่านจากยอดบิลที่แช่แข็งไว้ในรอบการนั่ง ไม่คำนวณใหม่
+    //     จำนวนบิลนับจากรอบการนั่ง ไม่ใช่จำนวนแถว payments เพราะบิลที่แบ่งจ่าย
+    //     หลายช่องทางจะมี payments หลายแถวแต่ยังเป็นบิลใบเดียว
+    //     และนับเฉพาะแถวรับเงินจริง (total_amount > 0) เพื่อไม่ให้แถวคืนเงินติดลบของบิลวันก่อน
+    //     ลากบิลใบนั้นเข้ามาเป็นยอดขายของวันที่คืนเงิน
+    const billRows = await query<
+      RowDataPacket & {
+        bill_count: number;
+        gross_sales: string;
+        discount_total: string;
+        service_charge_total: string;
+        vat_total: string;
+        discounted_bills: number;
+      }
+    >(
+      `SELECT COUNT(DISTINCT s.id) AS bill_count,
+              COALESCE(SUM(s.subtotal_amount), 0) AS gross_sales,
+              COALESCE(SUM(s.discount_amount), 0) AS discount_total,
+              COALESCE(SUM(s.service_charge_amount), 0) AS service_charge_total,
+              COALESCE(SUM(s.vat_amount), 0) AS vat_total,
+              COALESCE(SUM(IF(s.discount_amount > 0, 1, 0)), 0) AS discounted_bills
+         FROM table_sessions s
+        WHERE s.id IN (
+                SELECT DISTINCT p.session_id
+                  FROM payments p
+                 WHERE (? IS NULL OR p.branch_id = ?)
+                   AND p.paid_at >= ? AND p.paid_at < ?
+                   AND p.total_amount > 0
+              )`,
+      [branchId, branchId, range.startSql, range.endSql],
+    );
+    const billSummary = billRows[0];
+    const totalBills = Number(billSummary?.bill_count ?? 0);
+    const grossSalesAmount = Number(billSummary?.gross_sales ?? 0);
+    const discountAmount = Number(billSummary?.discount_total ?? 0);
+    const serviceChargeAmount = Number(billSummary?.service_charge_total ?? 0);
+    const vatAmount = Number(billSummary?.vat_total ?? 0);
+    const discountedBillCount = Number(billSummary?.discounted_bills ?? 0);
+
     const avgBillAmount = totalBills > 0 ? totalRevenue / totalBills : 0;
 
     // 2. โต๊ะที่ยังเปิดค้างชำระอยู่ ณ ปัจจุบันในสาขา
@@ -347,6 +391,11 @@ async function buildSettlementReport(
       cashTotal,
       transferTotal,
       cardTotal,
+      grossSalesAmount,
+      discountAmount,
+      serviceChargeAmount,
+      vatAmount,
+      discountedBillCount,
       unpaidSessionsCount,
       unpaidEstimatedAmount,
       cashiers,

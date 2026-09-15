@@ -22,6 +22,8 @@ export type BoardOrderRow = RowDataPacket & {
   created_at: string;
   session_id: number;
   session_status: string;
+  /** เวลาที่บิลของรอบการนั่งถูกคืนเงิน null คือยังไม่ถูกคืน */
+  session_refunded_at: string | null;
   table_no: string;
 };
 
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
       query<BoardOrderRow>(
         `SELECT o.id, o.branch_id, b.name AS branch_name, b.address AS branch_address, b.phone AS branch_phone,
                 o.order_code, o.order_type, o.status, o.total_amount, o.created_at, o.session_id, s.status AS session_status,
+                s.refunded_at AS session_refunded_at,
                 t.table_no
            FROM orders o
            JOIN table_sessions s ON s.id = o.session_id

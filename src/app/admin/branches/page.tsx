@@ -20,6 +20,10 @@ export default function BranchesPage() {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [cutoffHour, setCutoffHour] = useState(4);
+  // ค่าตั้งเรื่องเงินของสาขา ใช้เป็นตัวตั้งต้นของทุกบิลที่ปิดในสาขานี้
+  const [vatRate, setVatRate] = useState(7);
+  const [vatInclusive, setVatInclusive] = useState(true);
+  const [serviceChargeRate, setServiceChargeRate] = useState(0);
   const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ role: string; branchId: number | null } | null>(null);
@@ -59,6 +63,9 @@ export default function BranchesPage() {
     setAddress('');
     setPhone('');
     setCutoffHour(4);
+    setVatRate(7);
+    setVatInclusive(true);
+    setServiceChargeRate(0);
     setIsActive(true);
     setModalOpen(true);
   }
@@ -70,6 +77,9 @@ export default function BranchesPage() {
     setAddress(branch.address || '');
     setPhone(branch.phone || '');
     setCutoffHour(branch.business_day_cutoff_hour ?? 4);
+    setVatRate(Number(branch.vat_rate ?? 7));
+    setVatInclusive(Number(branch.vat_inclusive ?? 1) === 1);
+    setServiceChargeRate(Number(branch.service_charge_rate ?? 0));
     setIsActive(branch.is_active === 1);
     setModalOpen(true);
   }
@@ -94,6 +104,9 @@ export default function BranchesPage() {
             address: address.trim() || null,
             phone: phone.trim() || null,
             businessDayCutoffHour: Number(cutoffHour),
+            vatRate: Number(vatRate),
+            vatInclusive,
+            serviceChargeRate: Number(serviceChargeRate),
             isActive,
           }),
         });
@@ -114,6 +127,9 @@ export default function BranchesPage() {
             address: address.trim() || null,
             phone: phone.trim() || null,
             businessDayCutoffHour: Number(cutoffHour),
+            vatRate: Number(vatRate),
+            vatInclusive,
+            serviceChargeRate: Number(serviceChargeRate),
             isActive,
           }),
         });
@@ -327,6 +343,65 @@ export default function BranchesPage() {
                 className="w-full h-9 rounded-md border border-zinc-300 bg-white px-3 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
+          </div>
+
+          {/* ค่าตั้งเรื่องเงิน มีผลกับทุกบิลที่ปิดในสาขานี้ตั้งแต่บันทึกเป็นต้นไป */}
+          <div className="rounded-md border border-zinc-200 bg-zinc-50/60 p-3">
+            <p className="text-xs font-bold text-zinc-800 mb-2">ภาษีและค่าบริการของสาขา</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="vatRate" className="block text-xs font-medium text-zinc-700 mb-1">
+                  อัตราภาษีมูลค่าเพิ่ม (%)
+                </label>
+                <input
+                  id="vatRate"
+                  name="vatRate"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={100}
+                  value={String(vatRate)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVatRate(Number(e.target.value))}
+                  className="w-full h-9 rounded-md border border-zinc-300 bg-white px-3 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="serviceChargeRate"
+                  className="block text-xs font-medium text-zinc-700 mb-1"
+                >
+                  ค่าบริการ Service Charge (%)
+                </label>
+                <input
+                  id="serviceChargeRate"
+                  name="serviceChargeRate"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  max={100}
+                  value={String(serviceChargeRate)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setServiceChargeRate(Number(e.target.value))
+                  }
+                  className="w-full h-9 rounded-md border border-zinc-300 bg-white px-3 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+            <label className="mt-2.5 flex items-start gap-2 text-xs text-zinc-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={vatInclusive}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVatInclusive(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-emerald-600"
+              />
+              <span>
+                ราคาเมนูรวมภาษีมูลค่าเพิ่มแล้ว
+                <span className="block text-zinc-500">
+                  ติ๊กไว้ = ถอด VAT ออกมาแสดงบนใบเสร็จโดยยอดที่ลูกค้าจ่ายเท่าเดิม
+                  ไม่ติ๊ก = บวก VAT เพิ่มท้ายบิล
+                </span>
+              </span>
+            </label>
           </div>
 
           <div>

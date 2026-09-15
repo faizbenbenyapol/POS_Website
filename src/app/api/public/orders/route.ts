@@ -76,6 +76,89 @@ async function generateOrderCode(
   return `${ORDER_CODE_PREFIX}${datePart}${sequence}`;
 }
 
+/** ผลการตรวจสต๊อกของเมนูหนึ่งรายการ ใช้บอกลูกค้าว่าเมนูไหนเหลือไม่พอ */
+type StockShortage = {
+  itemName: string;
+  requested: number;
+  remaining: number;
+};
+
+/**
+ * ข้อผิดพลาดที่โยนออกมาเมื่อของเหลือไม่พอ ใช้บังคับให้ transaction ย้อนกลับทั้งใบ
+ * ไม่อย่างนั้นออเดอร์จะถูกบันทึกไปแล้วทั้งที่ครัวทำให้ไม่ได้
+ */
+class StockShortageError extends Error {
+  /**
+   * @param shortages - รายการเมนูที่ของเหลือไม่พอ พร้อมจำนวนที่สั่งและจำนวนที่เหลือจริง
+   */
+  constructor(public readonly shortages: StockShortage[]) {
+    super('STOCK_SHORTAGE');
+    this.name = 'StockShortageError';
+  }
+}
+
+/**
+ * ตัดสต๊อกของเมนูที่ลูกค้าสั่ง และปิดขายอัตโนมัติเมื่อจำนวนคงเหลือหมด
+ *
+ * ล็อกแถวสต๊อกด้วย FOR UPDATE ก่อนตรวจและตัด เพื่อกันกรณีลูกค้าสองโต๊ะกดสั่งจานสุดท้าย
+ * พร้อมกันแล้วผ่านทั้งคู่ เมนูที่ stock_qty เป็น NULL ถือว่าไม่จำกัดจำนวน จึงข้ามไปเลย
+ *
+ * @param conn - connection ที่อยู่ใน transaction เดียวกับการสร้างออเดอร์
+ * @param branchId - รหัสสาขาที่สั่ง
+ * @param priced - รายการที่ลูกค้าสั่งพร้อมชื่อและจำนวน
+ * @param orderId - รหัสออเดอร์ที่ตัดสต๊อกนี้ ใช้อ้างอิงในประวัติการตัดสต๊อก
+ * @returns รายการที่ของเหลือไม่พอ คืนอาเรย์ว่างเมื่อตัดสต๊อกได้ครบทุกรายการ
+ */
+async function deductStock(
+  conn: PoolConnection,
+  branchId: number,
+  priced: PricedItem[],
+  orderId: number,
+): Promise<StockShortage[]> {
+  const shortages: StockShortage[] = [];
+
+  for (const item of priced) {
+    const [rows] = await conn.execute<(RowDataPacket & { id: number; stock_qty: number | null })[]>(
+      `SELECT id, stock_qty FROM branch_menu_availability
+        WHERE branch_id = ? AND menu_item_id = ? FOR UPDATE`,
+      [branchId, item.menuItemId],
+    );
+    const stockRow = rows[0];
+    // ไม่มีแถวตั้งค่าของสาขา หรือไม่ได้ตั้งจำนวนคงเหลือไว้ = ขายได้ไม่จำกัด
+    if (!stockRow || stockRow.stock_qty === null) continue;
+
+    const before = Number(stockRow.stock_qty);
+    if (before < item.quantity) {
+      shortages.push({ itemName: item.itemName, requested: item.quantity, remaining: before });
+      continue;
+    }
+
+    const after = before - item.quantity;
+    await conn.execute(
+      `UPDATE branch_menu_availability
+          SET stock_qty = ?, is_available = IF(? <= 0, 0, is_available)
+        WHERE id = ?`,
+      [after, after, stockRow.id],
+    );
+    await conn.execute(
+      `INSERT INTO menu_stock_logs
+         (branch_id, menu_item_id, change_type, quantity, stock_before, stock_after, order_id, note)
+       VALUES (?, ?, 'DEDUCT', ?, ?, ?, ?, ?)`,
+      [
+        branchId,
+        item.menuItemId,
+        item.quantity,
+        before,
+        after,
+        orderId,
+        after <= 0 ? 'ของหมด ระบบปิดขายเมนูนี้อัตโนมัติ' : null,
+      ],
+    );
+  }
+
+  return shortages;
+}
+
 /**
  * ดึงชื่อและราคาปัจจุบันของเมนูที่ลูกค้าสั่ง เพื่อคัดลอกลง order_items
  * คำนวณราคาพิเศษเฉพาะสาขา (Custom Price) และตรวจสถานะเปิด/ปิดขายเฉพาะสาขา
@@ -163,7 +246,9 @@ export async function POST(request: NextRequest) {
 
     const branchId = session.session.branchId;
 
-    const created = await withTransaction(async (conn) => {
+    const created = await withTransaction<
+      { orderId: number; orderCode: string; total: number } | null | { shortages: StockShortage[] }
+    >(async (conn) => {
       const priced = await priceItems(conn, branchId, parsed.data.items);
       if (!priced) return null;
 
@@ -201,8 +286,30 @@ export async function POST(request: NextRequest) {
           ],
         );
       }
+
+      // ตัดสต๊อกเป็นขั้นสุดท้าย ถ้าของเหลือไม่พอให้ throw เพื่อให้ transaction ย้อนกลับทั้งใบ
+      // ออเดอร์และรายการอาหารที่เพิ่งเขียนไปจะไม่ค้างอยู่ในฐานข้อมูล
+      const shortages = await deductStock(conn, branchId, priced, orderResult.insertId);
+      if (shortages.length > 0) {
+        throw new StockShortageError(shortages);
+      }
+
       return { orderId: orderResult.insertId, orderCode, total };
+    }).catch((err) => {
+      if (err instanceof StockShortageError) return { shortages: err.shortages };
+      throw err;
     });
+
+    if (created && 'shortages' in created) {
+      const detail = created.shortages
+        .map((s) => `${s.itemName} (เหลือ ${s.remaining} ที่ แต่สั่ง ${s.requested} ที่)`)
+        .join(', ');
+      return apiError(
+        ERROR_CODES.VALIDATION_ERROR,
+        `ขออภัย มีเมนูที่ของเหลือไม่พอ: ${detail} กรุณากลับไปหน้าเมนูแล้วปรับจำนวนใหม่`,
+        409,
+      );
+    }
 
     if (!created) {
       return apiError(

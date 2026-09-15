@@ -1,21 +1,31 @@
 'use client';
 
 import Link from 'next/link';
-import { TicketIcon, AlertTriangleIcon } from '@/components/Icons';
-import type { StaleOrder } from './types';
+import { TicketIcon, AlertTriangleIcon, BoxIcon } from '@/components/Icons';
+import type { LowStockItem, StaleOrder } from './types';
 
 type DashboardAlertBannersProps = {
   urgentOpenTicketCount: number;
   staleOrders: StaleOrder[];
   stalePendingMinutes: number;
+  lowStockItems?: LowStockItem[];
+  lowStockThreshold?: number;
 };
 
+/**
+ * แถบเตือนสิ่งที่ต้องรีบจัดการบนหัวแดชบอร์ด
+ *
+ * @param lowStockItems - เมนูที่ของใกล้หมดหรือหมดแล้ว เรียงจากเหลือน้อยที่สุด
+ * @param lowStockThreshold - จำนวนคงเหลือที่ถือว่าใกล้หมด ใช้อธิบายเกณฑ์ในข้อความ
+ */
 export default function DashboardAlertBanners({
   urgentOpenTicketCount,
   staleOrders,
   stalePendingMinutes,
+  lowStockItems = [],
+  lowStockThreshold = 0,
 }: DashboardAlertBannersProps) {
-  if (urgentOpenTicketCount <= 0 && staleOrders.length === 0) {
+  if (urgentOpenTicketCount <= 0 && staleOrders.length === 0 && lowStockItems.length === 0) {
     return null;
   }
 
@@ -60,6 +70,39 @@ export default function DashboardAlertBanners({
             className="mt-1 block font-semibold text-amber-800 underline underline-offset-2 hover:text-amber-900"
           >
             ไปกระดานออเดอร์
+          </Link>
+        </div>
+      )}
+
+      {/* ของใกล้หมด เตือนก่อนที่ลูกค้าจะกดสั่งแล้วระบบตัดจนต้องยกเลิกทีหลัง */}
+      {lowStockItems.length > 0 && (
+        <div
+          role="alert"
+          className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs text-orange-800"
+        >
+          <p className="flex items-center gap-2 font-semibold">
+            <BoxIcon className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              เมนูที่ของใกล้หมด (เหลือ {lowStockThreshold} ที่หรือน้อยกว่า){' '}
+              {lowStockItems.length} รายการ
+            </span>
+          </p>
+          <p className="mt-1">
+            {lowStockItems.map((item) => (
+              <span key={item.menu_item_id} className="mr-3 font-normal text-orange-700">
+                {item.branch_name ? `[${item.branch_name}] ` : ''}
+                {item.name}{' '}
+                <strong className="font-bold">
+                  {item.stock_qty <= 0 ? 'หมดแล้ว' : `เหลือ ${item.stock_qty}`}
+                </strong>
+              </span>
+            ))}
+          </p>
+          <Link
+            href="/admin/stock"
+            className="mt-1 block font-semibold text-orange-800 underline underline-offset-2 hover:text-orange-900"
+          >
+            ไปหน้าสต๊อกเมนู
           </Link>
         </div>
       )}

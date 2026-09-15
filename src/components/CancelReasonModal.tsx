@@ -13,11 +13,23 @@ const PRESET_REASONS = [
   'อื่นๆ (ระบุเหตุผลเอง)',
 ];
 
+/** ตัวเลือกเหตุผลการคืนเงินบิลที่ปิดไปแล้ว คนละชุดกับการยกเลิกอาหารเพราะเป็นความผิดพลาดคนละแบบ */
+export const REFUND_REASONS = [
+  'ปิดบิลผิดโต๊ะ',
+  'เก็บเงินเกินจากที่ลูกค้าสั่ง',
+  'ลูกค้าไม่พอใจ ขอเงินคืน',
+  'คิดเงินผิด ต้องออกบิลใหม่',
+  'อื่นๆ (ระบุเหตุผลเอง)',
+];
+
 type CancelReasonModalProps = {
   open: boolean;
   title: string;
   subtitle?: string;
   amountText?: string;
+  amountLabel?: string;
+  presetReasons?: string[];
+  confirmLabel?: string;
   onConfirm: (reason: string) => void;
   onClose: () => void;
 };
@@ -25,16 +37,24 @@ type CancelReasonModalProps = {
 /**
  * Modal บังคับระบุเหตุผลในการกดยกเลิกรายการอาหารหรือยกเลิกบิล
  * เพื่อบันทึกลง Cancellation Audit Trail ป้องกันการทุจริตตัดเงินออกจากบิล
+ *
+ * @param presetReasons - ชุดเหตุผลสำเร็จรูป ไม่ส่งจะใช้ชุดของการยกเลิกอาหาร
+ *                        ถ้าส่งเองต้องมี 'อื่นๆ (ระบุเหตุผลเอง)' ไว้ท้ายรายการเพื่อให้พิมพ์เองได้
+ * @param amountLabel - ข้อความนำหน้ายอดเงิน ใช้เปลี่ยนคำเมื่อไม่ใช่การตัดเงินออกจากบิล
+ * @param confirmLabel - ข้อความบนปุ่มยืนยัน ใช้เปลี่ยนคำตามงานที่กำลังทำ
  */
 export default function CancelReasonModal({
   open,
   title,
   subtitle,
   amountText,
+  amountLabel = 'ยอดเงินที่ถูกตัดออกจากบิล',
+  presetReasons = PRESET_REASONS,
+  confirmLabel = 'ยืนยันการยกเลิก',
   onConfirm,
   onClose,
 }: CancelReasonModalProps) {
-  const [selectedReason, setSelectedReason] = useState(PRESET_REASONS[0]);
+  const [selectedReason, setSelectedReason] = useState(presetReasons[0]);
   const [customReason, setCustomReason] = useState('');
   const [error, setError] = useState('');
 
@@ -62,7 +82,7 @@ export default function CancelReasonModal({
             <p className="font-bold">{subtitle}</p>
             {amountText && (
               <p className="mt-0.5 text-amber-800">
-                ยอดเงินที่ถูกตัดออกจากบิล:{' '}
+                {amountLabel}:{' '}
                 <span className="font-bold text-red-600 num">{amountText}</span>
               </p>
             )}
@@ -77,7 +97,7 @@ export default function CancelReasonModal({
             เลือกเหตุผลการยกเลิก:
           </label>
           <div className="flex flex-col gap-1.5">
-            {PRESET_REASONS.map((reason) => (
+            {presetReasons.map((reason) => (
               <label
                 key={reason}
                 className={`flex items-center gap-2.5 rounded-xl border p-2.5 text-xs transition-colors cursor-pointer ${
@@ -134,7 +154,7 @@ export default function CancelReasonModal({
             onClick={handleConfirm}
             className="min-h-[42px] rounded-xl bg-red-600 px-5 text-xs font-bold text-white shadow-xs transition-colors hover:bg-red-700 active:scale-98 cursor-pointer"
           >
-            ยืนยันการยกเลิก
+            {confirmLabel}
           </button>
         </div>
       </div>

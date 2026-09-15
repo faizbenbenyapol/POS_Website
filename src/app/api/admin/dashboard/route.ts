@@ -5,6 +5,7 @@ import { requireStaff } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { getEffectiveBranchId, getBranchById } from '@/lib/branch';
 import { getBusinessDayRange, getYesterdayBusinessDayRange } from '@/lib/format';
+import { LOW_STOCK_THRESHOLD } from '@/lib/stock';
 
 /** ออเดอร์ที่ค้างสถานะรอครัวรับนานเกินกี่นาทีถึงจะขึ้นแถบเตือน */
 const STALE_PENDING_MINUTES = 10;
@@ -12,6 +13,39 @@ const STALE_PENDING_MINUTES = 10;
 /** จำนวนเมนูขายดีที่แสดงบน Dashboard */
 const TOP_MENU_LIMIT = 5;
 
+/** จำนวนเมนูใกล้หมดสูงสุดที่ยกขึ้นมาแสดงบนแถบเตือน มากกว่านี้ให้ไปดูที่หน้าสต๊อก */
+const LOW_STOCK_ALERT_LIMIT = 8;
+
+/**
+ * อ่านเมนูที่ของใกล้หมดหรือหมดแล้วของสาขาที่กำลังดูอยู่
+ * นับเฉพาะเมนูที่ตั้งจำนวนคงเหลือไว้ ส่วนเมนูที่ไม่จำกัดจำนวนไม่มีวันหมดจึงไม่ต้องเตือน
+ *
+ * @param branchId - รหัสสาขาที่ต้องการดู ส่ง null เพื่อรวมทุกสาขา
+ * @returns เมนูที่เหลือน้อยที่สุดเรียงจากน้อยไปมาก ไม่เกิน LOW_STOCK_ALERT_LIMIT รายการ
+ */
+function queryLowStockItems(branchId: number | null) {
+  return query<LowStockRow>(
+    `SELECT m.id AS menu_item_id, m.name, bma.stock_qty, b.name AS branch_name
+       FROM branch_menu_availability bma
+       JOIN menu_items m ON m.id = bma.menu_item_id
+       LEFT JOIN branches b ON b.id = bma.branch_id
+      WHERE (? IS NULL OR bma.branch_id = ?)
+        AND bma.stock_qty IS NOT NULL
+        AND bma.stock_qty <= ?
+      ORDER BY bma.stock_qty ASC, m.name ASC
+      LIMIT ${LOW_STOCK_ALERT_LIMIT}`,
+    [branchId, branchId, LOW_STOCK_THRESHOLD],
+  );
+}
+
+/**
+ * ยอดขายและจำนวนบิลของช่วงเวลาหนึ่ง
+ *
+ * จำนวนบิลนับจาก session_id ที่ไม่ซ้ำกัน ไม่ใช่จำนวนแถวใน payments
+ * เพราะบิลใบเดียวแบ่งจ่ายหลายช่องทางได้ (เงินสดครึ่ง โอนครึ่ง) ซึ่งเก็บเป็นหลายแถว
+ * และนับเฉพาะแถวที่เป็นยอดรับเงินจริง (total_amount > 0) เพื่อไม่ให้แถวคืนเงินติดลบ
+ * ของบิลเก่าถูกนับเป็นบิลใหม่ของวันที่คืนเงิน
+ */
 type RevenueRow = RowDataPacket & { total: string | null; bill_count: number };
 type TrendRow = RowDataPacket & { sale_date: string; total: string };
 type TopMenuRow = RowDataPacket & { item_name: string; quantity: number; amount: string };
@@ -25,6 +59,13 @@ type StaleOrderRow = RowDataPacket & {
   waiting_minutes: number;
 };
 type TicketSummaryRow = RowDataPacket & { open_count: number; urgent_open_count: number };
+/** เมนูที่ของใกล้หมดหรือหมดแล้ว ใช้ขึ้นแถบเตือนให้ครัวเติมของก่อนลูกค้าสั่งไม่ได้ */
+type LowStockRow = RowDataPacket & {
+  menu_item_id: number;
+  name: string;
+  stock_qty: number;
+  branch_name: string | null;
+};
 type MonthRow = RowDataPacket & { month: string };
 type BranchComparisonRow = RowDataPacket & {
   id: number;
@@ -61,7 +102,7 @@ export async function GET(request: NextRequest) {
 
     // หากเป็นพนักงาน (STAFF) ให้ส่งเฉพาะข้อมูลปฏิบัติการหน้าร้าน (ไม่เปิดเผยตัวเลขรายได้/ยอดขาย)
     if (auth.user.role === 'STAFF') {
-      const [orderCount, openTables, staleOrders, tickets] = await Promise.all([
+      const [orderCount, openTables, staleOrders, tickets, lowStockItems] = await Promise.all([
         queryOne<RowDataPacket & { total: number }>(
           `SELECT COUNT(*) AS total FROM orders
             WHERE (? IS NULL OR branch_id = ?)
@@ -95,6 +136,7 @@ export async function GET(request: NextRequest) {
            WHERE (? IS NULL OR branch_id = ?) AND status = 'OPEN'`,
           [branchId, branchId],
         ),
+        queryLowStockItems(branchId),
       ]);
 
       return apiOk({
@@ -109,6 +151,8 @@ export async function GET(request: NextRequest) {
         urgentOpenTicketCount: Number(tickets?.urgent_open_count ?? 0),
         stalePendingMinutes: STALE_PENDING_MINUTES,
         staleOrders,
+        lowStockThreshold: LOW_STOCK_THRESHOLD,
+        lowStockItems,
       });
     }
 
@@ -132,10 +176,12 @@ export async function GET(request: NextRequest) {
       salesTrend,
       tickets,
       branchComparison,
+      lowStockItems,
     ] = await Promise.all([
       // 1. ยอดขายประจำเดือนที่เลือก
       queryOne<RevenueRow>(
-        `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
+        `SELECT COALESCE(SUM(total_amount), 0) AS total,
+                COUNT(DISTINCT IF(total_amount > 0, session_id, NULL)) AS bill_count
            FROM payments
           WHERE (? IS NULL OR branch_id = ?)
             AND DATE_FORMAT(paid_at, '%Y-%m') = ?`,
@@ -143,7 +189,8 @@ export async function GET(request: NextRequest) {
       ),
       // 2. ยอดขายเดือนก่อนหน้า
       queryOne<RevenueRow>(
-        `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
+        `SELECT COALESCE(SUM(total_amount), 0) AS total,
+                COUNT(DISTINCT IF(total_amount > 0, session_id, NULL)) AS bill_count
            FROM payments
           WHERE (? IS NULL OR branch_id = ?)
             AND DATE_FORMAT(paid_at, '%Y-%m') = ?`,
@@ -159,7 +206,8 @@ export async function GET(request: NextRequest) {
       ),
       // 4. ยอดขายวันนี้ (ตามวันทำการ 04:00 - 03:59 น.)
       queryOne<RevenueRow>(
-        `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
+        `SELECT COALESCE(SUM(total_amount), 0) AS total,
+                COUNT(DISTINCT IF(total_amount > 0, session_id, NULL)) AS bill_count
            FROM payments
           WHERE (? IS NULL OR branch_id = ?)
             AND paid_at >= ? AND paid_at < ?`,
@@ -167,7 +215,8 @@ export async function GET(request: NextRequest) {
       ),
       // 5. ยอดขายเมื่อวาน (ตามวันทำการก่อนหน้า)
       queryOne<RevenueRow>(
-        `SELECT COALESCE(SUM(total_amount), 0) AS total, COUNT(*) AS bill_count
+        `SELECT COALESCE(SUM(total_amount), 0) AS total,
+                COUNT(DISTINCT IF(total_amount > 0, session_id, NULL)) AS bill_count
            FROM payments
           WHERE (? IS NULL OR branch_id = ?)
             AND paid_at >= ? AND paid_at < ?`,
@@ -247,9 +296,11 @@ export async function GET(request: NextRequest) {
       query<BranchComparisonRow>(
         `SELECT b.id, b.code, b.name,
                 COALESCE(SUM(CASE WHEN p.paid_at >= ? AND p.paid_at < ? THEN p.total_amount ELSE 0 END), 0) AS today_revenue,
-                COUNT(CASE WHEN p.paid_at >= ? AND p.paid_at < ? THEN p.id ELSE NULL END) AS today_bills,
+                COUNT(DISTINCT CASE WHEN p.paid_at >= ? AND p.paid_at < ? AND p.total_amount > 0
+                                    THEN p.session_id ELSE NULL END) AS today_bills,
                 COALESCE(SUM(CASE WHEN DATE_FORMAT(p.paid_at, '%Y-%m') = ? THEN p.total_amount ELSE 0 END), 0) AS monthly_revenue,
-                COUNT(CASE WHEN DATE_FORMAT(p.paid_at, '%Y-%m') = ? THEN p.id ELSE NULL END) AS monthly_bills
+                COUNT(DISTINCT CASE WHEN DATE_FORMAT(p.paid_at, '%Y-%m') = ? AND p.total_amount > 0
+                                    THEN p.session_id ELSE NULL END) AS monthly_bills
            FROM branches b
            LEFT JOIN payments p ON p.branch_id = b.id
           WHERE b.is_active = 1
@@ -257,6 +308,8 @@ export async function GET(request: NextRequest) {
           ORDER BY today_revenue DESC, monthly_revenue DESC, b.id ASC`,
         [todayRange.startSql, todayRange.endSql, todayRange.startSql, todayRange.endSql, selectedMonth, selectedMonth],
       ),
+      // 14. เมนูที่ของใกล้หมดหรือหมดแล้ว สำหรับแถบเตือนให้ครัวเติมของ
+      queryLowStockItems(branchId),
     ]);
 
     const monthlyRevenue = Number(monthlyRevRow?.total ?? 0);
@@ -301,6 +354,8 @@ export async function GET(request: NextRequest) {
       unpaidAmount: Number(unpaid?.total ?? 0),
       stalePendingMinutes: STALE_PENDING_MINUTES,
       staleOrders,
+      lowStockThreshold: LOW_STOCK_THRESHOLD,
+      lowStockItems,
       topMenus,
       salesTrend,
       openTicketCount: Number(tickets?.open_count ?? 0),

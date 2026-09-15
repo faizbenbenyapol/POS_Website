@@ -35,7 +35,12 @@ type MenuItem = {
   description: string | null;
   price: string;
   image_url: string | null;
+  /** จำนวนคงเหลือของสาขา null คือขายได้ไม่จำกัด */
+  stock_qty: number | null;
 };
+
+/** จำนวนคงเหลือที่ถือว่าใกล้หมด ต่ำกว่านี้จะขึ้นป้ายเตือนลูกค้าให้รีบสั่ง */
+const LOW_STOCK_THRESHOLD = 5;
 
 /** ตัวเลือกด่วนสำหรับใส่หมายเหตุพิเศษถึงทางร้าน สไตล์ LINE MAN */
 const QUICK_NOTES = ['ไม่ใส่ผัก', 'เผ็ดน้อย', 'ขอเผ็ดๆ', 'ไม่หวาน', 'แยกน้ำ', 'ขอช้อนส้อม'];
@@ -237,9 +242,17 @@ export default function CustomerMenuPage({
                   {item.description && (
                     <p className="mt-0.5 line-clamp-2 text-xs text-slip-dim">{item.description}</p>
                   )}
-                  <p className="num mt-1 font-bold text-emerald-700 text-sm">
-                    {formatBaht(item.price)} <span className="text-xs font-normal text-slip-dim">บาท</span>
-                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="num font-bold text-emerald-700 text-sm">
+                      {formatBaht(item.price)} <span className="text-xs font-normal text-slip-dim">บาท</span>
+                    </p>
+                    {/* เตือนเมื่อของใกล้หมด ลูกค้าจะได้ไม่สั่งเกินจำนวนที่ครัวทำได้ */}
+                    {item.stock_qty !== null && item.stock_qty <= LOW_STOCK_THRESHOLD && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
+                        เหลือ {item.stock_qty} ที่
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button
                   type="button"

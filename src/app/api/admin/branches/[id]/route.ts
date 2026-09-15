@@ -14,6 +14,9 @@ type BranchDetailRow = RowDataPacket & {
   address: string | null;
   phone: string | null;
   business_day_cutoff_hour: number;
+  vat_rate: string;
+  vat_inclusive: number;
+  service_charge_rate: string;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -97,13 +100,35 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const phone = parsed.data.phone !== undefined ? parsed.data.phone : existing.phone;
   const cutoff = parsed.data.businessDayCutoffHour ?? existing.business_day_cutoff_hour;
   const isActive = parsed.data.isActive !== undefined ? (parsed.data.isActive ? 1 : 0) : existing.is_active;
+  // ค่าตั้งเรื่องเงิน ถ้าไม่ได้ส่งมาให้คงค่าเดิมไว้ ไม่รีเซ็ตกลับเป็นค่า default
+  const vatRate = parsed.data.vatRate ?? Number(existing.vat_rate);
+  const vatInclusive =
+    parsed.data.vatInclusive !== undefined
+      ? parsed.data.vatInclusive
+        ? 1
+        : 0
+      : existing.vat_inclusive;
+  const serviceChargeRate = parsed.data.serviceChargeRate ?? Number(existing.service_charge_rate);
 
   await execute(
     `UPDATE branches
         SET code = ?, name = ?, address = ?, phone = ?,
-            business_day_cutoff_hour = ?, is_active = ?
+            business_day_cutoff_hour = ?,
+            vat_rate = ?, vat_inclusive = ?, service_charge_rate = ?,
+            is_active = ?
       WHERE id = ?`,
-    [code, name, address || null, phone || null, cutoff, isActive, id],
+    [
+      code,
+      name,
+      address || null,
+      phone || null,
+      cutoff,
+      vatRate,
+      vatInclusive,
+      serviceChargeRate,
+      isActive,
+      id,
+    ],
   );
 
   return apiOk({ id, code, name, isActive: isActive === 1 });

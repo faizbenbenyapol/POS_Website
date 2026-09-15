@@ -40,6 +40,9 @@ CREATE TABLE branches (
   address                  VARCHAR(255) NULL,
   phone                    VARCHAR(30)  NULL,
   business_day_cutoff_hour TINYINT      NOT NULL DEFAULT 4,
+  vat_rate                 DECIMAL(5,2) NOT NULL DEFAULT 7.00,
+  vat_inclusive            TINYINT(1)   NOT NULL DEFAULT 1,
+  service_charge_rate      DECIMAL(5,2) NOT NULL DEFAULT 0.00,
   is_active                TINYINT(1)   NOT NULL DEFAULT 1,
   created_at               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -110,6 +113,7 @@ CREATE TABLE branch_menu_availability (
   menu_item_id INT            NOT NULL,
   custom_price DECIMAL(10,2)  NULL,
   is_available TINYINT(1)     NOT NULL DEFAULT 1,
+  stock_qty    INT            NULL,
   updated_at   DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_branch_menu (branch_id, menu_item_id),
   FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE CASCADE,
@@ -126,12 +130,32 @@ CREATE TABLE table_sessions (
   opened_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   closed_at     DATETIME NULL,
   closed_by     INT      NULL,
+  -- ยอดบิลที่แช่แข็งไว้ตอนปิดบิล ไม่คำนวณใหม่ตอนเปิดดูย้อนหลัง
+  subtotal_amount       DECIMAL(10,2) NOT NULL DEFAULT 0,
+  discount_type         ENUM('NONE','AMOUNT','PERCENT') NOT NULL DEFAULT 'NONE',
+  discount_value        DECIMAL(10,2) NOT NULL DEFAULT 0,
+  discount_amount       DECIMAL(10,2) NOT NULL DEFAULT 0,
+  discount_reason       VARCHAR(255)  NULL,
+  discount_by           INT           NULL,
+  service_charge_rate   DECIMAL(5,2)  NOT NULL DEFAULT 0,
+  service_charge_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  vat_rate              DECIMAL(5,2)  NOT NULL DEFAULT 0,
+  vat_inclusive         TINYINT(1)    NOT NULL DEFAULT 1,
+  vat_amount            DECIMAL(10,2) NOT NULL DEFAULT 0,
+  grand_total           DECIMAL(10,2) NOT NULL DEFAULT 0,
+  -- การคืนเงินทั้งบิล บิลเดิมยังอยู่ครบ แต่ถูกทำเครื่องหมายว่าเป็นโมฆะแล้ว
+  refunded_at   DATETIME      NULL,
+  refunded_by   INT           NULL,
+  refund_reason VARCHAR(255)  NULL,
+  refund_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
   open_table_id INT GENERATED ALWAYS AS (IF(status = 'OPEN', table_id, NULL)) STORED,
   UNIQUE KEY uq_open_table (open_table_id),
   FOREIGN KEY (branch_id)  REFERENCES branches(id),
   FOREIGN KEY (table_id)   REFERENCES dining_tables(id),
   FOREIGN KEY (opened_by)  REFERENCES users(id),
   FOREIGN KEY (closed_by)  REFERENCES users(id),
+  FOREIGN KEY (discount_by) REFERENCES users(id),
+  FOREIGN KEY (refunded_by) REFERENCES users(id),
   INDEX idx_sessions_branch_status (branch_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -195,14 +219,18 @@ CREATE TABLE order_status_logs (
 CREATE TABLE payments (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   branch_id    INT           NOT NULL DEFAULT 1,
-  session_id   INT           NOT NULL UNIQUE,
-  method       ENUM('CASH','TRANSFER','CARD') NOT NULL,
-  total_amount DECIMAL(10,2) NOT NULL,
-  received_by  INT           NOT NULL,
-  paid_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- หนึ่งบิลมีได้หลายแถว เพราะลูกค้าจ่ายผสมหลายช่องทางในบิลเดียวได้
+  session_id      INT           NOT NULL,
+  method          ENUM('CASH','TRANSFER','CARD') NOT NULL,
+  total_amount    DECIMAL(10,2) NOT NULL,
+  received_amount DECIMAL(10,2) NULL,
+  change_amount   DECIMAL(10,2) NOT NULL DEFAULT 0,
+  received_by     INT           NOT NULL,
+  paid_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (branch_id)   REFERENCES branches(id),
   FOREIGN KEY (session_id)  REFERENCES table_sessions(id),
   FOREIGN KEY (received_by) REFERENCES users(id),
+  INDEX idx_payments_session (session_id),
   INDEX idx_payments_branch_paid (branch_id, paid_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -289,4 +317,24 @@ CREATE TABLE settlements (
   INDEX idx_settlement_closed_by (closed_by),
   FOREIGN KEY (branch_id) REFERENCES branches(id),
   FOREIGN KEY (closed_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ประวัติการตัดและเติมสต๊อกเมนูรายสาขา ใช้ตรวจว่าของหายไปกับออเดอร์ไหน
+CREATE TABLE menu_stock_logs (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  branch_id     INT NOT NULL,
+  menu_item_id  INT NOT NULL,
+  change_type   ENUM('SET','DEDUCT','RESTOCK','RESTORE') NOT NULL,
+  quantity      INT NOT NULL,
+  stock_before  INT NULL,
+  stock_after   INT NULL,
+  order_id      INT NULL,
+  changed_by    INT NULL,
+  note          VARCHAR(255) NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_stock_logs_branch_created (branch_id, created_at),
+  INDEX idx_stock_logs_menu (menu_item_id),
+  FOREIGN KEY (branch_id)    REFERENCES branches(id) ON DELETE CASCADE,
+  FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (changed_by)   REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

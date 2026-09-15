@@ -11,6 +11,14 @@ export type StaleOrder = {
   waiting_minutes: number;
 };
 
+/** เมนูที่ของใกล้หมดหรือหมดแล้ว ใช้ขึ้นแถบเตือนให้ครัวเติมของ */
+export type LowStockItem = {
+  menu_item_id: number;
+  name: string;
+  stock_qty: number;
+  branch_name?: string | null;
+};
+
 /** ข้อมูลเมนูขายดีสำหรับจัดอันดับ Leaderboard */
 export type TopMenu = {
   item_name: string;
@@ -37,6 +45,8 @@ export type StaffDashboardData = {
   urgentOpenTicketCount: number;
   stalePendingMinutes: number;
   staleOrders: StaleOrder[];
+  lowStockThreshold: number;
+  lowStockItems: LowStockItem[];
 };
 
 export type BranchComparison = {
@@ -73,6 +83,8 @@ export type AdminDashboardData = {
   unpaidAmount: number;
   stalePendingMinutes: number;
   staleOrders: StaleOrder[];
+  lowStockThreshold: number;
+  lowStockItems: LowStockItem[];
   topMenus: TopMenu[];
   salesTrend: TrendPoint[];
   openTicketCount: number;

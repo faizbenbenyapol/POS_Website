@@ -27,6 +27,8 @@ export default function BranchMenuPage({ params }: PageProps) {
   // Local edit states
   const [customPrices, setCustomPrices] = useState<Record<number, string>>({});
   const [availabilities, setAvailabilities] = useState<Record<number, boolean>>({});
+  // จำนวนคงเหลือรายเมนู เก็บเป็นข้อความ ค่าว่างคือไม่จำกัดจำนวน
+  const [stockQtys, setStockQtys] = useState<Record<number, string>>({});
 
   const loadData = useCallback(async () => {
     try {
@@ -42,12 +44,15 @@ export default function BranchMenuPage({ params }: PageProps) {
         setItems(mJson.data);
         const prices: Record<number, string> = {};
         const avails: Record<number, boolean> = {};
+        const stocks: Record<number, string> = {};
         for (const item of mJson.data) {
           prices[item.id] = item.custom_price !== null ? String(item.custom_price) : '';
           avails[item.id] = item.is_available === 1;
+          stocks[item.id] = item.stock_qty !== null && item.stock_qty !== undefined ? String(item.stock_qty) : '';
         }
         setCustomPrices(prices);
         setAvailabilities(avails);
+        setStockQtys(stocks);
       }
     } catch {
       showErrorToast('ไม่สามารถโหลดข้อมูลเมนูของสาขาได้');
@@ -65,12 +70,14 @@ export default function BranchMenuPage({ params }: PageProps) {
     const rawPrice = customPrices[menuItemId]?.trim();
     const customPrice = rawPrice ? Number(rawPrice) : null;
     const isAvailable = availabilities[menuItemId] ?? true;
+    const rawStock = stockQtys[menuItemId]?.trim();
+    const stockQty = rawStock ? Number(rawStock) : null;
 
     try {
       const res = await fetch(`/api/admin/branches/${branchId}/menu`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ menuItemId, customPrice, isAvailable }),
+        body: JSON.stringify({ menuItemId, customPrice, isAvailable, stockQty }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
@@ -93,7 +100,9 @@ export default function BranchMenuPage({ params }: PageProps) {
         const rawPrice = customPrices[item.id]?.trim();
         const customPrice = rawPrice ? Number(rawPrice) : null;
         const isAvailable = availabilities[item.id] ?? true;
-        return { menuItemId: item.id, customPrice, isAvailable };
+        const rawStock = stockQtys[item.id]?.trim();
+        const stockQty = rawStock ? Number(rawStock) : null;
+        return { menuItemId: item.id, customPrice, isAvailable, stockQty };
       });
 
       const res = await fetch(`/api/admin/branches/${branchId}/menu`, {
@@ -213,6 +222,7 @@ export default function BranchMenuPage({ params }: PageProps) {
                 <th className="px-4 py-3 text-center">หมวดหมู่</th>
                 <th className="px-4 py-3 text-center">ราคาหลัก (Master)</th>
                 <th className="px-4 py-3 text-center">ราคาเฉพาะสาขานี้ (บาท)</th>
+                <th className="px-4 py-3 text-center">คงเหลือ (จาน)</th>
                 <th className="px-4 py-3 text-center">สถานะของในสาขา</th>
                 <th className="px-4 py-3 text-right">บันทึก</th>
               </tr>
@@ -276,6 +286,31 @@ export default function BranchMenuPage({ params }: PageProps) {
                               }
                               title="ล้างราคาพิเศษเพื่อกลับไปใช้ราคาหลัก"
                               className="text-[11px] text-zinc-400 hover:text-red-600 transition cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <input
+                            type="number"
+                            value={stockQtys[item.id] ?? ''}
+                            onChange={(e) =>
+                              setStockQtys((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                            placeholder="ไม่จำกัด"
+                            min={0}
+                            title="เว้นว่างไว้คือขายได้ไม่จำกัด ใส่ 0 คือของหมดและระบบจะปิดขายให้อัตโนมัติ"
+                            className="w-24 rounded-md border border-rule bg-zinc-50 px-2 py-1 text-center font-mono text-xs text-zinc-800 focus:bg-white focus:border-emerald-600 focus:outline-none"
+                          />
+                          {(stockQtys[item.id] ?? '') !== '' && (
+                            <button
+                              type="button"
+                              onClick={() => setStockQtys((prev) => ({ ...prev, [item.id]: '' }))}
+                              title="เลิกจำกัดจำนวนคงเหลือ"
+                              className="text-xs text-zinc-400 hover:text-red-600 transition cursor-pointer"
                             >
                               ✕
                             </button>

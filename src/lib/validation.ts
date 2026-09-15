@@ -65,6 +65,17 @@ export const branchSchema = z.object({
   address: z.string().trim().max(255, 'ที่อยู่ยาวเกิน 255 ตัวอักษร').optional().or(z.literal('')),
   phone: z.string().trim().max(30, 'เบอร์โทรยาวเกิน 30 ตัวอักษร').optional().or(z.literal('')),
   businessDayCutoffHour: z.coerce.number().int().min(0).max(23).default(4),
+  vatRate: z.coerce
+    .number()
+    .min(0, 'อัตราภาษีต้องไม่ติดลบ')
+    .max(100, 'อัตราภาษีต้องไม่เกิน 100%')
+    .default(7),
+  vatInclusive: z.boolean().default(true),
+  serviceChargeRate: z.coerce
+    .number()
+    .min(0, 'อัตราค่าบริการต้องไม่ติดลบ')
+    .max(100, 'อัตราค่าบริการต้องไม่เกิน 100%')
+    .default(0),
   isActive: z.boolean().default(true),
 });
 
@@ -82,6 +93,13 @@ export const branchMenuOverrideSchema = z.object({
     .nullable()
     .optional(),
   isAvailable: z.boolean().default(true),
+  stockQty: z.coerce
+    .number()
+    .int('จำนวนคงเหลือต้องเป็นจำนวนเต็ม')
+    .min(0, 'จำนวนคงเหลือต้องไม่ติดลบ')
+    .max(999999, 'จำนวนคงเหลือสูงเกินกว่าที่ระบบรองรับ')
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -177,10 +195,68 @@ export const orderStatusSchema = z.object({
 });
 
 /**
- * ตรวจข้อมูลการปิดบิล วิธีชำระต้องเป็นหนึ่งใน 3 แบบที่ร้านรับ
+ * ตรวจข้อมูลการปิดบิล
+ * payments เป็นอาเรย์เพราะลูกค้าจ่ายผสมได้ เช่น เงินสดบางส่วนและโอนบางส่วนในบิลเดียว
+ * discount ไม่บังคับ แต่ถ้าให้ส่วนลดต้องระบุเหตุผลเสมอเพื่อตรวจย้อนหลังได้
+ * ยอดเงินทั้งหมดตรวจซ้ำอีกชั้นที่เซิร์ฟเวอร์ด้วย calculateBill และ validatePayments
  */
 export const checkoutSchema = z.object({
-  method: z.enum(['CASH', 'TRANSFER', 'CARD']),
+  payments: z
+    .array(
+      z.object({
+        method: z.enum(['CASH', 'TRANSFER', 'CARD']),
+        amount: z.coerce
+          .number()
+          .positive('ยอดที่ตัดเข้าช่องทางชำระเงินต้องมากกว่า 0')
+          .max(99999999, 'ยอดชำระสูงเกินกว่าที่ระบบรองรับ'),
+        receivedAmount: z.coerce
+          .number()
+          .min(0, 'เงินที่รับมาต้องไม่ติดลบ')
+          .max(99999999, 'เงินที่รับมาสูงเกินกว่าที่ระบบรองรับ')
+          .nullable()
+          .optional(),
+      }),
+    )
+    .min(1, 'ต้องระบุช่องทางการชำระเงินอย่างน้อย 1 ช่องทาง')
+    .max(3, 'แบ่งจ่ายได้สูงสุด 3 ช่องทางต่อหนึ่งบิล'),
+  discount: z
+    .object({
+      type: z.enum(['NONE', 'AMOUNT', 'PERCENT']).default('NONE'),
+      value: z.coerce.number().min(0, 'ส่วนลดต้องไม่ติดลบ').default(0),
+      reason: z.string().trim().max(255, 'เหตุผลส่วนลดยาวเกิน 255 ตัวอักษร').optional(),
+    })
+    .optional(),
+});
+
+/** วิธีแก้จำนวนคงเหลือของเมนู: ตั้งจำนวนใหม่ เติมของเพิ่ม หรือเลิกจำกัดจำนวน */
+export const STOCK_UPDATE_MODES = ['SET', 'ADD', 'UNLIMITED'] as const;
+
+/**
+ * ตรวจคำสั่งแก้จำนวนคงเหลือของเมนูรายสาขาจากหน้าสต๊อก
+ * quantity ไม่ต้องส่งเมื่อ mode เป็น UNLIMITED เพราะเป็นการเลิกนับจำนวนไปเลย
+ */
+export const stockUpdateSchema = z.object({
+  menuItemId: z.coerce.number().int().positive('ต้องระบุเมนูที่จะแก้จำนวนคงเหลือ'),
+  mode: z.enum(STOCK_UPDATE_MODES),
+  quantity: z.coerce
+    .number()
+    .int('จำนวนต้องเป็นจำนวนเต็ม')
+    .min(0, 'จำนวนต้องไม่ติดลบ')
+    .max(999999, 'จำนวนสูงเกินกว่าที่ระบบรองรับ')
+    .optional(),
+});
+
+/**
+ * ตรวจข้อมูลการคืนเงินบิลที่ปิดไปแล้ว
+ * บังคับระบุเหตุผลเสมอ เพราะการทำบิลเป็นโมฆะหลังรับเงินแล้วเป็นช่องทางทุจริตโดยตรง
+ * ต้องมีข้อความให้ตรวจย้อนหลังได้เหมือนการยกเลิกออเดอร์และการให้ส่วนลด
+ */
+export const refundSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(3, 'ต้องระบุเหตุผลการคืนเงินอย่างน้อย 3 ตัวอักษร')
+    .max(255, 'เหตุผลยาวเกิน 255 ตัวอักษร'),
 });
 
 /**

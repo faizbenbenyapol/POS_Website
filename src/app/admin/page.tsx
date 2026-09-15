@@ -188,6 +188,8 @@ export default function DashboardPage() {
         urgentOpenTicketCount={data.urgentOpenTicketCount}
         staleOrders={data.staleOrders}
         stalePendingMinutes={data.stalePendingMinutes}
+        lowStockItems={data.lowStockItems}
+        lowStockThreshold={data.lowStockThreshold}
       />
 
       {/* Branch Comparison Cards (HQ Admin viewing all branches) */}

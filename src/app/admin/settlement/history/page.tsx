@@ -289,7 +289,7 @@ export default function SettlementHistoryPage() {
               <p className="num mt-1 text-2xl font-black text-emerald-700">
                 ฿{formatBaht(data.summary.totalRevenue)}
               </p>
-              <p className="mt-1 text-[11px] text-slip-dim">
+              <p className="mt-1 text-xs text-slip-dim">
                 จาก {data.summary.settlementCount} วันทำการที่ปิดยอดแล้ว ({data.summary.totalBills}{' '}
                 บิล)
               </p>
@@ -300,7 +300,7 @@ export default function SettlementHistoryPage() {
               <p className="num mt-1 text-2xl font-black text-slip">
                 ฿{formatBaht(data.summary.avgRevenuePerDay)}
               </p>
-              <p className="mt-1 text-[11px] text-slip-dim">
+              <p className="mt-1 text-xs text-slip-dim">
                 เฉลี่ยจากวันที่ปิดยอดแล้วเท่านั้น
               </p>
             </div>
@@ -315,7 +315,7 @@ export default function SettlementHistoryPage() {
                   ? '-'
                   : describeCashDifference(data.summary.cashDifferenceTotal)}
               </p>
-              <p className="mt-1 text-[11px] text-emerald-700 font-medium">
+              <p className="mt-1 text-xs text-emerald-700 font-medium">
                 นับเงินไว้ {data.summary.daysWithCashCount} วันจาก {data.summary.settlementCount} วัน
               </p>
             </div>
@@ -328,7 +328,7 @@ export default function SettlementHistoryPage() {
               <p className="num mt-1 text-2xl font-black text-slip">
                 {data.summary.bestDay ? `฿${formatBaht(data.summary.bestDay.totalRevenue)}` : '-'}
               </p>
-              <p className="mt-1 text-[11px] text-slip-dim">
+              <p className="mt-1 text-xs text-slip-dim">
                 {data.summary.bestDay ? formatThaiDate(data.summary.bestDay.businessDate) : 'ยังไม่มีข้อมูล'}
               </p>
             </div>
@@ -385,11 +385,11 @@ export default function SettlementHistoryPage() {
                           {formatThaiDate(row.businessDate)}
                         </span>
                         {row.note && (
-                          <p className="mt-0.5 text-[11px] text-slip-dim">หมายเหตุ: {row.note}</p>
+                          <p className="mt-0.5 text-xs text-slip-dim">หมายเหตุ: {row.note}</p>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-bold text-slip">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-bold text-slip">
                           <LockIcon className="w-3 h-3" />Z-{row.zNumber}
                         </span>
                       </td>
@@ -421,7 +421,7 @@ export default function SettlementHistoryPage() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-slip">{row.closedByName}</span>
-                        <p className="mt-0.5 text-[11px] text-slip-dim">
+                        <p className="mt-0.5 text-xs text-slip-dim">
                           {formatThaiDateTime(row.closedAt)}
                         </p>
                       </td>

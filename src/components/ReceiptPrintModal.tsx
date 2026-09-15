@@ -5,6 +5,7 @@ import Modal from '@/components/Modal';
 import { formatBaht, formatThaiDateTime, formatThaiTime } from '@/lib/format';
 import { PrintIcon, CookingIcon, DrinkIcon } from '@/components/Icons';
 import { printHtml } from '@/lib/print';
+import type { BillTotals } from '@/lib/billing';
 
 /** ข้อมูลรายการอาหารสำหรับพิมพ์ */
 export type PrintItem = {
@@ -25,11 +26,23 @@ export type ReceiptData = {
   createdAt: string;
   items: PrintItem[];
   totalAmount?: string | number;
+  /** ยอดบิลครบทุกบรรทัดที่เซิร์ฟเวอร์คำนวณและบันทึกไว้จริง */
+  bill?: BillTotals;
+  /** การชำระเงินทุกช่องทางของบิลนี้ */
+  payments?: ReceiptPayment[];
   paymentMethod?: string;
   cashTendered?: number;
   changeDue?: number;
   paidAt?: string;
   cashierName?: string;
+};
+
+/** การชำระเงินหนึ่งช่องทางที่แสดงบนใบเสร็จ */
+export type ReceiptPayment = {
+  method: string;
+  amount: number;
+  receivedAmount?: number | null;
+  changeAmount?: number;
 };
 
 /** พารามิเตอร์สำหรับคอมโพเนนต์ ReceiptPrintModal */
@@ -64,6 +77,97 @@ export function isBarItem(item: PrintItem): boolean {
   return /เครื่องดื่ม|น้ำ|ชา|กาแฟ|เบียร์|ไวน์|ของหวาน|ขนม|ไอศกรีม|drink|beverage|bar|dessert|coffee|tea/i.test(
     text,
   );
+}
+
+
+/** บรรทัดหนึ่งบรรทัดในส่วนสรุปยอดของใบเสร็จ */
+type TotalLine = {
+  label: string;
+  amount: number;
+  /** true เมื่อเป็นตัวเลขที่ต้องแสดงเครื่องหมายลบนำหน้า เช่น ส่วนลด */
+  negative?: boolean;
+  /** true เมื่อเป็นบรรทัดยอดสุทธิที่ต้องเน้นเป็นพิเศษ ไม่รวมอยู่ในรายการย่อย */
+  emphasis?: boolean;
+};
+
+/**
+ * หายอดสุทธิที่ต้องพิมพ์บนใบเสร็จ
+ * ใช้ยอดจาก bill ที่เซิร์ฟเวอร์คำนวณไว้เป็นหลัก ถ้าไม่มีจึงถอยไปใช้ totalAmount แบบเดิม
+ * เพื่อให้ใบเสร็จของบิลเก่าที่ปิดก่อนมีระบบส่วนลดยังพิมพ์ได้เหมือนเดิม
+ *
+ * @param data - ข้อมูลใบเสร็จ
+ * @returns ยอดสุทธิหน่วยบาท
+ */
+function receiptGrandTotal(data: ReceiptData): number {
+  if (data.bill) return data.bill.grandTotal;
+  return Number(data.totalAmount || 0);
+}
+
+/**
+ * สร้างบรรทัดสรุปยอดของใบเสร็จตามลำดับ ยอดอาหาร -> ส่วนลด -> ค่าบริการ -> VAT
+ * บรรทัดที่เป็นศูนย์จะถูกตัดออก เพื่อไม่ให้สลิปยาวเกินจำเป็น
+ *
+ * @param data - ข้อมูลใบเสร็จ
+ * @returns บรรทัดสรุปยอดที่ต้องแสดง ไม่รวมบรรทัดยอดสุทธิ
+ */
+function buildTotalLines(data: ReceiptData): TotalLine[] {
+  const bill = data.bill;
+  if (!bill) return [];
+
+  const lines: TotalLine[] = [{ label: 'ยอดรวมค่าอาหาร', amount: bill.subtotal }];
+
+  if (bill.discountAmount > 0) {
+    const suffix = bill.discountType === 'PERCENT' ? ` (${bill.discountValue}%)` : '';
+    lines.push({ label: `ส่วนลด${suffix}`, amount: bill.discountAmount, negative: true });
+  }
+  if (bill.serviceChargeAmount > 0) {
+    lines.push({
+      label: `ค่าบริการ ${bill.serviceChargeRate}%`,
+      amount: bill.serviceChargeAmount,
+    });
+  }
+  if (bill.vatRate > 0) {
+    lines.push({ label: 'มูลค่าก่อนภาษี (Pre-VAT)', amount: bill.vatBase });
+    lines.push({
+      label: `ภาษีมูลค่าเพิ่ม ${bill.vatRate}%${bill.vatInclusive ? ' (รวมในราคาแล้ว)' : ''}`,
+      amount: bill.vatAmount,
+    });
+  }
+  return lines;
+}
+
+/**
+ * สร้างบรรทัดการชำระเงินของใบเสร็จ รองรับทั้งการจ่ายช่องทางเดียวและแบ่งจ่ายหลายช่องทาง
+ * บิลเก่าที่ไม่มีอาเรย์ payments จะถอยไปอ่าน paymentMethod แบบเดิม
+ *
+ * @param data - ข้อมูลใบเสร็จ
+ * @returns บรรทัดการชำระเงินและเงินทอนที่ต้องแสดง
+ */
+function buildPaymentLines(data: ReceiptData): TotalLine[] {
+  const lines: TotalLine[] = [];
+
+  if (data.payments && data.payments.length > 0) {
+    for (const payment of data.payments) {
+      const name = PAYMENT_METHOD_NAMES[payment.method] || payment.method;
+      lines.push({ label: `ชำระด้วย${name}`, amount: payment.amount });
+      if (payment.method === 'CASH' && payment.receivedAmount != null) {
+        lines.push({ label: 'รับเงินสด (Cash Tendered)', amount: Number(payment.receivedAmount) });
+      }
+    }
+    const totalChange = data.payments.reduce((sum, p) => sum + (p.changeAmount ?? 0), 0);
+    if (totalChange > 0) lines.push({ label: 'เงินทอน (Change Due)', amount: totalChange });
+    return lines;
+  }
+
+  if (data.paymentMethod) {
+    const name = PAYMENT_METHOD_NAMES[data.paymentMethod] || data.paymentMethod;
+    lines.push({ label: `ชำระด้วย${name}`, amount: receiptGrandTotal(data) });
+    if (data.paymentMethod === 'CASH' && data.cashTendered !== undefined) {
+      lines.push({ label: 'รับเงินสด (Cash Tendered)', amount: data.cashTendered });
+      lines.push({ label: 'เงินทอน (Change Due)', amount: data.changeDue ?? 0 });
+    }
+  }
+  return lines;
 }
 
 /**
@@ -162,9 +266,8 @@ export default function ReceiptPrintModal({
       });
     } else {
       // ใบเสร็จรับเงิน
-      const totalNum = Number(data.totalAmount || 0);
-      const vatAmount = totalNum > 0 ? (totalNum * 7) / 107 : 0;
-      const preTaxAmount = totalNum - vatAmount;
+      const lines = buildTotalLines(data);
+      const paymentLines = buildPaymentLines(data);
 
       const html = `
         <div style="width: 76mm; margin: 0 auto; padding: 4px; font-family: 'IBM Plex Sans Thai', sans-serif; color: #000000; line-height: 1.35;">
@@ -214,51 +317,29 @@ export default function ReceiptPrintModal({
 
           <!-- ยอดรวมและการชำระเงิน -->
           <div style="font-size: 12px; margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 6px;">
-            <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; margin-bottom: 4px;">
-              <span>ยอดรวมสุทธิ</span>
-              <span style="font-family: monospace;">฿${data.totalAmount !== undefined ? formatBaht(data.totalAmount) : '0.00'}</span>
-            </div>
-            ${
-              data.paymentMethod
-                ? `
+            ${lines
+              .filter((l) => !l.emphasis)
+              .map(
+                (l) => `
               <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 2px;">
-                <span>วิธีชำระเงิน:</span>
-                <span>${PAYMENT_METHOD_NAMES[data.paymentMethod] || data.paymentMethod}</span>
-              </div>
-              ${
-                data.paymentMethod === 'CASH' && data.cashTendered !== undefined
-                  ? `
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 2px;">
-                  <span>รับเงินสด (Cash Tendered):</span>
-                  <span style="font-family: monospace; font-weight: 700;">฿${formatBaht(data.cashTendered)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 4px;">
-                  <span>เงินทอน (Change Due):</span>
-                  <span style="font-family: monospace; font-weight: 700;">฿${formatBaht(data.changeDue ?? 0)}</span>
-                </div>
-              `
-                  : ''
-              }
-            `
-                : ''
-            }
-            ${
-              totalNum > 0
-                ? `
-              <div style="border-top: 1px dotted #ccc; padding-top: 4px; font-size: 10px; color: #555;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                  <span>มูลค่าก่อนภาษี (Pre-VAT):</span>
-                  <span style="font-family: monospace;">฿${formatBaht(preTaxAmount)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                  <span>ภาษีมูลค่าเพิ่ม (VAT 7%):</span>
-                  <span style="font-family: monospace;">฿${formatBaht(vatAmount)}</span>
-                </div>
-                <div style="font-size: 9px; color: #666; text-align: right; margin-top: 2px;">(ราคารวมภาษีมูลค่าเพิ่มแล้ว)</div>
-              </div>
-            `
-                : ''
-            }
+                <span>${l.label}</span>
+                <span style="font-family: monospace;">${l.negative ? '-' : ''}฿${formatBaht(l.amount)}</span>
+              </div>`,
+              )
+              .join('')}
+            <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; margin: 4px 0; border-top: 1px solid #000; padding-top: 4px;">
+              <span>ยอดรวมสุทธิ</span>
+              <span style="font-family: monospace;">฿${formatBaht(receiptGrandTotal(data))}</span>
+            </div>
+            ${paymentLines
+              .map(
+                (l) => `
+              <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-bottom: 2px;">
+                <span>${l.label}</span>
+                <span style="font-family: monospace; font-weight: 700;">฿${formatBaht(l.amount)}</span>
+              </div>`,
+              )
+              .join('')}
           </div>
 
           <!-- ท้ายใบเสร็จ -->
@@ -433,57 +514,33 @@ export default function ReceiptPrintModal({
             </div>
           ) : (
             <div className="flex flex-col gap-1">
-              {data.totalAmount !== undefined && (
-                <>
-                  <div className="flex justify-between font-bold text-sm text-slip">
-                    <span>ยอดรวมทั้งสิ้น:</span>
-                    <span className="num text-base font-black text-emerald-700">
-                      ฿{formatBaht(data.totalAmount)}
-                    </span>
-                  </div>
-                  {Number(data.totalAmount || 0) > 0 && (
-                    <div className="border-t border-dotted border-rule pt-1 text-[10px] text-slip-dim flex flex-col gap-0.5">
-                      <div className="flex justify-between">
-                        <span>มูลค่าก่อนภาษี (Pre-VAT):</span>
-                        <span className="num">
-                          ฿{formatBaht(Number(data.totalAmount) - (Number(data.totalAmount) * 7) / 107)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>ภาษีมูลค่าเพิ่ม (VAT 7%):</span>
-                        <span className="num">
-                          ฿{formatBaht((Number(data.totalAmount) * 7) / 107)}
-                        </span>
-                      </div>
-                      <div className="text-right text-[9px] text-zinc-400">
-                        (ราคารวมภาษีมูลค่าเพิ่มแล้ว)
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              {data.paymentMethod && (
-                <>
-                  <div className="flex justify-between text-[11px] text-slip-dim pt-1 border-t border-dashed border-rule">
-                    <span>ชำระด้วย:</span>
-                    <span className="font-semibold text-slip">
-                      {PAYMENT_METHOD_NAMES[data.paymentMethod] || data.paymentMethod}
-                    </span>
-                  </div>
-                  {data.paymentMethod === 'CASH' && data.cashTendered !== undefined && (
-                    <>
-                      <div className="flex justify-between text-[11px] text-slip-dim">
-                        <span>รับเงินสด:</span>
-                        <span className="num font-semibold text-slip">฿{formatBaht(data.cashTendered)}</span>
-                      </div>
-                      <div className="flex justify-between text-[11px] text-slip-dim">
-                        <span>เงินทอน:</span>
-                        <span className="num font-bold text-emerald-700">฿{formatBaht(data.changeDue ?? 0)}</span>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
+              {/* สรุปยอดทีละบรรทัดจากยอดที่เซิร์ฟเวอร์คำนวณไว้จริง ไม่ถอด VAT กลับเอง */}
+              {buildTotalLines(data).map((line) => (
+                <div key={line.label} className="flex justify-between text-xs text-slip-dim">
+                  <span>{line.label}</span>
+                  <span className={`num ${line.negative ? 'text-red-700 font-semibold' : ''}`}>
+                    {line.negative ? '-' : ''}฿{formatBaht(line.amount)}
+                  </span>
+                </div>
+              ))}
+
+              <div className="flex justify-between border-t border-rule pt-1 font-bold text-sm text-slip">
+                <span>ยอดรวมสุทธิ:</span>
+                <span className="num text-base font-black text-emerald-700">
+                  ฿{formatBaht(receiptGrandTotal(data))}
+                </span>
+              </div>
+
+              {buildPaymentLines(data).map((line, idx) => (
+                <div
+                  key={`${line.label}-${idx}`}
+                  className="flex justify-between text-xs text-slip-dim"
+                >
+                  <span>{line.label}</span>
+                  <span className="num font-semibold text-slip">฿{formatBaht(line.amount)}</span>
+                </div>
+              ))}
+
               <div className="mt-3 text-center text-[11px] text-slip-dim">
                 ขอบคุณที่ใช้บริการ / Thank you
               </div>
