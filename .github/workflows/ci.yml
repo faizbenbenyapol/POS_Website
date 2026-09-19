@@ -13,7 +13,8 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # ระบุรุ่นตายตัว ไม่ให้เครื่อง CI เปลี่ยนรุ่นเองโดยไม่รู้ตัว (ubuntu-latest จะย้ายไป Ubuntu 26 ในเดือน ต.ค. 2026)
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       NEXT_TELEMETRY_DISABLED: 1
