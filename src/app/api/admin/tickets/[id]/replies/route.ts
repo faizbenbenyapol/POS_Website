@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { execute, queryOne } from '@/lib/db';
 import { ticketReplySchema, firstErrorMessage } from '@/lib/validation';
 
@@ -17,7 +17,7 @@ type RouteContext = { params: Promise<{ id: string }> };
  * @returns id ของข้อความที่บันทึก หรือ error พร้อมข้อความไทย
  */
 export async function POST(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('tickets');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const id = parseId((await context.params).id);

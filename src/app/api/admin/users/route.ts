@@ -1,3 +1,4 @@
+import type { Role } from '@/lib/permissions';
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES } from '@/lib/api';
@@ -10,7 +11,7 @@ export type UserListRow = RowDataPacket & {
   id: number;
   username: string;
   full_name: string;
-  role: 'ADMIN' | 'STAFF';
+  role: Role;
   branch_id: number | null;
   branch_name: string | null;
   is_active: number;

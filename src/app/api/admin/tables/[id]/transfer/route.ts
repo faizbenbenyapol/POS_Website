@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { withTransaction } from '@/lib/db';
 import { transferTableSchema, firstErrorMessage } from '@/lib/validation';
 
@@ -30,7 +30,7 @@ type TransferFailure =
  * @returns ผลการย้าย หรือ error พร้อมข้อความไทย
  */
 export async function POST(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('tables.operate');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const sourceTableId = parseId((await context.params).id);

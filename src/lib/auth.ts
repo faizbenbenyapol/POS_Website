@@ -10,6 +10,7 @@ import {
 } from './auth/token';
 
 export * from './auth/token';
+import { can, type Capability } from '@/lib/permissions';
 
 /** ความแรงของ bcrypt — 10 รอบ เพื่อความสมดุลระหว่างความปลอดภัยและ latency ตอนล็อกอิน */
 const BCRYPT_ROUNDS = 10;
@@ -154,5 +155,24 @@ export async function requireStaff(
   if (requiredRole === 'ADMIN' && user.role !== 'ADMIN') {
     return { ok: false, reason: 'FORBIDDEN' };
   }
+  return { ok: true, user };
+}
+
+/**
+ * ตรวจสิทธิ์ตามความสามารถ (capability) แทนการระบุชื่อบทบาท ใช้เป็นบรรทัดแรกของ endpoint
+ * ที่บางบทบาทใช้ได้บางบทบาทใช้ไม่ได้ เช่น ครัวปิดบิลไม่ได้แต่เปลี่ยนสถานะอาหารได้
+ * ตารางสิทธิ์อยู่ที่ src/lib/permissions.ts ที่เดียว
+ *
+ * @param capability - สิ่งที่ endpoint นี้ทำ
+ * @returns ผู้ใช้ปัจจุบันเมื่อผ่าน หรือเหตุผลที่ไม่ผ่านให้ route แปลงเป็น HTTP status
+ */
+export async function requireCapability(
+  capability: Capability,
+): Promise<
+  { ok: true; user: SessionUser } | { ok: false; reason: 'UNAUTHORIZED' | 'FORBIDDEN' }
+> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, reason: 'UNAUTHORIZED' };
+  if (!can(user.role, capability)) return { ok: false, reason: 'FORBIDDEN' };
   return { ok: true, user };
 }

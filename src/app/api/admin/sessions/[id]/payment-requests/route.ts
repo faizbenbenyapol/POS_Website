@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { z } from 'zod';
 import { apiOk, apiError, authFailureResponse, serverError, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { execute, queryOne } from '@/lib/db';
 import { roundBaht } from '@/lib/billing';
 import { normalizePromptPayId } from '@/lib/promptpay';
@@ -32,7 +32,7 @@ const createPaymentRequestSchema = z.object({
  * @returns คำขอรับเงินพร้อมข้อความ QR และความสามารถของผู้ให้บริการ
  */
 export async function POST(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('checkout');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const sessionId = parseId((await context.params).id);

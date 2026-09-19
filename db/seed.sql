@@ -6,6 +6,7 @@
 -- รหัสผ่านผู้ใช้ตั้งต้น (เก็บใน DB เป็น bcrypt hash เท่านั้น):
 --   admin   / admin1234
 --   staff01 / staff1234
+--   cashier01 / kitchen01 / bar01 ใช้รหัส staff1234 เหมือนกัน (บทบาทแคชเชียร์ ครัว บาร์ ของสาขาสยาม)
 -- =============================================================
 
 -- บังคับ character set ของ connection เป็น utf8mb4 ก่อนนำเข้าข้อมูล
@@ -46,7 +47,10 @@ INSERT INTO branches (id, code, name, address, phone, business_day_cutoff_hour, 
 INSERT INTO users (username, password_hash, full_name, role, branch_id) VALUES
   ('admin',   '$2b$10$1b.K/eL6x6APFfWwlLQZIukpxCbUuqBd2ZUMxpD/4c2NWKnX6l6xu', 'เจ้าของร้าน (HQ)', 'ADMIN', NULL),
   ('staff01', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'พนักงานสาขาสยาม', 'STAFF', 1),
-  ('staff02', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'พนักงานสาขาอารีย์', 'STAFF', 2);
+  ('staff02', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'พนักงานสาขาอารีย์', 'STAFF', 2),
+  ('cashier01', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'แคชเชียร์สาขาสยาม', 'CASHIER', 1),
+  ('kitchen01', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'ครัวสาขาสยาม', 'KITCHEN', 1),
+  ('bar01', '$2b$10$RDSKDcaZcyDGZKsd0u8mAu4IGBJkcJTmSa1KaCIsdhTA7Nkc2MrrC', 'บาร์สาขาสยาม', 'BAR', 1);
 
 -- โต๊ะประจำแต่ละสาขา พร้อม qr_token ประจำโต๊ะ
 -- สาขาที่ 1 (HQ-SIAM): 8 โต๊ะ

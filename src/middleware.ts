@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { AUTH_COOKIE, readToken } from '@/lib/auth/token';
+import { canOpenPage, homePathFor } from '@/lib/permissions';
 
 /**
  * กันเส้นทาง /admin ไม่ให้เข้าถึงได้ถ้ายังไม่ได้ล็อกอิน และเด้งคนที่ล็อกอินแล้ว
@@ -25,13 +26,13 @@ export async function middleware(request: NextRequest) {
 
   // ล็อกอินอยู่แล้วแต่เปิดหน้า login → พาเข้าหลังบ้านตามบทบาท
   if (pathname === '/login' && user) {
-    const target = user.role === 'ADMIN' ? '/admin' : '/admin/orders';
-    return NextResponse.redirect(new URL(target, request.url));
+    return NextResponse.redirect(new URL(homePathFor(user.role), request.url));
   }
 
-  // พนักงาน (STAFF) พยายามเข้าหน้าจัดการผู้ใช้ระบบ → ส่งไปกระดานออเดอร์
-  if (pathname.startsWith('/admin/users') && user?.role === 'STAFF') {
-    return NextResponse.redirect(new URL('/admin/orders', request.url));
+  // เปิดหน้าที่บทบาทนี้ใช้ไม่ได้ (เช่น ครัวเปิดหน้าสรุปปิดยอด) → ส่งกลับหน้าแรกของบทบาทนั้น
+  // ตารางสิทธิ์อยู่ที่ src/lib/permissions.ts การกันจริงยังอยู่ที่ API ทุกตัว ชั้นนี้กันแค่การเปิดหน้า
+  if (user && pathname.startsWith('/admin') && !canOpenPage(user.role, pathname)) {
+    return NextResponse.redirect(new URL(homePathFor(user.role), request.url));
   }
 
   return NextResponse.next();

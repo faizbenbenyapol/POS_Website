@@ -42,6 +42,7 @@ type PrimaryAction = {
  * @param onDenyRefundBill - เรียกเมื่อผู้ใช้ที่ไม่มีสิทธิ์กดคืนเงิน ใช้แจ้งเตือน
  * @param onPrintTicket - เปิดหน้าพิมพ์ตั๋ว รับ (order, items, สถานีที่จะพิมพ์)
  * @param onCheckout - เปิด modal ปิดบิลของโต๊ะนี้
+ * @param canCheckout - true เมื่อบทบาทนี้ปิดบิลได้ ครัวและบาร์จะไม่เห็นปุ่มปิดบิลเลย
  * @returns การ์ดออเดอร์พร้อมหัวบิล รายการอาหาร และแถบคำสั่งด้านล่าง
  */
 export default function OrderCard({
@@ -60,6 +61,7 @@ export default function OrderCard({
   onDenyRefundBill,
   onPrintTicket,
   onCheckout,
+  canCheckout = true,
 }: {
   order: BoardOrder;
   orderItems: BoardItem[];
@@ -76,6 +78,7 @@ export default function OrderCard({
   onDenyRefundBill: () => void;
   onPrintTicket: (order: BoardOrder, orderItems: BoardItem[], station: StationFilter) => void;
   onCheckout: (order: BoardOrder) => void;
+  canCheckout?: boolean;
 }) {
   const status = STATUS_LABELS[order.status] ?? STATUS_LABELS.PENDING;
   const closed = order.session_status === 'CLOSED';
@@ -120,7 +123,7 @@ export default function OrderCard({
         onClick: () => onChangeOrderStatus(order, 'SERVED'),
       };
     }
-    if (order.status === 'SERVED') {
+    if (order.status === 'SERVED' && canCheckout) {
       return {
         label: 'ปิดบิล เก็บเงิน',
         icon: <CreditCardIcon className="w-4 h-4" />,
@@ -324,7 +327,7 @@ export default function OrderCard({
                 hint="ทุกรายการในใบสั่งนี้"
                 onClick={() => onPrintTicket(order, orderItems, 'ALL')}
               />
-              {order.status !== 'SERVED' && (
+              {order.status !== 'SERVED' && canCheckout && (
                 <ActionMenuItem
                   icon={<CreditCardIcon className="w-4 h-4" />}
                   label="ปิดบิล เก็บเงิน"

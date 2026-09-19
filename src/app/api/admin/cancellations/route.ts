@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, serverError, authFailureResponse } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { getEffectiveBranchId, getActiveBranch } from '@/lib/branch';
 import { getBusinessDayRangeFromDateString } from '@/lib/format';
@@ -33,7 +33,7 @@ export type CancellationLogRow = RowDataPacket & {
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireStaff();
+    const auth = await requireCapability('orders.view');
     if (!auth.ok) return authFailureResponse(auth.reason);
 
     const branchId = await getEffectiveBranchId(request, auth.user);

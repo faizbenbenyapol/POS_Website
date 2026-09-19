@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import ReceiptPrintModal, { ReceiptData, isBarItem } from '@/components/ReceiptPrintModal';
 import CancelReasonModal, { REFUND_REASONS } from '@/components/CancelReasonModal';
+import { can, isRole } from '@/lib/permissions';
+import { readStation } from '@/lib/station';
 import CancellationAuditModal from '@/components/CancellationAuditModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { useToast } from '@/components/Toast';
@@ -73,6 +75,22 @@ function OrdersBoardContent() {
 
   // การแสดงผลและการควบคุมการรีเฟรช
   const [viewMode, setViewMode] = useState<BoardViewMode>('LIST');
+  const boardDefaultsApplied = useRef(false);
+
+  // ตั้งมุมมองเริ่มต้นครั้งเดียวตอนเปิดหน้า: เครื่องที่ตั้งเป็นครัว/บาร์ เปิดมาเป็น KDS กรองสถานีของตัวเอง
+  // ถ้าเครื่องไม่ได้ตั้งจุด ใช้บทบาทของผู้ใช้แทน (บัญชีครัวเปิดมาเจอ KDS ครัว)
+  useEffect(() => {
+    if (boardDefaultsApplied.current || currentUser === null) return;
+    boardDefaultsApplied.current = true;
+    const station = readStation();
+    if (station) {
+      setViewMode(station.board.view);
+      setStationFilter(station.board.station);
+    } else if (currentUser.role === 'KITCHEN' || currentUser.role === 'BAR') {
+      setViewMode('KDS');
+      setStationFilter(currentUser.role);
+    }
+  }, [currentUser]);
   const [refreshIntervalSec, setRefreshIntervalSec] = useState<number>(10);
   const [countdown, setCountdown] = useState<number>(10);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
@@ -556,11 +574,13 @@ function OrdersBoardContent() {
         onDenyRefundBill={handleDenyRefundBill}
         onPrintTicket={handleOpenKitchenPrint}
         onCheckout={setCheckoutOrder}
+        canCheckout={canCheckout}
       />
     );
   }
 
   const checkoutContext = checkoutOrder ? getCheckoutContext(checkoutOrder) : null;
+  const canCheckout = currentUser !== null && isRole(currentUser.role) && can(currentUser.role, 'checkout');
 
   return (
     <div className="flex flex-col gap-4">

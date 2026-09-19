@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability, requireStaff } from '@/lib/auth';
 import { execute, query, queryOne } from '@/lib/db';
 import { tableSchema, firstErrorMessage } from '@/lib/validation';
 import { getEffectiveBranchId } from '@/lib/branch';
@@ -42,7 +42,7 @@ function generateQrToken(): string {
  * @returns รายการโต๊ะเรียงตามสาขาและเลขโต๊ะ
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('tables.operate');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const branchId = await getEffectiveBranchId(request, auth.user);

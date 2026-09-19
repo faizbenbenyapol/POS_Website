@@ -75,7 +75,8 @@ CREATE TABLE users (
   username      VARCHAR(50)  NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   full_name     VARCHAR(100) NOT NULL,
-  role          ENUM('ADMIN','STAFF') NOT NULL DEFAULT 'STAFF',
+  -- สิทธิ์ของแต่ละบทบาทอยู่ที่ src/lib/permissions.ts
+  role          ENUM('ADMIN','STAFF','CASHIER','KITCHEN','BAR') NOT NULL DEFAULT 'STAFF',
   branch_id     INT          NULL,
   is_active     TINYINT(1)   NOT NULL DEFAULT 1,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -501,4 +502,5 @@ INSERT INTO schema_migrations (filename, mode) VALUES
   ('010_bill_refund.sql', 'BASELINE'),
   ('011_menu_options.sql', 'BASELINE'),
   ('012_ingredients.sql', 'BASELINE'),
-  ('013_payment_requests.sql', 'BASELINE');
+  ('013_payment_requests.sql', 'BASELINE'),
+  ('014_user_roles.sql', 'BASELINE');

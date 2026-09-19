@@ -1,7 +1,8 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
+import { can } from '@/lib/permissions';
 import { execute, queryOne } from '@/lib/db';
 import { restoreStock } from '@/lib/stock';
 import { orderStatusSchema, firstErrorMessage } from '@/lib/validation';
@@ -24,7 +25,7 @@ type RouteContext = { params: Promise<{ id: string }> };
  * @returns สถานะใหม่ของรายการและของใบสั่ง หรือ error เมื่อบิลปิดไปแล้ว
  */
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('orders.progress');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const id = parseId((await context.params).id);
@@ -35,6 +36,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const parsed = orderStatusSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return apiError(ERROR_CODES.VALIDATION_ERROR, firstErrorMessage(parsed.error));
+  }
+  if (parsed.data.status === 'CANCELLED' && !can(auth.user.role, 'orders.cancelItem')) {
+    return authFailureResponse('FORBIDDEN');
   }
 
   const found = await queryOne<

@@ -1,5 +1,6 @@
 import { formatBahtWithSign } from '@/lib/format';
 import type { GrossProfitSummary } from '@/lib/profit';
+import type { Role } from '@/lib/permissions';
 
 /** ออเดอร์ที่ค้างรอครัวรับนานเกินเกณฑ์กำหนด */
 export type StaleOrder = {
@@ -45,7 +46,8 @@ export type TrendPoint = {
 /** ข้อมูลสำหรับพนักงานปฏิบัติการหน้าร้าน (ไม่มีข้อมูลยอดขาย/การเงิน) */
 export type StaffDashboardData = {
   isStaff: true;
-  userRole: 'STAFF';
+  /** บทบาทจริงของผู้ใช้ (ทุกบทบาทที่ไม่ใช่ ADMIN ได้หน้าจอนี้) */
+  userRole: Exclude<Role, 'ADMIN'>;
   userFullName: string;
   branchId?: number | null;
   branchName?: string;

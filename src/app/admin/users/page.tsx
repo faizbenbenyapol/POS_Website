@@ -8,13 +8,14 @@ import { TextField, SelectField, CheckboxField, FormActions } from '@/components
 import { apiFetch, jsonBody } from '@/lib/client';
 import { formatThaiDate } from '@/lib/format';
 import { PlusIcon, CrownIcon, BriefcaseIcon, BanIcon, EyeIcon, BuildingIcon } from '@/components/Icons';
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, USER_ROLES, type Role } from '@/lib/permissions';
 
 /** ผู้ใช้ 1 แถวตามที่ GET /api/admin/users คืนมา (ไม่มี password_hash) */
 type SystemUser = {
   id: number;
   username: string;
   full_name: string;
-  role: 'ADMIN' | 'STAFF';
+  role: Role;
   branch_id: number | null;
   branch_name: string | null;
   is_active: number;
@@ -38,11 +39,11 @@ const EMPTY_FORM = {
   isActive: true,
 };
 
-/** ตัวเลือกบทบาทพร้อมคำอธิบายภาษาไทย */
-const ROLE_OPTIONS = [
-  { value: 'STAFF', label: 'พนักงาน (ดูออเดอร์ ปิดบิล ตอบ ticket ประจำสาขา)' },
-  { value: 'ADMIN', label: 'ผู้ดูแลระบบ (เข้าถึงทุกส่วน)' },
-];
+/** ตัวเลือกบทบาทพร้อมคำอธิบายภาษาไทย เรียงจากบทบาทที่ใช้บ่อยที่สุดก่อน */
+const ROLE_OPTIONS = [...USER_ROLES.filter((r) => r !== 'ADMIN'), 'ADMIN' as const].map((role) => ({
+  value: role,
+  label: `${ROLE_LABELS[role]} (${ROLE_DESCRIPTIONS[role]})`,
+}));
 
 /**
  * หน้าจัดการผู้ใช้ระบบ เข้าได้เฉพาะแอดมิน
@@ -237,7 +238,7 @@ export default function UsersPage() {
                           : 'bg-zinc-100 text-zinc-700'
                       }`}
                     >
-                      {user.role === 'ADMIN' ? 'ผู้ดูแลระบบ' : 'พนักงาน'}
+                      {ROLE_LABELS[user.role] ?? user.role}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -423,8 +424,8 @@ export default function UsersPage() {
             ]}
           />
           <p className="text-xs text-zinc-500 -mt-2">
-            {form.role === 'STAFF'
-              ? 'พนักงานต้องถูกล็อกไว้กับสาขาใดสาขาหนึ่งเพื่อความปลอดภัย'
+            {form.role !== 'ADMIN'
+              ? 'พนักงานทุกบทบาทต้องถูกล็อกไว้กับสาขาใดสาขาหนึ่งเพื่อความปลอดภัย'
               : 'หากเลือกสำนักงานใหญ่จะสามารถสลับดูข้อมูลได้ทุกสาขา'}
           </p>
 

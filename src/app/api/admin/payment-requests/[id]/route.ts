@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { apiOk, apiError, authFailureResponse, serverError, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { findPaymentProvider } from '@/lib/payments/provider';
 import {
   getPaymentRequest,
@@ -19,7 +19,7 @@ type RouteContext = { params: Promise<{ id: string }> };
  * @returns สถานะล่าสุดของคำขอ
  */
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('checkout');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const id = parseId((await context.params).id);
@@ -53,7 +53,7 @@ type PaymentRequestAction = 'CONFIRM' | 'SIMULATE';
  * @returns สถานะล่าสุดของคำขอหลังยืนยัน
  */
 export async function POST(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('checkout');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const id = parseId((await context.params).id);

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import AdminNav from '@/components/AdminNav';
+import AdminShell from '@/components/AdminShell';
 
 /**
  * เลย์เอาต์ของทุกหน้าหลังบ้าน ตรวจซ้ำอีกชั้นว่าล็อกอินแล้วจริง
@@ -17,10 +17,5 @@ export default async function AdminLayout({
     redirect('/login');
   }
 
-  return (
-    <div className="flex min-h-screen flex-col bg-char md:flex-row">
-      <AdminNav user={user} />
-      <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
-    </div>
-  );
+  return <AdminShell user={user}>{children}</AdminShell>;
 }

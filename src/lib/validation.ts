@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { normalizePromptPayId } from '@/lib/promptpay';
+import { USER_ROLES } from '@/lib/permissions';
 
 /**
  * ข้อความ error ภาษาไทยที่ใช้ซ้ำหลายที่ ประกาศไว้ที่เดียวกันสะกดไม่ตรงกัน
@@ -245,7 +246,7 @@ export const createUserSchema = z.object({
     .regex(/^[a-zA-Z0-9_.]+$/, 'ชื่อผู้ใช้ใช้ได้เฉพาะ a-z 0-9 จุด และขีดล่าง'),
   password: z.string().min(8, 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร').max(200),
   fullName: z.string().trim().min(1, MESSAGES.required).max(100, 'ชื่อ-สกุลยาวเกิน 100 ตัวอักษร'),
-  role: z.enum(['ADMIN', 'STAFF']),
+  role: z.enum(USER_ROLES),
   branchId: z.coerce.number().int().positive().nullable().optional(),
   isActive: z.boolean().default(true),
 });

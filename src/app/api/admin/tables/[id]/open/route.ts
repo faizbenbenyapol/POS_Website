@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, serverError, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import { openTableSession } from '@/lib/session';
 
@@ -17,7 +17,7 @@ type RouteContext = { params: Promise<{ id: string }> };
  * @returns sessionId ของรอบการนั่งที่เปิดอยู่
  */
 export async function POST(_request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('tables.operate');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const tableId = parseId((await context.params).id);

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { withTransaction } from '@/lib/db';
 import { checkoutSchema, firstErrorMessage } from '@/lib/validation';
 import { findSettlement } from '@/lib/settlement';
@@ -155,7 +155,7 @@ async function loadBranchMoneySettings(
  * @returns ยอดบิลที่คิดได้ เงินทอน และรายการชำระเงิน หรือ error พร้อมข้อความไทยบอกสาเหตุ
  */
 export async function POST(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('checkout');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const sessionId = parseId((await context.params).id);
@@ -372,7 +372,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
  * @returns ยอดบิลปัจจุบันและค่าตั้งเรื่องเงินของสาขา
  */
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('checkout');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const sessionId = parseId((await context.params).id);

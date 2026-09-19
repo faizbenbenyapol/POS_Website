@@ -13,12 +13,22 @@ import {
 } from '@/components/Icons';
 import DashboardAlertBanners from './DashboardAlertBanners';
 import type { StaffDashboardData } from './types';
+import { ROLE_DESCRIPTIONS, ROLE_LABELS, canOpenPage } from '@/lib/permissions';
+
+/** เมนูลัดทั้งหมด หน้าจอจะกรองเหลือเฉพาะหน้าที่บทบาทของผู้ใช้เปิดได้ */
+const QUICK_LINKS = [
+  { href: '/admin/orders', title: 'กระดานออเดอร์ & ครัว', hint: 'รับออเดอร์ / เสิร์ฟ / เช็คบิล', icon: CartIcon },
+  { href: '/admin/settlement', title: 'สรุปปิดยอด (Z-Report)', hint: 'พิมพ์ใบปิดกะ / ตรวจนับเงินสด', icon: ReceiptIcon },
+  { href: '/admin/tables', title: 'โต๊ะและ QR Code', hint: 'เปิดโต๊ะ / ย้ายโต๊ะ / พิมพ์ป้าย', icon: TableIcon },
+  { href: '/admin/menu', title: 'เมนูอาหาร', hint: 'สลับสถานะ ของหมด/มีขาย', icon: FoodMenuIcon },
+];
 
 type StaffOperationalViewProps = {
   data: StaffDashboardData;
 };
 
 export default function StaffOperationalView({ data }: StaffOperationalViewProps) {
+  const quickLinks = QUICK_LINKS.filter((link) => canOpenPage(data.userRole, link.href));
   return (
     <div className="flex flex-col gap-5 pb-8">
       {/* Welcome Card for Staff */}
@@ -115,74 +125,42 @@ export default function StaffOperationalView({ data }: StaffOperationalViewProps
         </div>
       </div>
 
-      {/* Quick Action Navigation for Staff */}
-      <div className="rounded-2xl border border-rule bg-white p-5 shadow-xs">
-        <h3 className="text-sm font-bold text-slip mb-3">เมนูลัดสำหรับพนักงาน</h3>
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-          <Link
-            href="/admin/orders"
-            className="flex items-center gap-3 rounded-xl border border-rule p-3 hover:bg-zinc-50 hover:border-slate-300 transition-all group"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 group-hover:scale-105 transition-transform">
-              <CartIcon className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slip">กระดานออเดอร์ & ครัว</p>
-              <p className="text-[11px] text-slip-dim">เช็คบิล / รับเงิน / เสิร์ฟ</p>
-            </div>
-          </Link>
-
-          <Link
-            href="/admin/settlement"
-            className="flex items-center gap-3 rounded-xl border border-rule p-3 hover:bg-zinc-50 hover:border-slate-300 transition-all group"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 group-hover:scale-105 transition-transform">
-              <ReceiptIcon className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slip">สรุปปิดยอด (Z-Report)</p>
-              <p className="text-[11px] text-slip-dim">พิมพ์ใบปิดกะ / ตรวจนับเงินสด</p>
-            </div>
-          </Link>
-
-          <Link
-            href="/admin/tables"
-            className="flex items-center gap-3 rounded-xl border border-rule p-3 hover:bg-zinc-50 hover:border-slate-300 transition-all group"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 group-hover:scale-105 transition-transform">
-              <TableIcon className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slip">โต๊ะและ QR Code</p>
-              <p className="text-[11px] text-slip-dim">พิมพ์ป้าย / สร้าง QR ใหม่</p>
-            </div>
-          </Link>
-
-          <Link
-            href="/admin/menu"
-            className="flex items-center gap-3 rounded-xl border border-rule p-3 hover:bg-zinc-50 hover:border-slate-300 transition-all group"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 group-hover:scale-105 transition-transform">
-              <FoodMenuIcon className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-slip">เมนูอาหาร</p>
-              <p className="text-[11px] text-slip-dim">สลับสถานะ ของหมด/มีขาย</p>
-            </div>
-          </Link>
+      {/* เมนูลัด แสดงเฉพาะหน้าที่บทบาทนี้เปิดได้ (ครัวไม่เห็นปิดยอด แคชเชียร์ไม่เห็นเมนูอาหาร) */}
+      {quickLinks.length > 0 && (
+        <div className="rounded-2xl border border-rule bg-white p-5 shadow-xs">
+          <h3 className="text-sm font-bold text-slip mb-3">เมนูลัด</h3>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            {quickLinks.map((link) => {
+              const Icon = link.icon;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="flex items-center gap-3 rounded-xl border border-rule p-3 hover:bg-zinc-50 hover:border-slate-300 transition-all group"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 group-hover:scale-105 transition-transform">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slip">{link.title}</p>
+                    <p className="text-[11px] text-slip-dim">{link.hint}</p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Role Policy Explanation */}
+      {/* ขอบเขตสิทธิ์ของบทบาทนี้ */}
       <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 text-xs text-slip-dim">
         <div className="flex items-center gap-1.5 font-bold text-slip mb-1">
           <InfoIcon className="w-4 h-4 shrink-0 text-slate-500" />
-          <span>ขอบเขตสิทธิ์การใช้งานบัญชีพนักงาน (STAFF Policy):</span>
+          <span>สิทธิ์ของบัญชีนี้ ({ROLE_LABELS[data.userRole]})</span>
         </div>
         <ul className="list-disc list-inside space-y-1 text-[11px] ml-1">
-          <li>สามารถดูแลโต๊ะ รับออเดอร์ เสิร์ฟอาหาร เช็คบิลคิดเงิน และพิมพ์ใบเสร็จ/ตั๋วครัว ได้อย่างเต็มรูปแบบ</li>
-          <li>สามารถพิมพ์ป้าย QR Code ตั้งโต๊ะ และกดสร้าง QR Code ใหม่เมื่อเคลียร์โต๊ะได้</li>
-          <li>ข้อมูลสรุปยอดขาย รายได้รวม กำไร และการจัดการผู้ใช้ระบบ สงวนสิทธิ์เฉพาะบัญชีเจ้าของร้าน (ADMIN)</li>
+          <li>{ROLE_DESCRIPTIONS[data.userRole]}</li>
+          <li>ยอดขาย รายได้ กำไร และการจัดการผู้ใช้ระบบ สงวนสิทธิ์เฉพาะบัญชีเจ้าของร้าน (ADMIN)</li>
         </ul>
       </div>
     </div>

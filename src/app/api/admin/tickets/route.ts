@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { query, queryOne, withTransaction } from '@/lib/db';
 import { generateTicketCode } from '@/lib/ticket';
 import { staffTicketSchema, firstErrorMessage } from '@/lib/validation';
@@ -39,7 +39,7 @@ export type TicketReplyRow = RowDataPacket & {
  * รองรับการกรองตามสาขาที่เลือก (หรือแสดงทุกสาขาสำหรับ HQ Admin)
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('tickets');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const branchId = await getEffectiveBranchId(request, auth.user);
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('tickets');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const parsed = staffTicketSchema.safeParse(await request.json().catch(() => null));

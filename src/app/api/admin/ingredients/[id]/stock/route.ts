@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, serverError, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { query, queryOne, withTransaction } from '@/lib/db';
 import { getEffectiveBranchId } from '@/lib/branch';
 import { roundQty } from '@/lib/recipe';
@@ -21,7 +21,7 @@ const LOG_LIMIT = 50;
  * @returns ประวัติล่าสุดไม่เกิน 50 แถว พร้อมชื่อผู้ทำและรหัสออเดอร์ที่เกี่ยวข้อง
  */
 export async function GET(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('ingredients.stock');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const ingredientId = parseId((await context.params).id);
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
  * @returns ยอดก่อนและหลังแก้
  */
 export async function POST(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('ingredients.stock');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const ingredientId = parseId((await context.params).id);

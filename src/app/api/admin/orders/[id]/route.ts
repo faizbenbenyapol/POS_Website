@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { execute, query, queryOne } from '@/lib/db';
 import { restoreStock } from '@/lib/stock';
 import { orderStatusSchema, firstErrorMessage } from '@/lib/validation';
@@ -20,7 +20,7 @@ type RouteContext = { params: Promise<{ id: string }> };
  * @returns ผลสำเร็จ หรือ error เมื่อบิลถูกปิดไปแล้วหรือไม่พบออเดอร์
  */
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('orders.progress');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const id = parseId((await context.params).id);

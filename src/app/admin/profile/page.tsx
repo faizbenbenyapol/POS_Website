@@ -1,5 +1,6 @@
 'use client';
 
+import type { Role } from '@/lib/permissions';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, jsonBody } from '@/lib/client';
@@ -23,7 +24,7 @@ type UserProfileData = {
     id: number;
     username: string;
     fullName: string;
-    role: 'ADMIN' | 'STAFF';
+    role: Role;
     branchId: number | null;
     branchName: string | null;
     branchCode: string | null;

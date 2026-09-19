@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, serverError, ERROR_CODES } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability, requireStaff } from '@/lib/auth';
 import { execute, query } from '@/lib/db';
 import { getBranchById, getEffectiveBranchId } from '@/lib/branch';
 import { isIngredientLow } from '@/lib/recipe';
@@ -31,7 +31,7 @@ type IngredientRow = RowDataPacket & {
  * @returns สาขาที่กำลังดูและรายการวัตถุดิบ
  */
 export async function GET(request: NextRequest) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('ingredients.stock');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   try {

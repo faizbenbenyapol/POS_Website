@@ -1,7 +1,7 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import type { NextRequest } from 'next/server';
 import { apiOk, serverError, authFailureResponse } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { getEffectiveBranchId, getBranchById } from '@/lib/branch';
 import { getBusinessDayRange, getYesterdayBusinessDayRange } from '@/lib/format';
@@ -149,7 +149,7 @@ function getPreviousYearMonth(yearMonth: string): string {
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireStaff();
+    const auth = await requireCapability('dashboard.view');
     if (!auth.ok) return authFailureResponse(auth.reason);
 
     const branchId = await getEffectiveBranchId(request, auth.user);
@@ -158,8 +158,9 @@ export async function GET(request: NextRequest) {
     const todayRange = getBusinessDayRange(undefined, activeBranch?.businessDayCutoffHour);
     const yesterdayRange = getYesterdayBusinessDayRange(undefined, activeBranch?.businessDayCutoffHour);
 
-    // หากเป็นพนักงาน (STAFF) ให้ส่งเฉพาะข้อมูลปฏิบัติการหน้าร้าน (ไม่เปิดเผยตัวเลขรายได้/ยอดขาย)
-    if (auth.user.role === 'STAFF') {
+    // ทุกบทบาทที่ไม่ใช่ ADMIN (พนักงาน แคชเชียร์ ครัว บาร์) ได้เฉพาะข้อมูลปฏิบัติการหน้าร้าน
+    // ไม่เปิดเผยตัวเลขรายได้ ยอดขาย และกำไร ตรวจแบบ "ไม่ใช่ ADMIN" เพื่อให้บทบาทที่เพิ่มในอนาคตปลอดภัยไว้ก่อน
+    if (auth.user.role !== 'ADMIN') {
       const [orderCount, openTables, staleOrders, tickets, lowStockItems, lowIngredients] = await Promise.all([
         queryOne<RowDataPacket & { total: number }>(
           `SELECT COUNT(*) AS total FROM orders
@@ -201,7 +202,7 @@ export async function GET(request: NextRequest) {
       return apiOk({
         ...toLowIngredientAlert(lowIngredients),
         isStaff: true,
-        userRole: 'STAFF',
+        userRole: auth.user.role,
         userFullName: auth.user.fullName,
         branchId,
         branchName: activeBranch?.name ?? 'สาขาปัจจุบัน',

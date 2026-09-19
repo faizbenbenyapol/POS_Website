@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, serverError, authFailureResponse, ERROR_CODES } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { query, withTransaction } from '@/lib/db';
 import { getEffectiveBranchId, getBranchById } from '@/lib/branch';
 import { LOW_STOCK_THRESHOLD } from '@/lib/stock';
@@ -32,7 +32,7 @@ export type StockItemRow = RowDataPacket & {
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireStaff();
+    const auth = await requireCapability('stock.menu');
     if (!auth.ok) return authFailureResponse(auth.reason);
 
     const branchId = await getEffectiveBranchId(request, auth.user);
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const auth = await requireStaff();
+    const auth = await requireCapability('stock.menu');
     if (!auth.ok) return authFailureResponse(auth.reason);
 
     const branchId = await getEffectiveBranchId(request, auth.user);

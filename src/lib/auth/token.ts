@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
+import { isRole, type Role } from '@/lib/permissions';
 
 /**
  * ชื่อ cookie สำหรับเก็บเซสชัน JWT โดยตั้งค่าเป็น httpOnly เพื่อความปลอดภัย
@@ -10,7 +11,8 @@ export const AUTH_COOKIE = 'pos_session';
  */
 export const TOKEN_MAX_AGE_SECONDS = 8 * 60 * 60;
 
-export type UserRole = 'ADMIN' | 'STAFF';
+/** บทบาทของผู้ใช้ รายการและสิทธิ์ของแต่ละบทบาทอยู่ใน src/lib/permissions.ts */
+export type UserRole = Role;
 
 export type SessionUser = {
   id: number;
@@ -56,7 +58,7 @@ export async function readToken(token: string): Promise<SessionUser | null> {
       typeof payload.id !== 'number' ||
       typeof payload.username !== 'string' ||
       typeof payload.fullName !== 'string' ||
-      (payload.role !== 'ADMIN' && payload.role !== 'STAFF')
+      !isRole(payload.role)
     ) {
       return null;
     }

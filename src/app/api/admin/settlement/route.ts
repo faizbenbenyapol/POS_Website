@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, serverError, authFailureResponse, ERROR_CODES } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability } from '@/lib/auth';
 import { query, withTransaction } from '@/lib/db';
 import { getEffectiveBranchId, getActiveBranch } from '@/lib/branch';
 import { findSettlement, type SettlementRow } from '@/lib/settlement';
@@ -435,7 +435,7 @@ function toClosure(row: SettlementRow): SettlementClosure {
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireStaff();
+    const auth = await requireCapability('settlement');
     if (!auth.ok) return authFailureResponse(auth.reason);
 
     const branchId = await getEffectiveBranchId(request, auth.user);
@@ -478,7 +478,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireStaff();
+    const auth = await requireCapability('settlement');
     if (!auth.ok) return authFailureResponse(auth.reason);
 
     const branchId = await getEffectiveBranchId(request, auth.user);

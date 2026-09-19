@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, apiError, authFailureResponse, ERROR_CODES, parseId } from '@/lib/api';
-import { requireStaff } from '@/lib/auth';
+import { requireCapability, requireStaff } from '@/lib/auth';
 import { execute, queryOne } from '@/lib/db';
 import { menuItemSchema, firstErrorMessage } from '@/lib/validation';
 
@@ -48,7 +48,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
  * ทั้ง ADMIN และ STAFF สามารถกดสลับได้ เพื่อให้พนักงานหน้าร้านและครัวแจ้งของหมดได้ทันที
  */
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const auth = await requireStaff();
+  const auth = await requireCapability('stock.menu');
   if (!auth.ok) return authFailureResponse(auth.reason);
 
   const id = parseId((await context.params).id);
