@@ -25,6 +25,9 @@ type StockResponse = {
   items: StockItem[];
 };
 
+/** สาขาที่ HQ Admin เลือกดูสต๊อกได้ ตามที่ GET /api/admin/branches คืนมา */
+type BranchOption = { id: number; code: string; name: string; is_active: number };
+
 /** ตัวกรองมุมมองของหน้าสต๊อก */
 type StockFilter = 'ALL' | 'LOW' | 'OUT' | 'UNLIMITED';
 
@@ -61,6 +64,8 @@ export default function StockPage() {
   const [quantity, setQuantity] = useState('0');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [switchingBranch, setSwitchingBranch] = useState(false);
 
   /**
    * โหลดจำนวนคงเหลือของทุกเมนูในสาขาที่กำลังดูอยู่
@@ -79,8 +84,31 @@ export default function StockPage() {
       setLoadError('');
     } else {
       setLoadError(result.message);
+      // HQ Admin ที่ดูภาพรวมทุกสาขาจะโหลดสต๊อกไม่ได้ ดึงรายชื่อสาขามาให้เลือกบนหน้านี้เลย
+      const branchResult = await apiFetch<BranchOption[]>('/api/admin/branches');
+      if (branchResult.ok) setBranches(branchResult.data.filter((b) => b.is_active));
     }
   }, []);
+
+  /**
+   * สลับไปดูสาขาที่เลือกแล้วรีโหลดหน้า เพื่อให้แถบเลือกสาขาและข้อมูลทุกส่วนตรงกัน
+   *
+   * @param branchId - รหัสสาขาที่ต้องการดูสต๊อก
+   * @returns ไม่คืนค่า มีผลข้างเคียงคือตั้ง cookie สาขาและรีโหลดหน้า
+   */
+  async function switchBranch(branchId: number) {
+    setSwitchingBranch(true);
+    const result = await apiFetch<unknown>(
+      '/api/admin/branches/switch',
+      { method: 'POST', body: jsonBody({ branchId }) },
+    );
+    if (result.ok) {
+      window.location.reload();
+      return;
+    }
+    setSwitchingBranch(false);
+    setLoadError(result.message);
+  }
 
   useEffect(() => {
     load(true);
@@ -196,6 +224,24 @@ export default function StockPage() {
       <div className="flex flex-col gap-4">
         <h1 className="text-lg font-semibold text-zinc-900">สต๊อกเมนู</h1>
         <ErrorState message={loadError} onRetry={() => load(true)} />
+        {branches.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-zinc-600">เลือกสาขาที่ต้องการดูสต๊อก</p>
+            <div className="flex flex-wrap gap-2">
+              {branches.map((branch) => (
+                <button
+                  key={branch.id}
+                  type="button"
+                  disabled={switchingBranch}
+                  onClick={() => switchBranch(branch.id)}
+                  className="min-h-[44px] rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50 cursor-pointer"
+                >
+                  {branch.name} ({branch.code})
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
