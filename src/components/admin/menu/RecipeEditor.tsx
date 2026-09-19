@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
+import CustomSelect from '@/components/Select';
 import { TableSkeleton, ErrorState } from '@/components/DataState';
 import { CloseIcon, PlusIcon } from '@/components/Icons';
 import { apiFetch, jsonBody } from '@/lib/client';
@@ -155,27 +156,23 @@ export default function RecipeEditor({
                 const lineCost = ingredient ? (Number(line.quantity) || 0) * ingredient.costPerUnit : 0;
                 return (
                   <div key={line.key} className="flex flex-wrap items-center gap-2">
-                    <select
+                    <CustomSelect
                       value={line.ingredientId}
-                      onChange={(e) => updateLine(line.key, { ingredientId: e.target.value })}
-                      aria-label="วัตถุดิบ"
-                      className={`min-w-[10rem] flex-1 cursor-pointer ${inputClass}`}
-                    >
-                      <option value="">เลือกวัตถุดิบ…</option>
-                      {(ingredients ?? [])
+                      onChange={(value) => updateLine(line.key, { ingredientId: value })}
+                      placeholder="เลือกวัตถุดิบ…"
+                      className="min-w-[10rem] flex-1"
+                      options={(ingredients ?? [])
                         .filter(
                           (i) =>
                             (i.isActive || String(i.id) === line.ingredientId) &&
                             (String(i.id) === line.ingredientId ||
                               !lines.some((l) => l.ingredientId === String(i.id))),
                         )
-                        .map((i) => (
-                          <option key={i.id} value={String(i.id)}>
-                            {i.name}
-                            {i.isActive ? '' : ' (ปิดใช้แล้ว)'}
-                          </option>
-                        ))}
-                    </select>
+                        .map((i) => ({
+                          value: String(i.id),
+                          label: `${i.name}${i.isActive ? '' : ' (ปิดใช้แล้ว)'}`,
+                        }))}
+                    />
                     <input
                       type="number"
                       min={0}

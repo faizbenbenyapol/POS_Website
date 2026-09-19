@@ -200,6 +200,11 @@ function OrdersBoardContent() {
    *                       false ตอน poll ตามรอบ เพื่อไม่ให้กระดานกะพริบขณะพนักงานกำลังอ่าน
    * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือปรับ state ของกระดาน
    */
+  // ค่าที่ load ใช้แต่ไม่ควรทำให้กระดานโหลดใหม่เมื่อเปลี่ยน (ตั้งเสียง รอบรีเฟรช) เก็บใน ref
+  // ถ้าใส่เป็น dependency ของ load การกดปิดเสียงหรือเปลี่ยนรอบรีเฟรชจะล้างกระดานแล้วโหลดใหม่ทั้งหน้า
+  const pollSettingsRef = useRef({ soundEnabled, soundTone, soundVolume, refreshIntervalSec });
+  pollSettingsRef.current = { soundEnabled, soundTone, soundVolume, refreshIntervalSec };
+
   const load = useCallback(
     async (showSkeleton: boolean) => {
       if (showSkeleton) {
@@ -221,14 +226,15 @@ function OrdersBoardContent() {
         return;
       }
 
+      const settings = pollSettingsRef.current;
       setLastSyncTime(formatThaiTime(new Date().toISOString()));
-      setCountdown(refreshIntervalSec > 0 ? refreshIntervalSec : 0);
+      setCountdown(settings.refreshIntervalSec > 0 ? settings.refreshIntervalSec : 0);
 
       const newOrders = result.data.orders;
-      if (knownOrderIdsRef.current !== null && soundEnabled) {
+      if (knownOrderIdsRef.current !== null && settings.soundEnabled) {
         const hasNewOrder = newOrders.some((o) => !knownOrderIdsRef.current!.has(o.id));
         if (hasNewOrder) {
-          playNewOrderSound(soundTone, soundVolume);
+          playNewOrderSound(settings.soundTone, settings.soundVolume);
           setNotice({
             tone: 'success',
             message: 'มีออเดอร์ใหม่เข้ามาที่หน้ากระดาน!',
@@ -240,7 +246,7 @@ function OrdersBoardContent() {
       setOrders(newOrders);
       setItems(result.data.items);
     },
-    [statusFilter, dateFilter, tableFilter, soundEnabled, soundTone, soundVolume, refreshIntervalSec],
+    [statusFilter, dateFilter, tableFilter],
   );
 
   useEffect(() => {
@@ -251,23 +257,24 @@ function OrdersBoardContent() {
   }, [load]);
 
   // ตัวนับเวลาถอยหลังการดึงข้อมูลและอัปเดตอายุออเดอร์
+  // ตัวนับแค่ลดตัวเลข ส่วนการโหลดอยู่ใน effect แยกด้านล่าง ห้ามเรียก load ใน updater ของ setState
+  // เพราะ React เรียก updater ซ้ำได้ (โหมดพัฒนาเรียกสองรอบเสมอ) กระดานเคยยิง API ซ้ำสองครั้งทุกรอบ
   useEffect(() => {
     const timer = window.setInterval(() => {
       setTimeTick(Date.now());
-
-      if (refreshIntervalSec > 0) {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            load(false);
-            return refreshIntervalSec;
-          }
-          return prev - 1;
-        });
-      }
+      if (refreshIntervalSec > 0) setCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [refreshIntervalSec, load]);
+  }, [refreshIntervalSec]);
+
+  // นับถึงศูนย์แล้วโหลดรอบถัดไป (load ตั้งตัวนับกลับเองเมื่อโหลดสำเร็จ)
+  useEffect(() => {
+    if (refreshIntervalSec > 0 && countdown === 0) {
+      setCountdown(refreshIntervalSec);
+      load(false);
+    }
+  }, [countdown, refreshIntervalSec, load]);
 
   /**
    * เปลี่ยนสถานะของใบสั่งทั้งใบด้วยการกดครั้งเดียว
@@ -723,7 +730,10 @@ function OrdersBoardContent() {
 
         {showPrepSummary && (
           <div className="mt-3 pt-2.5 border-t border-amber-200/60">
-            {prepSummary.length === 0 ? (
+            {/* ระหว่างโหลดครั้งแรกยังไม่รู้ว่ามีงานค้างไหม ห้ามบอกว่าเคลียร์ครบแล้ว */}
+            {orders === null ? (
+              <p className="py-2 text-center text-sm text-amber-900/60">กำลังโหลดรายการที่ต้องเตรียม…</p>
+            ) : prepSummary.length === 0 ? (
               <p className="py-2 text-center text-sm font-medium text-emerald-800">
                 เคลียร์ออเดอร์ครบถ้วนแล้ว ไม่มีรายการค้างทำในขณะนี้
               </p>
@@ -731,7 +741,7 @@ function OrdersBoardContent() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                 {prepSummary.map((item) => (
                   <div
-                    key={item.name}
+                    key={item.key}
                     className="flex flex-col justify-between rounded-lg border border-amber-200 bg-white p-2.5 shadow-2xs"
                   >
                     <div className="flex items-start justify-between gap-1.5">
@@ -739,6 +749,10 @@ function OrdersBoardContent() {
                         <span className="font-bold text-sm text-slate-800 line-clamp-2 leading-tight">
                           {item.name}
                         </span>
+                        {/* ตัวเลือกแยกบรรทัด ไม่ต่อท้ายชื่อ ชื่อเมนูจะได้ไม่ถูกตัดจนอ่านไม่ออก */}
+                        {item.options && (
+                          <span className="text-xs font-semibold leading-snug text-slate-600">{item.options}</span>
+                        )}
                         {item.isBar ? (
                           <span className="text-xs font-bold text-cyan-700">บาร์น้ำ</span>
                         ) : (

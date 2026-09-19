@@ -16,10 +16,10 @@ import { STATUS_FILTERS, type BoardViewMode } from './types';
 
 /** รอบเวลาดึงข้อมูลใหม่ที่เลือกได้ หน่วยเป็นวินาที 0 คือหยุดรีเฟรชอัตโนมัติ */
 const REFRESH_OPTIONS = [
-  { value: 5, label: 'รีเฟรชทุก 5 วินาที' },
-  { value: 10, label: 'รีเฟรชทุก 10 วินาที' },
-  { value: 30, label: 'รีเฟรชทุก 30 วินาที' },
-  { value: 0, label: 'หยุดรีเฟรชอัตโนมัติ' },
+  { value: 5, label: 'รีเฟรชทุก 5 วินาที', short: '5 วิ' },
+  { value: 10, label: 'รีเฟรชทุก 10 วินาที', short: '10 วิ' },
+  { value: 30, label: 'รีเฟรชทุก 30 วินาที', short: '30 วิ' },
+  { value: 0, label: 'หยุดรีเฟรชอัตโนมัติ', short: 'ปิด' },
 ];
 
 /**
@@ -99,9 +99,6 @@ export default function OrderToolbar({
   isAdmin: boolean;
   onOpenAuditLog: () => void;
 }) {
-  const currentRefreshLabel =
-    REFRESH_OPTIONS.find((o) => o.value === refreshIntervalSec)?.label ?? 'รีเฟรชอัตโนมัติ';
-
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -175,21 +172,34 @@ export default function OrderToolbar({
             </div>
 
             <div className="flex flex-col gap-1 px-1.5 pb-1.5" onClick={(e) => e.stopPropagation()}>
-              <label htmlFor="order-refresh-interval" className="text-sm font-semibold text-slip">
+              <span id="order-refresh-interval" className="text-sm font-semibold text-slip">
                 รอบรีเฟรชอัตโนมัติ
-              </label>
-              <select
-                id="order-refresh-interval"
-                value={refreshIntervalSec}
-                onChange={(event) => onChangeRefreshInterval(Number(event.target.value))}
-                className="min-h-[40px] w-full rounded-lg border border-rule bg-white px-2.5 text-sm font-semibold text-slip cursor-pointer"
+              </span>
+              {/* ปุ่มแบ่งช่องแทน dropdown ของเบราว์เซอร์ กดครั้งเดียวจบ และไม่หลุดออกนอกเมนูบนจอสัมผัส */}
+              <div
+                role="radiogroup"
+                aria-labelledby="order-refresh-interval"
+                className="grid grid-cols-4 gap-1 rounded-lg border border-rule bg-zinc-50 p-1"
               >
-                {REFRESH_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                {REFRESH_OPTIONS.map((option) => {
+                  const selected = refreshIntervalSec === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      title={option.label}
+                      onClick={() => onChangeRefreshInterval(option.value)}
+                      className={`min-h-[36px] rounded-md px-2 text-xs font-semibold transition-colors cursor-pointer ${
+                        selected ? 'bg-white text-emerald-700 shadow-xs ring-1 ring-emerald-200' : 'text-slip-dim hover:text-slip'
+                      }`}
+                    >
+                      {option.short}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <ActionMenuDivider />
@@ -217,7 +227,7 @@ export default function OrderToolbar({
             <ActionMenuItem
               icon={<DownloadIcon className="w-4 h-4" />}
               label="ส่งออกออเดอร์เป็น CSV"
-              hint={canExport ? currentRefreshLabel : 'ยังไม่มีออเดอร์ให้ส่งออก'}
+              hint={canExport ? 'ตามวันที่และตัวกรองที่เลือกอยู่' : 'ยังไม่มีออเดอร์ให้ส่งออก'}
               disabled={!canExport}
               onClick={onExportCsv}
             />

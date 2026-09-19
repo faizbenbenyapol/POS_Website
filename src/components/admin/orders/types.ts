@@ -35,7 +35,11 @@ export type BoardItem = {
 
 /** ข้อมูลสรุปเมนูอาหารค้างปรุงสำหรับห้องครัว */
 export type PrepItem = {
+  /** คีย์ไม่ซ้ำของการ์ด (ชื่อเมนู + ตัวเลือก) */
+  key: string;
   name: string;
+  /** ตัวเลือกที่ลูกค้าเลือก เมนูเดียวกันแต่ตัวเลือกต่างกันแยกการ์ด */
+  options: string | null;
   quantity: number;
   tables: string[];
   isBar: boolean;

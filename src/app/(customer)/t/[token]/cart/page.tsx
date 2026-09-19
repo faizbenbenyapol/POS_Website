@@ -10,13 +10,14 @@ import { readCart, writeCart, cartTotal, type CartItem } from '@/lib/cart';
 import QuickTicketButton from '@/components/QuickTicketButton';
 
 /** รายการข้อความด่วนสำหรับระบุหมายเหตุอาหาร */
+// ไม่มีชิปที่เพิ่มของหรือเพิ่มขนาด (เช่น "พิเศษ" "เพิ่มไข่ดาว") เพราะของพวกนั้นมีราคา ต้องสั่งผ่านตัวเลือกของเมนู
+// ถ้าให้กดเป็นหมายเหตุ ลูกค้าจะได้ของเพิ่มฟรีโดยไม่ถูกคิดเงิน
 const PRESET_NOTES = [
   { label: 'เผ็ดน้อย', value: 'เผ็ดน้อย' },
   { label: 'เผ็ดมาก', value: 'เผ็ดมาก' },
   { label: 'ไม่ใส่ผัก', value: 'ไม่ใส่ผัก' },
-  { label: 'เพิ่มไข่ดาว', value: 'เพิ่มไข่ดาว' },
-  { label: 'พิเศษ', value: 'พิเศษ' },
   { label: 'ไม่หวาน', value: 'ไม่หวาน' },
+  { label: 'แยกน้ำ', value: 'แยกน้ำ' },
 ];
 
 /** ตัวเลือกประเภทออเดอร์ที่ลูกค้ากดเลือกก่อนยืนยันสั่ง */
@@ -224,7 +225,13 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
 
             {/* แถบชิปข้อความด่วน */}
             <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {PRESET_NOTES.map((chip) => {
+              {/* ตัดชิปที่ซ้ำกับตัวเลือกที่เลือกไว้แล้ว เช่น เลือกเผ็ดน้อยในตัวเลือกแล้วไม่ต้องมีชิปเรื่องความเผ็ดอีก */}
+              {PRESET_NOTES.filter((chip) => {
+                const chosen = item.optionsText ?? '';
+                if (chip.value.includes('เผ็ด') && chosen.includes('เผ็ด')) return false;
+                if (chip.value.includes('หวาน') && chosen.includes('หวาน')) return false;
+                return true;
+              }).map((chip) => {
                 const isSelected = item.note.includes(chip.value);
                 return (
                   <button

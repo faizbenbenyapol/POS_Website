@@ -84,7 +84,10 @@ export function computeKitchenPrepSummary(
     }
   }
 
-  const prepMap = new Map<string, { quantity: number; tables: Set<string>; isBar: boolean }>();
+  const prepMap = new Map<
+    string,
+    { name: string; options: string | null; quantity: number; tables: Set<string>; isBar: boolean }
+  >();
 
   for (const item of items) {
     const parentOrder = activeOrderMap.get(item.order_id);
@@ -102,6 +105,8 @@ export function computeKitchenPrepSummary(
       // แยกตามตัวเลือกด้วย กะเพราเผ็ดน้อยกับเผ็ดมากเป็นคนละจานสำหรับคนทำ
       const prepKey = item.options_text ? `${item.item_name} (${item.options_text})` : item.item_name;
       const existing = prepMap.get(prepKey) || {
+        name: item.item_name,
+        options: item.options_text ?? null,
         quantity: 0,
         tables: new Set<string>(),
         isBar,
@@ -113,8 +118,10 @@ export function computeKitchenPrepSummary(
   }
 
   return Array.from(prepMap.entries())
-    .map(([name, data]) => ({
-      name,
+    .map(([key, data]) => ({
+      key,
+      name: data.name,
+      options: data.options,
       quantity: data.quantity,
       tables: Array.from(data.tables).sort((a, b) =>
         a.localeCompare(b, undefined, { numeric: true }),

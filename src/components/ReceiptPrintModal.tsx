@@ -68,18 +68,9 @@ const PAYMENT_METHOD_NAMES: Record<string, string> = {
   CARD: 'บัตรเครดิต / เดบิต',
 };
 
-/**
- * ตรวจสอบว่ารายการนี้เป็นเครื่องดื่มหรือของหวานสำหรับสถานีบาร์น้ำหรือไม่
- *
- * @param item - รายการอาหาร
- * @returns true หากจัดอยู่ในกลุ่มบาร์เครื่องดื่ม
- */
-export function isBarItem(item: PrintItem): boolean {
-  const text = `${item.categoryName ?? ''} ${item.itemName}`.toLowerCase();
-  return /เครื่องดื่ม|น้ำ|ชา|กาแฟ|เบียร์|ไวน์|ของหวาน|ขนม|ไอศกรีม|drink|beverage|bar|dessert|coffee|tea/i.test(
-    text,
-  );
-}
+/** ตรรกะแยกครัว/บาร์ย้ายไปอยู่ที่ src/lib/kitchenRouting.ts ส่งต่อไว้ให้ไฟล์เดิมที่ import จากที่นี่ */
+import { isBarItem } from '@/lib/kitchenRouting';
+export { isBarItem };
 
 
 /** บรรทัดหนึ่งบรรทัดในส่วนสรุปยอดของใบเสร็จ */

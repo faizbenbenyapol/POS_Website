@@ -125,12 +125,15 @@ export default function TransferQrPanel({
 
       {request && !stale && request.status !== 'EXPIRED' && request.status !== 'CANCELLED' && (
         <>
-          <PromptPayQR
-            payload={request.qrPayload}
-            amount={request.amount}
-            accountName={request.accountName}
-            maskedPromptPayId={request.maskedPromptPayId}
-          />
+          {/* ได้รับเงินแล้วไม่ต้องโชว์ QR อีก กันลูกค้าสแกนโอนซ้ำ */}
+          {request.status !== 'PAID' && (
+            <PromptPayQR
+              payload={request.qrPayload}
+              amount={request.amount}
+              accountName={request.accountName}
+              maskedPromptPayId={request.maskedPromptPayId}
+            />
+          )}
 
           {request.status === 'PAID' ? (
             <div

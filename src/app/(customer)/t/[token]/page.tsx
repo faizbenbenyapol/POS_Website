@@ -52,6 +52,22 @@ const LOW_STOCK_THRESHOLD = 5;
 const QUICK_NOTES = ['ไม่ใส่ผัก', 'เผ็ดน้อย', 'ขอเผ็ดๆ', 'ไม่หวาน', 'แยกน้ำ', 'ขอช้อนส้อม'];
 
 /**
+ * ตัดชิปหมายเหตุที่ซ้ำกับกลุ่มตัวเลือกของเมนู เช่น เมนูที่มีกลุ่ม "ระดับความเผ็ด" แล้วไม่ต้องมีชิป "เผ็ดน้อย"
+ * ไม่อย่างนั้นลูกค้าเลือกเผ็ดมากในตัวเลือกแต่กดชิปเผ็ดน้อยในหมายเหตุ ครัวไม่รู้จะทำแบบไหน
+ *
+ * @param groups - กลุ่มตัวเลือกของเมนู
+ * @returns ชิปที่ยังใช้ได้กับเมนูนี้
+ */
+function quickNotesFor(groups: MenuOptionGroup[]): string[] {
+  const words = groups.flatMap((g) => [g.name, ...g.options.map((o) => o.name)]).join(' ');
+  const hasSpice = words.includes('เผ็ด');
+  const hasSweet = words.includes('หวาน');
+  return QUICK_NOTES.filter(
+    (note) => !(hasSpice && note.includes('เผ็ด')) && !(hasSweet && note.includes('หวาน')),
+  );
+}
+
+/**
  * หน้าเมนูของลูกค้า จุดเริ่มต้นหลังสแกน QR
  * เรียก /api/public/tables/[token] ก่อนเสมอ เพราะการเรียกนั้นคือสิ่งที่เปิดรอบการนั่งให้โต๊ะ
  *
@@ -471,7 +487,7 @@ export default function CustomerMenuPage({
 
                 {/* Quick Note Chips */}
                 <div className="flex flex-wrap gap-1.5">
-                  {QUICK_NOTES.map((qNote) => {
+                  {quickNotesFor(selectedItemForDetail.option_groups ?? []).map((qNote) => {
                     const isSelected = detailNote.includes(qNote);
                     return (
                       <button

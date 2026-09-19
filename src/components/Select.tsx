@@ -19,6 +19,10 @@ export type CustomSelectProps = {
   icon?: ReactNode;
   className?: string;
   disabled?: boolean;
+  /** ทิศที่รายการเปิดออก ใช้ 'top' เมื่อช่องอยู่ติดขอบล่างของจอ เช่น ท้ายแถบเมนู */
+  placement?: 'bottom' | 'top';
+  /** ขนาดของช่อง 'sm' ใช้ในแถบตัวกรองที่แน่น */
+  size?: 'md' | 'sm';
 };
 
 /**
@@ -35,11 +39,23 @@ export default function CustomSelect({
   icon,
   className = '',
   disabled = false,
+  placement = 'bottom',
+  size = 'md',
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
+
+  // ปิดรายการเมื่อกด Esc ให้ใช้คีย์บอร์ดได้เหมือน select ของเบราว์เซอร์
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -63,8 +79,10 @@ export default function CustomSelect({
           id={id}
           type="button"
           disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
           onClick={() => setIsOpen((prev) => !prev)}
-          className={`flex min-h-[42px] w-full items-center justify-between gap-2.5 rounded-xl border bg-white px-3.5 text-sm text-slate-900 transition-all hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 ${
+          className={`flex ${size === 'sm' ? 'min-h-[34px] px-2.5' : 'min-h-[42px] px-3.5'} w-full items-center justify-between gap-2.5 rounded-xl border bg-white text-sm text-slate-900 transition-all hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-600/20 ${
             isOpen ? 'border-emerald-600 ring-2 ring-emerald-600/20' : 'border-slate-200'
           } ${disabled ? 'cursor-not-allowed opacity-50 bg-slate-50' : 'cursor-pointer'}`}
         >
@@ -84,7 +102,9 @@ export default function CustomSelect({
 
         {/* Dropdown Menu — Slate Border & Crisp Shadow */}
         {isOpen && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl overscroll-contain animate-in fade-in zoom-in-95 duration-100">
+          <div className={`absolute left-0 right-0 z-50 ${placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl overscroll-contain animate-in fade-in zoom-in-95 duration-100`}
+            role="listbox"
+          >
             {options.length === 0 ? (
               <div className="px-4 py-3 text-center text-xs text-slate-400">ไม่มีตัวเลือก</div>
             ) : (
@@ -94,6 +114,8 @@ export default function CustomSelect({
                   <button
                     key={option.value}
                     type="button"
+                    role="option"
+                    aria-selected={isSelected}
                     onClick={() => {
                       onChange(option.value);
                       setIsOpen(false);

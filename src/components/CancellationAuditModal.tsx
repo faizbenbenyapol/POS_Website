@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Modal from '@/components/Modal';
 import { apiFetch } from '@/lib/client';
+import CustomSelect from '@/components/Select';
 import { downloadCsvFile } from '@/lib/exportCsv';
 import { formatBaht, formatThaiTime, formatThaiDateTime } from '@/lib/format';
 import { DownloadIcon, RefreshIcon } from '@/components/Icons';
@@ -142,18 +143,16 @@ export default function CancellationAuditModal({
 
           <div className="flex items-center gap-1.5 ml-auto sm:ml-2">
             <span className="text-slip-dim font-medium">เหตุผล:</span>
-            <select
+            <CustomSelect
               value={filterReason}
-              onChange={(e) => setFilterReason(e.target.value)}
-              className="rounded-lg border border-rule bg-white px-2 py-1 text-xs text-slip focus:border-zinc-400 focus:outline-none"
-            >
-              <option value="">ทุกเหตุผล</option>
-              {COMMON_REASONS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
+              onChange={setFilterReason}
+              size="sm"
+              className="min-w-[11rem]"
+              options={[
+                { value: '', label: 'ทุกเหตุผล' },
+                ...COMMON_REASONS.map((r) => ({ value: r, label: r })),
+              ]}
+            />
           </div>
 
           <div className="flex items-center gap-1.5 ml-auto">

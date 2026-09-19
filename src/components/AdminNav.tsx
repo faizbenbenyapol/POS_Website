@@ -21,6 +21,7 @@ import {
   ExpandIcon,
 } from '@/components/Icons';
 import BranchSwitcher from '@/components/BranchSwitcher';
+import CustomSelect from '@/components/Select';
 import { ROLE_LABELS, canOpenPage } from '@/lib/permissions';
 import { STATIONS, stationAllows, writeStation, type Station, type StationId } from '@/lib/station';
 
@@ -136,34 +137,34 @@ export default function AdminNav({
         })}
       </ul>
 
-      {/* ตั้งจุดของเครื่องนี้และเข้าโหมดเต็มจอ */}
-      <div className="flex flex-col gap-1.5 border-t border-rule p-2">
-        <label className="flex flex-col gap-1 px-1 text-[11px] font-medium text-zinc-500">
-          เครื่องนี้ใช้ที่
-          <select
-            value={station?.id ?? ''}
-            onChange={(e) => writeStation((e.target.value || null) as StationId | null)}
-            className="min-h-[36px] rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-800 cursor-pointer"
-          >
-            <option value="">ไม่ระบุ (เห็นทุกเมนูตามสิทธิ์)</option>
-            {STATIONS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      {/* ตั้งจุดของเครื่องนี้และเข้าโหมดเต็มจอ แสดงตั้งแต่จอแท็บเล็ตขึ้นไป (เครื่องประจำจุดไม่ใช่มือถือ) */}
+      {/* รวมไว้แถวเดียวกับปุ่มเต็มจอ ไม่ให้กินพื้นที่แนวตั้งของรายการเมนูบนจอเตี้ย */}
+      <div className="hidden items-end gap-1.5 border-t border-rule px-2 pt-2 md:flex">
+        <CustomSelect
+          id="station-select"
+          label="เครื่องนี้ใช้ที่"
+          value={station?.id ?? ''}
+          onChange={(value) => writeStation((value || null) as StationId | null)}
+          options={[
+            { value: '', label: 'ไม่ระบุ' },
+            ...STATIONS.map((s) => ({ value: s.id, label: s.label })),
+          ]}
+          placement="top"
+          size="sm"
+          className="min-w-0 flex-1"
+        />
         <button
           type="button"
           onClick={onEnterFocus}
-          className="flex min-h-[38px] w-full items-center gap-2.5 rounded-md px-3 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 cursor-pointer"
+          aria-label="เต็มจอ (ซ่อนเมนู)"
+          title="เต็มจอ (ซ่อนเมนู)"
+          className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 cursor-pointer"
         >
-          <ExpandIcon className="w-4 h-4 shrink-0" />
-          <span>เต็มจอ (ซ่อนเมนู)</span>
+          <ExpandIcon className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="border-t border-rule p-2">
+      <div className="border-t border-rule p-2 md:border-t-0">
         <button
           type="button"
           onClick={handleLogout}

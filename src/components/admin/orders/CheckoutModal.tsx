@@ -36,6 +36,8 @@ type PaymentRow = {
   receivedAmount: string;
   /** คำขอรับเงินโอนที่ได้รับเงินแล้ว ใช้เฉพาะแถวโอนเงิน null คือยังไม่ได้ยืนยัน */
   paymentRequestId: number | null;
+  /** true = ยอดของแถวนี้ตามยอดบิลอัตโนมัติ จนกว่าแคชเชียร์จะพิมพ์ยอดเอง */
+  autoAmount?: boolean;
 };
 
 /**
@@ -80,7 +82,7 @@ export default function CheckoutModal({
   const [discountValue, setDiscountValue] = useState('');
   const [discountReason, setDiscountReason] = useState('');
   const [payments, setPayments] = useState<PaymentRow[]>([
-    { method: 'CASH', amount: '', receivedAmount: '', paymentRequestId: null },
+    { method: 'CASH', amount: '', receivedAmount: '', paymentRequestId: null, autoAmount: true },
   ]);
   const [unservedAcknowledged, setUnservedAcknowledged] = useState(false);
 
@@ -108,7 +110,7 @@ export default function CheckoutModal({
     setDiscountType('NONE');
     setDiscountValue('');
     setDiscountReason('');
-    setPayments([{ method: 'CASH', amount: '', receivedAmount: '', paymentRequestId: null }]);
+    setPayments([{ method: 'CASH', amount: '', receivedAmount: '', paymentRequestId: null, autoAmount: true }]);
     setUnservedAcknowledged(false);
   }, [sessionId]);
 
@@ -120,6 +122,17 @@ export default function CheckoutModal({
 
   // ใช้ฟังก์ชันคำนวณตัวเดียวกับฝั่งเซิร์ฟเวอร์ ตัวเลขที่ลูกค้าเห็นกับที่บันทึกจริงจึงตรงกันเสมอ
   const bill = calculateBill(sessionItems, settings, discount);
+
+  // จ่ายช่องทางเดียว (กรณีส่วนใหญ่) เติมยอดบิลให้เลยและตามยอดเมื่อให้ส่วนลด ไม่ต้องกด "เติมยอดที่เหลือ" ทุกบิล
+  // หยุดตามทันทีที่แคชเชียร์พิมพ์ยอดเอง หรือแบ่งจ่ายหลายช่องทาง
+  const autoTotal = settingsLoaded && bill.grandTotal > 0 ? String(bill.grandTotal) : '';
+  useEffect(() => {
+    setPayments((prev) =>
+      prev.length === 1 && prev[0].autoAmount && prev[0].amount !== autoTotal
+        ? [{ ...prev[0], amount: autoTotal }]
+        : prev,
+    );
+  }, [autoTotal]);
 
   /**
    * แก้ค่าของแถวชำระเงินแถวหนึ่ง
@@ -399,40 +412,55 @@ export default function CheckoutModal({
                 className="flex flex-col gap-2.5 rounded-xl border border-rule bg-white p-3"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={row.method}
-                    onChange={(e) =>
-                      updatePayment(index, {
-                        method: e.target.value as PaymentMethod,
-                        receivedAmount: '',
-                        paymentRequestId: null,
-                      })
-                    }
+                  {/* ปุ่มช่องทางชำระเงิน กดครั้งเดียวบนจอสัมผัส แทน dropdown ของเบราว์เซอร์ */}
+                  <div
+                    role="radiogroup"
                     aria-label={`ช่องทางชำระเงินลำดับที่ ${index + 1}`}
-                    className="min-h-[44px] flex-1 rounded-lg border border-slate-300 bg-white px-2.5 text-sm font-semibold text-slip cursor-pointer"
+                    className="grid w-full grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1"
                   >
-                    {PAYMENT_METHODS.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                    {PAYMENT_METHODS.map((m) => {
+                      const selected = row.method === m.value;
+                      return (
+                        <button
+                          key={m.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => {
+                            if (selected) return;
+                            updatePayment(index, {
+                              method: m.value as PaymentMethod,
+                              receivedAmount: '',
+                              paymentRequestId: null,
+                            });
+                          }}
+                          className={`min-h-[40px] rounded-md px-2 text-sm font-semibold transition-colors cursor-pointer ${
+                            selected
+                              ? 'bg-white text-emerald-700 shadow-xs ring-1 ring-emerald-300'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      );
+                    })}
+                  </div>
 
                   <input
                     type="number"
                     step="any"
                     min="0"
                     value={row.amount}
-                    onChange={(e) => updatePayment(index, { amount: e.target.value })}
-                    placeholder="ยอดที่ตัดเข้าช่องทางนี้"
+                    onChange={(e) => updatePayment(index, { amount: e.target.value, autoAmount: false })}
+                    placeholder="ยอดเงิน"
                     aria-label={`ยอดที่ตัดเข้าช่องทางลำดับที่ ${index + 1}`}
                     className="min-h-[44px] w-36 rounded-lg border border-slate-300 bg-white px-3 text-base font-bold text-slate-900 focus:border-emerald-600 focus:outline-hidden"
                   />
 
-                  {missingForRow > 0 && (
+                  {missingForRow > 0 && missingForRow !== rowAmount && (
                     <button
                       type="button"
-                      onClick={() => updatePayment(index, { amount: String(missingForRow) })}
+                      onClick={() => updatePayment(index, { amount: String(missingForRow), autoAmount: false })}
                       className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                       title="เติมยอดที่ยังขาดให้ช่องทางนี้"
                     >

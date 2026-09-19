@@ -120,22 +120,31 @@ export default function AdminShell({ user, children }: { user: SessionUser; chil
     };
   }, [focus]);
 
+  // ใช้โครงเดียวกันทั้งสองโหมด (ตำแหน่ง main ไม่เปลี่ยน) เพื่อไม่ให้เนื้อหาของหน้าถูกสร้างใหม่ตอนสลับโหมด
+  // ไม่อย่างนั้นกระดานออเดอร์จะโหลดใหม่และตัวกรองที่ตั้งไว้หายทุกครั้งที่กดเต็มจอ
   return (
-    <div className="flex min-h-screen flex-col bg-char md:flex-row">
+    <div className={`flex min-h-screen flex-col bg-char ${focus ? '' : 'md:flex-row'}`}>
+      {/* แถบบางด้านบนแทนปุ่มลอย ปุ่มลอยเคยทับปุ่มของหน้า (เช่นปุ่มรีเฟรชของกระดานออเดอร์) */}
+      {focus && (
+        <div className="sticky top-0 z-40 flex h-10 shrink-0 items-center justify-between gap-3 border-b border-rule bg-white/95 px-3 backdrop-blur md:px-4">
+          <p className="min-w-0 truncate text-xs text-zinc-500">
+            <span className="font-semibold text-zinc-800">{user.fullName}</span>
+            {station && <span> · {station.label}</span>}
+          </p>
+          <button
+            type="button"
+            onClick={exitFocus}
+            className="flex min-h-[32px] shrink-0 items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 cursor-pointer"
+          >
+            <CloseIcon className="w-3.5 h-3.5" />
+            ออกจากเต็มจอ
+          </button>
+        </div>
+      )}
       {!focus && <AdminNav user={user} station={station} onEnterFocus={enterFocus} />}
       <main className={`min-w-0 flex-1 ${focus ? 'px-3 py-3 md:px-4 md:py-4' : 'px-4 py-6 md:px-8 md:py-8'}`}>
         {children}
       </main>
-      {focus && (
-        <button
-          type="button"
-          onClick={exitFocus}
-          className="fixed right-3 top-3 z-40 flex min-h-[40px] items-center gap-1.5 rounded-full border border-zinc-300 bg-white/90 px-3 text-xs font-semibold text-zinc-700 shadow-sm backdrop-blur hover:bg-white cursor-pointer"
-        >
-          <CloseIcon className="w-3.5 h-3.5" />
-          ออกจากเต็มจอ
-        </button>
-      )}
     </div>
   );
 }
