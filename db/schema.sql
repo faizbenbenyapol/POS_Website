@@ -16,6 +16,7 @@ CREATE DATABASE IF NOT EXISTS pos_qr
 USE pos_qr;
 
 -- ลบตารางเดิมก่อน เรียงจากตารางลูกไปตารางแม่ เพื่อไม่ให้ติด foreign key
+DROP TABLE IF EXISTS schema_migrations;
 DROP TABLE IF EXISTS payment_requests;
 DROP TABLE IF EXISTS ingredient_stock_logs;
 DROP TABLE IF EXISTS menu_recipes;
@@ -478,3 +479,26 @@ CREATE TABLE payment_requests (
   FOREIGN KEY (confirmed_by) REFERENCES users(id),
   FOREIGN KEY (created_by)   REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- migration ที่รวมอยู่ใน schema นี้แล้ว scripts/migrate.js จะไม่รันไฟล์เหล่านี้ซ้ำกับฐานข้อมูลที่สร้างจากไฟล์นี้
+-- เพิ่ม migration ใหม่เมื่อไร ต้องรวมผลของมันเข้า schema นี้ และเพิ่มชื่อไฟล์ลงรายการด้านล่างด้วย
+CREATE TABLE schema_migrations (
+  filename   VARCHAR(255) NOT NULL PRIMARY KEY,
+  mode       ENUM('RUN','BASELINE') NOT NULL DEFAULT 'RUN',
+  applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO schema_migrations (filename, mode) VALUES
+  ('001_phase1_concurrency_and_counters.sql', 'BASELINE'),
+  ('002_indexes.sql', 'BASELINE'),
+  ('003_cancellation_audit_logs.sql', 'BASELINE'),
+  ('004_branches.sql', 'BASELINE'),
+  ('005_order_type.sql', 'BASELINE'),
+  ('006_order_status_logs.sql', 'BASELINE'),
+  ('007_settlements.sql', 'BASELINE'),
+  ('008_money_layer.sql', 'BASELINE'),
+  ('009_menu_stock.sql', 'BASELINE'),
+  ('010_bill_refund.sql', 'BASELINE'),
+  ('011_menu_options.sql', 'BASELINE'),
+  ('012_ingredients.sql', 'BASELINE'),
+  ('013_payment_requests.sql', 'BASELINE');
