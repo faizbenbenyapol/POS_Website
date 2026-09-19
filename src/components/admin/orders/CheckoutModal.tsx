@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Modal from '@/components/Modal';
-import PromptPayQR from '@/components/PromptPayQR';
+import TransferQrPanel from './TransferQrPanel';
 import { CloseIcon, PlusIcon } from '@/components/Icons';
 import { apiFetch } from '@/lib/client';
 import { formatBaht } from '@/lib/format';
@@ -34,6 +34,8 @@ type PaymentRow = {
   method: PaymentMethod;
   amount: string;
   receivedAmount: string;
+  /** คำขอรับเงินโอนที่ได้รับเงินแล้ว ใช้เฉพาะแถวโอนเงิน null คือยังไม่ได้ยืนยัน */
+  paymentRequestId: number | null;
 };
 
 /**
@@ -78,7 +80,7 @@ export default function CheckoutModal({
   const [discountValue, setDiscountValue] = useState('');
   const [discountReason, setDiscountReason] = useState('');
   const [payments, setPayments] = useState<PaymentRow[]>([
-    { method: 'CASH', amount: '', receivedAmount: '' },
+    { method: 'CASH', amount: '', receivedAmount: '', paymentRequestId: null },
   ]);
   const [unservedAcknowledged, setUnservedAcknowledged] = useState(false);
 
@@ -106,7 +108,7 @@ export default function CheckoutModal({
     setDiscountType('NONE');
     setDiscountValue('');
     setDiscountReason('');
-    setPayments([{ method: 'CASH', amount: '', receivedAmount: '' }]);
+    setPayments([{ method: 'CASH', amount: '', receivedAmount: '', paymentRequestId: null }]);
     setUnservedAcknowledged(false);
   }, [sessionId]);
 
@@ -134,7 +136,13 @@ export default function CheckoutModal({
     amount: Number(row.amount) || 0,
     receivedAmount:
       row.method === 'CASH' && row.receivedAmount !== '' ? Number(row.receivedAmount) : null,
+    paymentRequestId: row.method === 'TRANSFER' ? row.paymentRequestId : null,
   }));
+
+  // เงินโอนทุกแถวต้องได้รับการยืนยันว่าเงินเข้าแล้ว (เซิร์ฟเวอร์ตรวจซ้ำอีกชั้นตอนปิดบิล)
+  const unconfirmedTransfer = payments.some(
+    (row) => row.method === 'TRANSFER' && row.paymentRequestId === null,
+  );
 
   const paidTotal = roundBaht(paymentInputs.reduce((sum, p) => sum + p.amount, 0));
   const remaining = roundBaht(bill.grandTotal - paidTotal);
@@ -159,6 +167,7 @@ export default function CheckoutModal({
     !checkingOut &&
     bill.grandTotal > 0 &&
     paymentCheck.ok &&
+    !unconfirmedTransfer &&
     !discountNeedsReason &&
     (unservedItems.length === 0 || unservedAcknowledged);
 
@@ -366,6 +375,7 @@ export default function CheckoutModal({
                       method: 'TRANSFER',
                       amount: remaining > 0 ? String(remaining) : '',
                       receivedAmount: '',
+                      paymentRequestId: null,
                     },
                   ])
                 }
@@ -395,6 +405,7 @@ export default function CheckoutModal({
                       updatePayment(index, {
                         method: e.target.value as PaymentMethod,
                         receivedAmount: '',
+                        paymentRequestId: null,
                       })
                     }
                     aria-label={`ช่องทางชำระเงินลำดับที่ ${index + 1}`}
@@ -508,12 +519,14 @@ export default function CheckoutModal({
                   </div>
                 )}
 
-                {/* QR PromptPay เมื่อเลือกโอนเงิน */}
-                {row.method === 'TRANSFER' && rowAmount > 0 && (
-                  <PromptPayQR
+                {/* สร้าง QR พร้อมเพย์และรอยืนยันว่าเงินเข้า ก่อนยอมให้ปิดบิลด้วยเงินโอน */}
+                {row.method === 'TRANSFER' && (
+                  <TransferQrPanel
+                    sessionId={order.session_id}
                     amount={rowAmount}
-                    phoneNumber={order.branch_phone || undefined}
-                    accountName={order.branch_name ? `ร้านสาขา ${order.branch_name}` : undefined}
+                    onConfirmedChange={(paymentRequestId) =>
+                      updatePayment(index, { paymentRequestId })
+                    }
                   />
                 )}
               </div>
@@ -526,7 +539,12 @@ export default function CheckoutModal({
               {paymentCheck.message}
             </div>
           )}
-          {paymentCheck.ok && (
+          {paymentCheck.ok && unconfirmedTransfer && (
+            <div className="rounded-lg bg-amber-50 p-2.5 text-sm font-bold text-amber-800 border border-amber-200">
+              ยอดครบแล้ว รอยืนยันว่าเงินโอนเข้าก่อนจึงจะปิดบิลได้
+            </div>
+          )}
+          {paymentCheck.ok && !unconfirmedTransfer && (
             <div className="rounded-lg bg-blue-50 p-2.5 text-sm font-bold text-blue-700 border border-blue-200 flex items-center justify-between">
               <span>ยอดชำระครบแล้ว</span>
               <span className="num">

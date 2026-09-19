@@ -8,6 +8,7 @@ import { findSettlement } from '@/lib/settlement';
 import { businessDayRange, getBusinessCutoffHour } from '@/lib/format';
 import {
   calculateBill,
+  roundBaht,
   validatePayments,
   type BillTotals,
   type BranchMoneySettings,
@@ -27,7 +28,8 @@ type CheckoutFailure =
   | 'DAY_CLOSED'
   | 'DISCOUNT_FORBIDDEN'
   | 'DISCOUNT_NO_REASON'
-  | 'PAYMENT_MISMATCH';
+  | 'PAYMENT_MISMATCH'
+  | 'TRANSFER_UNCONFIRMED';
 
 /** แถวรายการอาหารเท่าที่การคิดเงินต้องใช้ */
 type BillItemRow = RowDataPacket & {
@@ -54,6 +56,55 @@ async function loadBillItems(conn: PoolConnection, sessionId: number): Promise<B
     [sessionId],
   );
   return rows;
+}
+
+/**
+ * ตรวจว่าทุกแถวเงินโอนผูกกับคำขอรับเงินที่ใช้ได้ ล็อกคำขอไว้ใน transaction เดียวกับการปิดบิล
+ * กันสองเครื่องเอา QR ใบเดียวกันไปปิดคนละบิลพร้อมกัน (มี UNIQUE ที่ payments ซ้ำอีกชั้น)
+ *
+ * @param conn - connection ที่อยู่ใน transaction เดียวกับการปิดบิล
+ * @param sessionId - รอบการนั่งที่กำลังปิดบิล
+ * @param payments - แถวชำระเงินที่แคชเชียร์กรอก
+ * @returns ข้อความไทยบอกว่าผิดตรงไหน หรือ null เมื่อทุกแถวเงินโอนผ่าน
+ */
+async function verifyTransferPayments(
+  conn: PoolConnection,
+  sessionId: number,
+  payments: { method: string; amount: number; paymentRequestId: number | null }[],
+): Promise<string | null> {
+  const transfers = payments.filter((p) => p.method === 'TRANSFER');
+  if (transfers.some((p) => p.paymentRequestId === null)) {
+    return 'ช่องทางโอนเงินต้องสร้าง QR และได้รับการยืนยันว่าเงินเข้าแล้วก่อนปิดบิล';
+  }
+  const ids = transfers.map((p) => p.paymentRequestId as number);
+  if (new Set(ids).size !== ids.length) {
+    return 'ใช้ QR รับเงินใบเดียวกันซ้ำในบิลเดียวกันไม่ได้';
+  }
+
+  for (const payment of transfers) {
+    const [rows] = await conn.execute<
+      (RowDataPacket & { session_id: number; amount: string; status: string; used: number })[]
+    >(
+      `SELECT pr.session_id, pr.amount, pr.status,
+              EXISTS(SELECT 1 FROM payments p WHERE p.payment_request_id = pr.id) AS used
+         FROM payment_requests pr WHERE pr.id = ? FOR UPDATE`,
+      [payment.paymentRequestId],
+    );
+    const request = rows[0];
+    if (!request || request.session_id !== sessionId) {
+      return 'QR รับเงินที่เลือกไม่ใช่ของบิลนี้ กรุณาสร้าง QR ใหม่';
+    }
+    if (request.status !== 'PAID') {
+      return 'ยังไม่ได้รับการยืนยันว่าเงินโอนเข้าแล้ว กรุณารอสถานะ "ได้รับเงินแล้ว" ก่อนปิดบิล';
+    }
+    if (Number(request.used) === 1) {
+      return 'QR รับเงินใบนี้ถูกใช้ปิดบิลไปแล้ว';
+    }
+    if (roundBaht(Number(request.amount)) !== roundBaht(payment.amount)) {
+      return `ยอดที่โอนผ่าน QR (${Number(request.amount).toFixed(2)} บาท) ไม่ตรงกับยอดที่ตัดเข้าช่องทางโอนเงิน`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -125,11 +176,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     : { type: 'NONE', value: 0, reason: null };
 
-  const paymentInputs: PaymentInput[] = parsed.data.payments.map((p) => ({
-    method: p.method,
-    amount: p.amount,
-    receivedAmount: p.receivedAmount ?? null,
-  }));
+  const paymentInputs: (PaymentInput & { paymentRequestId: number | null })[] =
+    parsed.data.payments.map((p) => ({
+      method: p.method,
+      amount: p.amount,
+      receivedAmount: p.receivedAmount ?? null,
+      paymentRequestId: p.method === 'TRANSFER' ? (p.paymentRequestId ?? null) : null,
+    }));
 
   const result = await withTransaction<
     | { ok: true; bill: BillTotals; changeDue: number }
@@ -185,6 +238,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return { ok: false, reason: 'PAYMENT_MISMATCH', message: paymentCheck.message };
     }
 
+    // เงินโอนต้องผูกกับ QR ที่ยืนยันแล้วว่าเงินเข้า ของบิลนี้ ยอดเดียวกัน และยังไม่เคยใช้ปิดบิลใด
+    // กันแคชเชียร์กด "โอนเงิน" แล้วปิดบิลไปทั้งที่ยังไม่มีเงินเข้าบัญชีร้านจริง
+    const transferCheck = await verifyTransferPayments(conn, sessionId, paymentInputs);
+    if (transferCheck) {
+      return { ok: false, reason: 'TRANSFER_UNCONFIRMED', message: transferCheck };
+    }
+
     for (const payment of paymentInputs) {
       const received =
         payment.method === 'CASH' ? (payment.receivedAmount ?? payment.amount) : null;
@@ -192,8 +252,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         payment.method === 'CASH' ? Math.max(0, Number(received) - payment.amount) : 0;
       await conn.execute(
         `INSERT INTO payments
-           (session_id, branch_id, method, total_amount, received_amount, change_amount, received_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (session_id, branch_id, method, total_amount, received_amount, change_amount, payment_request_id, received_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           sessionId,
           branchOfSession,
@@ -201,6 +261,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           payment.amount,
           received,
           change,
+          payment.paymentRequestId,
           auth.user.id,
         ],
       );
@@ -254,6 +315,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         400,
       );
     }
+    if (result.reason === 'TRANSFER_UNCONFIRMED') {
+      return apiError(ERROR_CODES.VALIDATION_ERROR, result.message ?? 'ยังไม่ได้ยืนยันเงินโอน', 409);
+    }
     if (result.reason === 'PAYMENT_MISMATCH') {
       return apiError(ERROR_CODES.VALIDATION_ERROR, result.message ?? 'ยอดชำระไม่ตรงกับยอดบิล', 409);
     }
@@ -286,7 +350,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       sessionId,
       bill: result.bill,
       changeDue: result.changeDue,
-      payments: paymentInputs,
+      payments: paymentInputs.map(({ method, amount, receivedAmount }) => ({
+        method,
+        amount,
+        receivedAmount,
+      })),
       // คงชื่อฟิลด์ total ไว้เพื่อให้ข้อความแจ้งผลบนกระดานออเดอร์อ่านยอดสุทธิได้เหมือนเดิม
       total: result.bill.grandTotal,
     },

@@ -36,6 +36,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const found = await queryOne<
     RowDataPacket & {
+      id: number;
       order_id: number;
       order_code: string;
       menu_item_id: number;
@@ -85,7 +86,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     if (found.item_status !== 'CANCELLED') {
       await restoreStock(
         found.branch_id ?? 1,
-        [{ menuItemId: found.menu_item_id, quantity: found.quantity }],
+        [{ menuItemId: found.menu_item_id, quantity: found.quantity, orderItemId: found.id }],
         found.order_id,
         auth.user.id,
         `ยกเลิกรายการอาหาร: ${reason}`,

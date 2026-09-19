@@ -168,6 +168,7 @@ function OrdersBoardContent() {
           itemName: i.item_name,
           quantity: i.quantity,
           note: i.note,
+          optionsText: i.options_text,
           categoryName: i.category_name,
         })),
     });
@@ -333,6 +334,7 @@ function OrdersBoardContent() {
           method: p.method,
           amount: p.amount,
           receivedAmount: p.receivedAmount ?? null,
+          paymentRequestId: p.paymentRequestId ?? null,
         })),
         discount: {
           type: discount.type,
@@ -367,6 +369,7 @@ function OrdersBoardContent() {
         quantity: i.quantity,
         unitPrice: i.unit_price,
         note: i.note,
+        optionsText: i.options_text,
       })),
       totalAmount: bill.grandTotal,
       bill,
@@ -458,7 +461,10 @@ function OrdersBoardContent() {
     const rows = orders.map((order) => {
       const orderItems = items.filter((i) => i.order_id === order.id);
       const itemsSummary = orderItems
-        .map((i) => `${i.quantity}x ${i.item_name}${i.note ? ` (${i.note})` : ''}`)
+        .map((i) => {
+          const extras = [i.options_text, i.note].filter(Boolean).join(' / ');
+          return `${i.quantity}x ${i.item_name}${extras ? ` (${extras})` : ''}`;
+        })
         .join(' | ');
 
       const statusObj = STATUS_LABELS[order.status] ?? STATUS_LABELS.PENDING;

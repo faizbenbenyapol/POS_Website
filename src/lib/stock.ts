@@ -1,5 +1,6 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import { withTransaction } from '@/lib/db';
+import { restoreIngredients } from '@/lib/ingredients';
 
 /**
  * จำนวนคงเหลือที่ถือว่า "ใกล้หมด" ต่ำกว่าหรือเท่ากับค่านี้จะถูกเตือนที่หน้าสต๊อกและแดชบอร์ด
@@ -11,6 +12,8 @@ export const LOW_STOCK_THRESHOLD = 5;
 export type StockRestoreItem = {
   menuItemId: number;
   quantity: number;
+  /** แถว order_items ที่ถูกยกเลิก ใช้คืนวัตถุดิบเท่าที่เคยตัดไปจริงกับรายการนี้ */
+  orderItemId?: number;
 };
 
 /**
@@ -30,7 +33,10 @@ export type StockRestoreItem = {
  * @param orderId - รหัสใบสั่งที่ยกเลิก ใช้อ้างอิงในประวัติการคืนสต๊อก
  * @param userId - รหัสผู้ใช้ที่กดยกเลิก ใช้ตรวจย้อนหลังว่าใครทำให้ของกลับเข้าคลัง
  * @param note - หมายเหตุประกอบ เช่น เหตุผลการยกเลิก ส่ง null เมื่อไม่มี
- * @returns ไม่คืนค่า มีผลข้างเคียงคือเขียน branch_menu_availability และ menu_stock_logs
+ * คืนวัตถุดิบ (migration 012) ใน transaction เดียวกัน สำหรับรายการที่ส่ง orderItemId มา
+ *
+ * @returns ไม่คืนค่า มีผลข้างเคียงคือเขียน branch_menu_availability, menu_stock_logs
+ *          และคืนยอดใน branch_ingredient_stock พร้อมประวัติใน ingredient_stock_logs
  */
 export async function restoreStock(
   branchId: number,
@@ -42,6 +48,13 @@ export async function restoreStock(
   if (items.length === 0) return;
 
   await withTransaction(async (conn) => {
+    await restoreIngredients(
+      conn,
+      items.flatMap((item) => (item.orderItemId ? [item.orderItemId] : [])),
+      userId,
+      note ?? null,
+    );
+
     for (const item of items) {
       if (item.quantity <= 0) continue;
 

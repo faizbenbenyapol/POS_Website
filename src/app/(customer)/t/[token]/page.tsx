@@ -18,11 +18,15 @@ import { formatBaht, formatBahtWithSign } from '@/lib/format';
 import {
   readCart,
   writeCart,
-  addToCart,
   addCustomizedToCart,
   cartTotal,
   type CartItem,
 } from '@/lib/cart';
+import {
+  describeGroupRule,
+  resolveOptionSelection,
+  type MenuOptionGroup,
+} from '@/lib/menuOptions';
 
 /** หมวดหมู่ที่ลูกค้าเห็นบนแถบเลื่อนแนวนอน */
 type Category = { id: number; name: string };
@@ -37,6 +41,8 @@ type MenuItem = {
   image_url: string | null;
   /** จำนวนคงเหลือของสาขา null คือขายได้ไม่จำกัด */
   stock_qty: number | null;
+  /** กลุ่มตัวเลือก เช่น ระดับความเผ็ด ท็อปปิ้ง อาร์เรย์ว่างเมื่อเมนูนี้ไม่มีตัวเลือก */
+  option_groups: MenuOptionGroup[];
 };
 
 /** จำนวนคงเหลือที่ถือว่าใกล้หมด ต่ำกว่านี้จะขึ้นป้ายเตือนลูกค้าให้รีบสั่ง */
@@ -70,6 +76,7 @@ export default function CustomerMenuPage({
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<MenuItem | null>(null);
   const [detailQuantity, setDetailQuantity] = useState(1);
   const [detailNote, setDetailNote] = useState('');
+  const [detailOptionIds, setDetailOptionIds] = useState<number[]>([]);
 
   /**
    * เปิดรอบการนั่งของโต๊ะแล้วโหลดเมนูที่เปิดขายอยู่
@@ -117,6 +124,26 @@ export default function CustomerMenuPage({
     setSelectedItemForDetail(item);
     setDetailQuantity(1);
     setDetailNote('');
+    setDetailOptionIds([]);
+  }
+
+  /**
+   * กดเลือกหรือยกเลิกตัวเลือกหนึ่งอย่าง
+   * กลุ่มที่เลือกได้อย่างเดียวทำงานแบบปุ่มวิทยุ (กดอันใหม่แทนอันเดิม)
+   * กลุ่มที่เลือกได้หลายอย่างจะไม่ให้เลือกเกินจำนวนสูงสุดของกลุ่ม
+   *
+   * @param group - กลุ่มของตัวเลือกที่กด
+   * @param optionId - id ของตัวเลือกที่กด
+   */
+  function toggleOption(group: MenuOptionGroup, optionId: number) {
+    setDetailOptionIds((prev) => {
+      const groupIds = new Set(group.options.map((o) => o.id));
+      if (prev.includes(optionId)) return prev.filter((id) => id !== optionId);
+      if (group.maxSelect === 1) return [...prev.filter((id) => !groupIds.has(id)), optionId];
+      const pickedInGroup = prev.filter((id) => groupIds.has(id)).length;
+      if (pickedInGroup >= group.maxSelect) return prev;
+      return [...prev, optionId];
+    });
   }
 
   /**
@@ -125,13 +152,15 @@ export default function CustomerMenuPage({
    * @returns ไม่คืนค่า แต่มีผลข้างเคียงคือบันทึกตะกร้าลง localStorage และปิด Pop-up
    */
   function handleAddCustomized() {
-    if (!selectedItemForDetail) return;
+    if (!selectedItemForDetail || !detailSelection?.ok) return;
     const next = addCustomizedToCart(cart, {
       menuItemId: selectedItemForDetail.id,
       name: selectedItemForDetail.name,
-      price: Number(selectedItemForDetail.price),
+      price: Number(selectedItemForDetail.price) + detailSelection.priceDelta,
       quantity: detailQuantity,
       note: detailNote,
+      optionIds: detailOptionIds,
+      optionsText: detailSelection.text,
     });
     setCart(next);
     writeCart(token, next);
@@ -168,6 +197,14 @@ export default function CustomerMenuPage({
       return matchCat && matchSearch;
     }) ?? [];
   const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  // ตรวจตัวเลือกด้วยกติกาชุดเดียวกับเซิร์ฟเวอร์ ปุ่มใส่ตะกร้าจะกดได้เมื่อเลือกครบเท่านั้น
+  const detailSelection = selectedItemForDetail
+    ? resolveOptionSelection(selectedItemForDetail.option_groups ?? [], detailOptionIds)
+    : null;
+  const detailUnitPrice = selectedItemForDetail
+    ? Number(selectedItemForDetail.price) + (detailSelection?.ok ? detailSelection.priceDelta : 0)
+    : 0;
 
   return (
     <div className="flex flex-col gap-0 pb-24">
@@ -247,6 +284,11 @@ export default function CustomerMenuPage({
                       {formatBaht(item.price)} <span className="text-xs font-normal text-slip-dim">บาท</span>
                     </p>
                     {/* เตือนเมื่อของใกล้หมด ลูกค้าจะได้ไม่สั่งเกินจำนวนที่ครัวทำได้ */}
+                    {(item.option_groups ?? []).length > 0 && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                        เลือกได้
+                      </span>
+                    )}
                     {item.stock_qty !== null && item.stock_qty <= LOW_STOCK_THRESHOLD && (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">
                         เหลือ {item.stock_qty} ที่
@@ -361,6 +403,65 @@ export default function CustomerMenuPage({
 
               <div className="border-t border-rule" />
 
+              {/* กลุ่มตัวเลือก เช่น ระดับความเผ็ด ท็อปปิ้ง ขนาด */}
+              {(selectedItemForDetail.option_groups ?? []).map((group) => {
+                const pickedCount = group.options.filter((o) => detailOptionIds.includes(o.id)).length;
+                const missing = pickedCount < group.minSelect;
+                return (
+                  <fieldset key={group.id} className="flex flex-col gap-2">
+                    <legend className="mb-2 flex w-full items-center justify-between">
+                      <span className="text-xs font-bold text-slip">{group.name}</span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          missing ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slip-dim'
+                        }`}
+                      >
+                        {describeGroupRule(group)}
+                      </span>
+                    </legend>
+                    <div className="flex flex-col gap-1.5">
+                      {group.options.map((option) => {
+                        const checked = detailOptionIds.includes(option.id);
+                        const atMax = !checked && group.maxSelect > 1 && pickedCount >= group.maxSelect;
+                        return (
+                          <label
+                            key={option.id}
+                            className={`flex min-h-[44px] items-center gap-3 rounded-xl border px-3 text-sm transition-colors ${
+                              checked
+                                ? 'border-emerald-500 bg-emerald-50 font-semibold text-emerald-900'
+                                : 'border-rule bg-white text-slip'
+                            } ${atMax ? 'opacity-50' : 'cursor-pointer hover:border-slate-300'}`}
+                          >
+                            <input
+                              type={group.maxSelect === 1 ? 'radio' : 'checkbox'}
+                              name={`option-group-${group.id}`}
+                              checked={checked}
+                              disabled={atMax}
+                              onChange={() => toggleOption(group, option.id)}
+                              onClick={(e) => {
+                                // ปุ่มวิทยุปกติกดซ้ำแล้วไม่ยกเลิก ให้กดซ้ำเพื่อเอาออกได้ในกลุ่มที่ไม่บังคับ
+                                if (group.maxSelect === 1 && checked && group.minSelect === 0) {
+                                  e.preventDefault();
+                                  toggleOption(group, option.id);
+                                }
+                              }}
+                              className="h-4 w-4 shrink-0 accent-emerald-600"
+                            />
+                            <span className="min-w-0 flex-1">{option.name}</span>
+                            {option.priceDelta !== 0 && (
+                              <span className="num shrink-0 text-xs font-bold text-slip-dim">
+                                {option.priceDelta > 0 ? '+' : '-'}
+                                {formatBaht(Math.abs(option.priceDelta))}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                );
+              })}
+
               {/* Notes / Special Instructions */}
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
@@ -435,11 +536,12 @@ export default function CustomerMenuPage({
                 <button
                   type="button"
                   onClick={handleAddCustomized}
-                  className="flex min-h-[46px] flex-1 items-center justify-between rounded-full bg-emerald-600 px-5 font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-98 transition-all cursor-pointer"
+                  disabled={!detailSelection?.ok}
+                  className="flex min-h-[46px] flex-1 items-center justify-between rounded-full bg-emerald-600 px-5 font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-98 transition-all cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
-                  <span className="text-sm">ใส่ตะกร้า</span>
+                  <span className="text-sm">{detailSelection?.ok ? 'ใส่ตะกร้า' : 'เลือกตัวเลือกให้ครบ'}</span>
                   <span className="num text-sm font-black">
-                    ฿{formatBaht(Number(selectedItemForDetail.price) * detailQuantity)}
+                    ฿{formatBaht(detailUnitPrice * detailQuantity)}
                   </span>
                 </button>
               </div>

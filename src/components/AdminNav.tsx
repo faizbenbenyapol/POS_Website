@@ -17,6 +17,7 @@ import {
   ReceiptIcon,
   ClockIcon,
   UserCircleIcon,
+  LeafIcon,
 } from '@/components/Icons';
 import BranchSwitcher from '@/components/BranchSwitcher';
 
@@ -27,6 +28,7 @@ const NAV_ITEMS: { href: string; label: string; icon: React.ComponentType<{ clas
   { href: '/admin/settlement', label: 'สรุปปิดยอด', icon: ReceiptIcon, adminOnly: false },
   { href: '/admin/menu', label: 'เมนูอาหาร', icon: FoodMenuIcon, adminOnly: false },
   { href: '/admin/stock', label: 'สต๊อกเมนู', icon: BoxIcon, adminOnly: false },
+  { href: '/admin/ingredients', label: 'วัตถุดิบ', icon: LeafIcon, adminOnly: false },
   { href: '/admin/categories', label: 'หมวดหมู่', icon: TagIcon, adminOnly: true },
   { href: '/admin/tables', label: 'โต๊ะและ QR', icon: TableIcon, adminOnly: false },
   { href: '/admin/tickets', label: 'เรื่องแจ้งปัญหา', icon: TicketIcon, adminOnly: false },

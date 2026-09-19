@@ -16,6 +16,16 @@ CREATE DATABASE IF NOT EXISTS pos_qr
 USE pos_qr;
 
 -- ลบตารางเดิมก่อน เรียงจากตารางลูกไปตารางแม่ เพื่อไม่ให้ติด foreign key
+DROP TABLE IF EXISTS payment_requests;
+DROP TABLE IF EXISTS ingredient_stock_logs;
+DROP TABLE IF EXISTS menu_recipes;
+DROP TABLE IF EXISTS branch_ingredient_stock;
+DROP TABLE IF EXISTS ingredients;
+DROP TABLE IF EXISTS order_item_options;
+DROP TABLE IF EXISTS menu_options;
+DROP TABLE IF EXISTS menu_option_groups;
+DROP TABLE IF EXISTS menu_stock_logs;
+DROP TABLE IF EXISTS settlements;
 DROP TABLE IF EXISTS ticket_replies;
 DROP TABLE IF EXISTS tickets;
 DROP TABLE IF EXISTS cancellation_audit_logs;
@@ -43,14 +53,19 @@ CREATE TABLE branches (
   vat_rate                 DECIMAL(5,2) NOT NULL DEFAULT 7.00,
   vat_inclusive            TINYINT(1)   NOT NULL DEFAULT 1,
   service_charge_rate      DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  -- บัญชีพร้อมเพย์ของสาขา ใช้สร้าง QR รับเงินโอนตอนปิดบิล
+  promptpay_id             VARCHAR(20)  NULL,
+  promptpay_name           VARCHAR(100) NULL,
   is_active                TINYINT(1)   NOT NULL DEFAULT 1,
   created_at               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- สาขาเริ่มต้น
-INSERT INTO branches (id, code, name, address, phone, business_day_cutoff_hour, is_active)
-VALUES (1, 'HQ-SIAM', 'สาขาสยาม (สำนักงานใหญ่)', 'สยามสแควร์ กรุงเทพมหานคร', '02-123-4567', 4, 1);
+-- พร้อมเพย์เป็นบัญชีตัวอย่าง ต้องเปลี่ยนเป็นบัญชีจริงของร้านที่หน้า "จัดการสาขา" ก่อนใช้งานจริง
+INSERT INTO branches (id, code, name, address, phone, business_day_cutoff_hour, promptpay_id, promptpay_name, is_active)
+VALUES (1, 'HQ-SIAM', 'สาขาสยาม (สำนักงานใหญ่)', 'สยามสแควร์ กรุงเทพมหานคร', '02-123-4567', 4,
+        '0812345678', 'สาขาสยาม (บัญชีตัวอย่าง)', 1);
 
 -- ผู้ใช้ระบบฝั่งร้าน (พนักงานและแอดมิน) ใช้สำหรับ Authentication
 -- branch_id = NULL คือ เจ้าของร้าน/HQ Admin (เข้าถึงได้ทุกสาขา)
@@ -191,8 +206,12 @@ CREATE TABLE order_items (
   menu_item_id INT           NOT NULL,
   item_name    VARCHAR(120)  NOT NULL,
   unit_price   DECIMAL(10,2) NOT NULL,
+  -- ต้นทุนต่อจาน ณ ตอนสั่ง คิดจากสูตร (menu_recipes) NULL คือเมนูที่ยังไม่ได้ใส่สูตร
+  unit_cost    DECIMAL(10,2) NULL,
   quantity     SMALLINT      NOT NULL,
   note         VARCHAR(255)  NULL,
+  -- ข้อความสรุปตัวเลือกที่ลูกค้าเลือก เช่น "เผ็ดน้อย, ไข่ดาว (+10)"
+  options_text VARCHAR(255)  NULL,
   status       ENUM('PENDING','PREPARING','SERVED','CANCELLED') NOT NULL DEFAULT 'PENDING',
   FOREIGN KEY (order_id)     REFERENCES orders(id) ON DELETE CASCADE,
   FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
@@ -225,11 +244,14 @@ CREATE TABLE payments (
   total_amount    DECIMAL(10,2) NOT NULL,
   received_amount DECIMAL(10,2) NULL,
   change_amount   DECIMAL(10,2) NOT NULL DEFAULT 0,
+  -- คำขอรับเงินโอนที่ยืนยันแล้ว (payment_requests) หนึ่งคำขอใช้ปิดบิลได้ครั้งเดียว
+  payment_request_id INT        NULL,
   received_by     INT           NOT NULL,
   paid_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (branch_id)   REFERENCES branches(id),
   FOREIGN KEY (session_id)  REFERENCES table_sessions(id),
   FOREIGN KEY (received_by) REFERENCES users(id),
+  UNIQUE KEY uq_payments_request (payment_request_id),
   INDEX idx_payments_session (session_id),
   INDEX idx_payments_branch_paid (branch_id, paid_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -337,4 +359,122 @@ CREATE TABLE menu_stock_logs (
   FOREIGN KEY (branch_id)    REFERENCES branches(id) ON DELETE CASCADE,
   FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
   FOREIGN KEY (changed_by)   REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE menu_option_groups (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  menu_item_id INT          NOT NULL,
+  name         VARCHAR(60)  NOT NULL,
+  min_select   TINYINT      NOT NULL DEFAULT 0,
+  max_select   TINYINT      NOT NULL DEFAULT 1,
+  sort_order   SMALLINT     NOT NULL DEFAULT 0,
+  is_active    TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_option_groups_menu (menu_item_id, sort_order),
+  FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE menu_options (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  group_id    INT           NOT NULL,
+  name        VARCHAR(60)   NOT NULL,
+  price_delta DECIMAL(10,2) NOT NULL DEFAULT 0,
+  sort_order  SMALLINT      NOT NULL DEFAULT 0,
+  is_active   TINYINT(1)    NOT NULL DEFAULT 1,
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_options_group (group_id, sort_order),
+  FOREIGN KEY (group_id) REFERENCES menu_option_groups(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- สำเนาตัวเลือกที่ลูกค้าเลือก ณ ตอนสั่ง ใช้ทำรายงานว่าตัวเลือกไหนขายดี
+-- option_id เป็น SET NULL เมื่อตัวเลือกถูกลบ แต่ชื่อและราคาที่คัดลอกไว้ยังอยู่ครบ
+CREATE TABLE order_item_options (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  order_item_id INT           NOT NULL,
+  option_id     INT           NULL,
+  group_name    VARCHAR(60)   NOT NULL,
+  option_name   VARCHAR(60)   NOT NULL,
+  price_delta   DECIMAL(10,2) NOT NULL DEFAULT 0,
+  INDEX idx_item_options_item (order_item_id),
+  INDEX idx_item_options_option (option_id),
+  FOREIGN KEY (order_item_id) REFERENCES order_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (option_id)     REFERENCES menu_options(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE ingredients (
+  id                  INT AUTO_INCREMENT PRIMARY KEY,
+  name                VARCHAR(100)   NOT NULL,
+  unit                VARCHAR(20)    NOT NULL,
+  cost_per_unit       DECIMAL(12,4)  NOT NULL DEFAULT 0,
+  low_stock_threshold DECIMAL(12,3)  NULL,
+  is_active           TINYINT(1)     NOT NULL DEFAULT 1,
+  created_at          DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_ingredient_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE branch_ingredient_stock (
+  branch_id     INT            NOT NULL,
+  ingredient_id INT            NOT NULL,
+  quantity      DECIMAL(12,3)  NOT NULL DEFAULT 0,
+  updated_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (branch_id, ingredient_id),
+  FOREIGN KEY (branch_id)     REFERENCES branches(id) ON DELETE CASCADE,
+  FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE menu_recipes (
+  menu_item_id  INT            NOT NULL,
+  ingredient_id INT            NOT NULL,
+  quantity      DECIMAL(12,3)  NOT NULL,
+  PRIMARY KEY (menu_item_id, ingredient_id),
+  INDEX idx_recipes_ingredient (ingredient_id),
+  FOREIGN KEY (menu_item_id)  REFERENCES menu_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE ingredient_stock_logs (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  branch_id     INT            NOT NULL,
+  ingredient_id INT            NOT NULL,
+  change_type   ENUM('RECEIVE','ADJUST','WASTE','DEDUCT','RESTORE') NOT NULL,
+  quantity      DECIMAL(12,3)  NOT NULL,
+  qty_before    DECIMAL(12,3)  NOT NULL,
+  qty_after     DECIMAL(12,3)  NOT NULL,
+  unit_cost     DECIMAL(12,4)  NULL,
+  order_id      INT            NULL,
+  order_item_id INT            NULL,
+  changed_by    INT            NULL,
+  note          VARCHAR(255)   NULL,
+  created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_ing_logs_branch_created (branch_id, created_at),
+  INDEX idx_ing_logs_ingredient (ingredient_id, created_at),
+  INDEX idx_ing_logs_order_item (order_item_id),
+  FOREIGN KEY (branch_id)     REFERENCES branches(id) ON DELETE CASCADE,
+  FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+  FOREIGN KEY (changed_by)    REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE payment_requests (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  branch_id    INT           NOT NULL,
+  session_id   INT           NOT NULL,
+  provider     VARCHAR(20)   NOT NULL,
+  provider_ref VARCHAR(64)   NOT NULL,
+  amount       DECIMAL(10,2) NOT NULL,
+  qr_payload   VARCHAR(512)  NOT NULL,
+  status       ENUM('PENDING','PAID','EXPIRED','CANCELLED') NOT NULL DEFAULT 'PENDING',
+  expires_at   DATETIME      NOT NULL,
+  paid_at      DATETIME      NULL,
+  confirmed_by INT           NULL,
+  created_by   INT           NOT NULL,
+  created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_payment_provider_ref (provider, provider_ref),
+  INDEX idx_payment_requests_session (session_id, status),
+  FOREIGN KEY (branch_id)    REFERENCES branches(id),
+  FOREIGN KEY (session_id)   REFERENCES table_sessions(id),
+  FOREIGN KEY (confirmed_by) REFERENCES users(id),
+  FOREIGN KEY (created_by)   REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

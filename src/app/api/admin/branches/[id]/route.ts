@@ -17,6 +17,8 @@ type BranchDetailRow = RowDataPacket & {
   vat_rate: string;
   vat_inclusive: number;
   service_charge_rate: string;
+  promptpay_id: string | null;
+  promptpay_name: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -109,12 +111,20 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         : 0
       : existing.vat_inclusive;
   const serviceChargeRate = parsed.data.serviceChargeRate ?? Number(existing.service_charge_rate);
+  // เก็บเลขพร้อมเพย์เป็นตัวเลขล้วน ส่งสตริงว่างมาคือเลิกรับโอนผ่าน QR ของสาขานี้
+  const promptpayId =
+    parsed.data.promptpayId !== undefined
+      ? parsed.data.promptpayId.replace(/[\s-]/g, '') || null
+      : existing.promptpay_id;
+  const promptpayName =
+    parsed.data.promptpayName !== undefined ? parsed.data.promptpayName || null : existing.promptpay_name;
 
   await execute(
     `UPDATE branches
         SET code = ?, name = ?, address = ?, phone = ?,
             business_day_cutoff_hour = ?,
             vat_rate = ?, vat_inclusive = ?, service_charge_rate = ?,
+            promptpay_id = ?, promptpay_name = ?,
             is_active = ?
       WHERE id = ?`,
     [
@@ -126,6 +136,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       vatRate,
       vatInclusive,
       serviceChargeRate,
+      promptpayId,
+      promptpayName,
       isActive,
       id,
     ],

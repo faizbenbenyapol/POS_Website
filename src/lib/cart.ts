@@ -1,10 +1,17 @@
+import { optionSelectionKey } from '@/lib/menuOptions';
+
 /** รายการ 1 ชิ้นในตะกร้าของลูกค้า เก็บเท่าที่จำเป็นต่อการสั่ง ราคาจริงดึงใหม่ที่เซิร์ฟเวอร์ */
 export type CartItem = {
   menuItemId: number;
   name: string;
+  /** ราคาต่อจานรวมตัวเลือกที่บวกเพิ่มแล้ว ใช้แสดงผลเท่านั้น เซิร์ฟเวอร์คิดใหม่เสมอ */
   price: number;
   quantity: number;
   note: string;
+  /** id ของตัวเลือกที่เลือก เช่น เผ็ดน้อย ไข่ดาวเพิ่ม ตะกร้าที่บันทึกก่อนมีตัวเลือกจะไม่มีฟิลด์นี้ */
+  optionIds?: number[];
+  /** ข้อความสรุปตัวเลือกไว้แสดงในตะกร้า เช่น "เผ็ดน้อย, ไข่ดาวเพิ่ม (+10)" */
+  optionsText?: string;
 };
 
 /** คำนำหน้าคีย์ใน localStorage แยกตะกร้าตามโต๊ะ ไม่ให้ปนกันเวลาเปิดหลายแท็บ */
@@ -34,7 +41,13 @@ export function readCart(token: string): CartItem[] {
     const raw = window.localStorage.getItem(cartKey(token));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as CartItem[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    // ตะกร้าที่บันทึกไว้ก่อนระบบมีตัวเลือกอาหารจะไม่มี optionIds เติมค่าว่างให้ครบรูปแบบ
+    return (parsed as CartItem[]).map((item) => ({
+      ...item,
+      optionIds: Array.isArray(item.optionIds) ? item.optionIds : [],
+      optionsText: item.optionsText ?? '',
+    }));
   } catch {
     return [];
   }
@@ -69,35 +82,13 @@ export function cartTotal(items: CartItem[]): number {
 }
 
 /**
- * เพิ่มเมนูลงตะกร้า ถ้ามีเมนูเดิมอยู่แล้วให้บวกจำนวนแทนการเพิ่มแถวใหม่
- * เพื่อไม่ให้ตะกร้ายาวเป็นหางว่าวเวลาลูกค้ากดปุ่มเดิมซ้ำ ๆ
+ * เพิ่มเมนูลงตะกร้าพร้อมระบุจำนวน ตัวเลือก และข้อความหมายเหตุพิเศษ (สไตล์ LINE MAN)
+ * หากมีเมนูเดียวกัน ตัวเลือกชุดเดียวกัน และหมายเหตุเดียวกันเป๊ะ ให้บวกจำนวนเข้าแถวเดิม
+ * ส่วนเมนูเดียวกันแต่ตัวเลือกต่างกัน (เผ็ดน้อย กับ เผ็ดมาก) ต้องแยกแถว ไม่อย่างนั้นครัวทำผิดจาน
  *
  * @param items - ตะกร้าปัจจุบัน
- * @param addition - เมนูที่จะเพิ่ม พร้อมชื่อและราคาที่แสดงอยู่บนหน้าจอ
+ * @param addition - รายละเอียดเมนู พร้อมจำนวน ตัวเลือก และข้อความหมายเหตุ
  * @returns ตะกร้าชุดใหม่ (ไม่แก้ของเดิมเพื่อให้ React รู้ว่าค่าเปลี่ยน)
- */
-export function addToCart(
-  items: CartItem[],
-  addition: { menuItemId: number; name: string; price: number },
-): CartItem[] {
-  const existing = items.find((item) => item.menuItemId === addition.menuItemId);
-  if (existing) {
-    return items.map((item) =>
-      item.menuItemId === addition.menuItemId
-        ? { ...item, quantity: item.quantity + 1 }
-        : item,
-    );
-  }
-  return [...items, { ...addition, quantity: 1, note: '' }];
-}
-
-/**
- * เพิ่มเมนูลงตะกร้าพร้อมระบุจำนวนและข้อความหมายเหตุพิเศษ (สไตล์ LINE MAN)
- * หากมีเมนูเดียวกันและหมายเหตุเดียวกันเป๊ะ ให้บวกจำนวนเพิ่ม
- *
- * @param items - ตะกร้าปัจจุบัน
- * @param addition - รายละเอียดเมนู พร้อมจำนวนและข้อความหมายเหตุ
- * @returns ตะกร้าชุดใหม่
  */
 export function addCustomizedToCart(
   items: CartItem[],
@@ -107,13 +98,20 @@ export function addCustomizedToCart(
     price: number;
     quantity?: number;
     note?: string;
+    optionIds?: number[];
+    optionsText?: string;
   },
 ): CartItem[] {
   const qty = Math.max(1, addition.quantity ?? 1);
   const note = (addition.note ?? '').trim();
+  const optionIds = [...(addition.optionIds ?? [])].sort((a, b) => a - b);
+  const key = optionSelectionKey(optionIds);
 
   const existing = items.find(
-    (item) => item.menuItemId === addition.menuItemId && item.note.trim() === note,
+    (item) =>
+      item.menuItemId === addition.menuItemId &&
+      item.note.trim() === note &&
+      optionSelectionKey(item.optionIds) === key,
   );
 
   if (existing) {
@@ -122,6 +120,17 @@ export function addCustomizedToCart(
     );
   }
 
-  return [...items, { ...addition, quantity: qty, note }];
+  return [
+    ...items,
+    {
+      menuItemId: addition.menuItemId,
+      name: addition.name,
+      price: addition.price,
+      quantity: qty,
+      note,
+      optionIds,
+      optionsText: addition.optionsText ?? '',
+    },
+  ];
 }
 

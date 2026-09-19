@@ -16,6 +16,8 @@ export type BranchListRow = RowDataPacket & {
   vat_rate: string;
   vat_inclusive: number;
   service_charge_rate: string;
+  promptpay_id: string | null;
+  promptpay_name: string | null;
   is_active: number;
   created_at: string;
   table_count: number;
@@ -37,6 +39,7 @@ export async function GET() {
   const rows = await query<BranchListRow>(
     `SELECT b.id, b.code, b.name, b.address, b.phone, b.business_day_cutoff_hour,
             b.vat_rate, b.vat_inclusive, b.service_charge_rate,
+            b.promptpay_id, b.promptpay_name,
             b.is_active, b.created_at,
             (SELECT COUNT(*) FROM dining_tables t WHERE t.branch_id = b.id) AS table_count,
             (SELECT COUNT(*) FROM orders o
@@ -82,6 +85,8 @@ export async function POST(request: NextRequest) {
     vatRate,
     vatInclusive,
     serviceChargeRate,
+    promptpayId,
+    promptpayName,
     isActive,
   } = parsed.data;
 
@@ -99,8 +104,8 @@ export async function POST(request: NextRequest) {
   const result = await execute(
     `INSERT INTO branches
        (code, name, address, phone, business_day_cutoff_hour,
-        vat_rate, vat_inclusive, service_charge_rate, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        vat_rate, vat_inclusive, service_charge_rate, promptpay_id, promptpay_name, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       code.toUpperCase(),
       name,
@@ -110,6 +115,8 @@ export async function POST(request: NextRequest) {
       vatRate,
       vatInclusive ? 1 : 0,
       serviceChargeRate,
+      promptpayId ? promptpayId.replace(/[\s-]/g, '') : null,
+      promptpayName || null,
       isActive ? 1 : 0,
     ],
   );

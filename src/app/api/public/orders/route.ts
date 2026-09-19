@@ -5,7 +5,12 @@ import { query, withTransaction } from '@/lib/db';
 import { findTableSession, resolveTableSession, sessionErrorMessage } from '@/lib/session';
 import { createOrderSchema, firstErrorMessage } from '@/lib/validation';
 import { getBusinessDayRange } from '@/lib/format';
+import { roundBaht } from '@/lib/billing';
 import { createRateLimiter } from '@/lib/rateLimit';
+import { resolveOptionSelection, type ChosenOption } from '@/lib/menuOptions';
+import { loadOptionGroups } from '@/lib/menuOptionsStore';
+import { deductIngredients, loadRecipes, type RecipeLine } from '@/lib/ingredients';
+import { recipeUnitCost } from '@/lib/recipe';
 
 /** จำกัดการสั่งอาหาร 10 ครั้ง/นาที ต่อ token กันยิงซ้ำจากสคริปต์ */
 const orderByToken = createRateLimiter('order-token', { maxRequests: 10, windowMs: 60000 });
@@ -20,10 +25,23 @@ const ORDER_SEQUENCE_DIGITS = 4;
 type PricedItem = {
   menuItemId: number;
   itemName: string;
+  /** ราคาต่อจานรวมตัวเลือกที่บวกเพิ่มแล้ว */
   unitPrice: number;
+  /** ต้นทุนวัตถุดิบต่อจานจากสูตร null คือเมนูที่ยังไม่มีสูตร */
+  unitCost: number | null;
   quantity: number;
   note: string | null;
+  /** ตัวเลือกที่ผ่านการตรวจแล้ว เช่น เผ็ดน้อย ไข่ดาวเพิ่ม */
+  options: ChosenOption[];
+  /** ข้อความสรุปตัวเลือกสำหรับครัวและใบเสร็จ null เมื่อไม่ได้เลือก */
+  optionsText: string | null;
 };
+
+/** ผลการคิดราคาตะกร้า แยกเหตุผลที่ไม่ผ่านเพื่อตอบลูกค้าให้ตรงกรณี */
+type PricingResult =
+  | { ok: true; items: PricedItem[]; recipes: Map<number, RecipeLine[]> }
+  | { ok: false; reason: 'UNAVAILABLE' }
+  | { ok: false; reason: 'OPTIONS'; message: string };
 
 /** ออเดอร์ 1 ใบพร้อมยอดรวม สำหรับหน้าสถานะฝั่งลูกค้า */
 type OrderRow = RowDataPacket & {
@@ -43,6 +61,7 @@ type OrderItemRow = RowDataPacket & {
   unit_price: string;
   quantity: number;
   note: string | null;
+  options_text: string | null;
   status: string;
 };
 
@@ -165,14 +184,17 @@ async function deductStock(
  *
  * @param conn - connection ที่อยู่ใน transaction เดียวกับการสร้างออเดอร์
  * @param branchId - รหัสสาขา
- * @param items - รายการที่ลูกค้าสั่ง มีแค่ menuItemId, quantity, note
- * @returns รายการที่เติมชื่อและราคาแล้ว หรือ null เมื่อมีเมนูที่ถูกปิดขายไปแล้ว
+ * ตรวจตัวเลือกของแต่ละรายการกับกติกาของเมนู (บังคับเลือก / เลือกได้สูงสุด) แล้วบวกราคาตัวเลือกเข้าราคาต่อจาน
+ * และคิดต้นทุนต่อจานจากสูตรปัจจุบันเพื่อแช่แข็งลง order_items.unit_cost
+ *
+ * @param items - รายการที่ลูกค้าสั่ง มี menuItemId, quantity, note และ optionIds
+ * @returns รายการที่เติมชื่อ ราคา ตัวเลือก และต้นทุนแล้ว หรือเหตุผลที่คิดราคาไม่ได้
  */
 async function priceItems(
   conn: PoolConnection,
   branchId: number,
-  items: { menuItemId: number; quantity: number; note?: string }[],
-): Promise<PricedItem[] | null> {
+  items: { menuItemId: number; quantity: number; note?: string; optionIds: number[] }[],
+): Promise<PricingResult> {
   const ids = items.map((i) => i.menuItemId);
   const placeholders = ids.map(() => '?').join(',');
   const [rows] = await conn.execute<
@@ -197,18 +219,32 @@ async function priceItems(
   const menuMap = new Map(availableRows.map((r) => [r.id, { name: r.name, price: Number(r.price) }]));
 
   // ตรวจว่ามีเมนูไหนไม่พบหรือปิดขายไปแล้ว
-  if (menuMap.size !== new Set(ids).size) return null;
+  if (menuMap.size !== new Set(ids).size) return { ok: false, reason: 'UNAVAILABLE' };
 
-  return items.map((item) => {
+  const [optionGroups, recipes] = await Promise.all([
+    loadOptionGroups(ids, true, conn),
+    loadRecipes(conn, ids),
+  ]);
+
+  const priced: PricedItem[] = [];
+  for (const item of items) {
     const menu = menuMap.get(item.menuItemId)!;
-    return {
+    const selection = resolveOptionSelection(optionGroups.get(item.menuItemId) ?? [], item.optionIds);
+    if (!selection.ok) {
+      return { ok: false, reason: 'OPTIONS', message: `${menu.name}: ${selection.message}` };
+    }
+    priced.push({
       menuItemId: item.menuItemId,
       itemName: menu.name,
-      unitPrice: menu.price,
+      unitPrice: roundBaht(menu.price + selection.priceDelta),
+      unitCost: recipeUnitCost(recipes.get(item.menuItemId) ?? []),
       quantity: item.quantity,
       note: item.note?.trim() || null,
-    };
-  });
+      options: selection.options,
+      optionsText: selection.text || null,
+    });
+  }
+  return { ok: true, items: priced, recipes };
 }
 
 /**
@@ -247,12 +283,15 @@ export async function POST(request: NextRequest) {
     const branchId = session.session.branchId;
 
     const created = await withTransaction<
-      { orderId: number; orderCode: string; total: number } | null | { shortages: StockShortage[] }
+      | { orderId: number; orderCode: string; total: number }
+      | Exclude<PricingResult, { ok: true }>
+      | { shortages: StockShortage[] }
     >(async (conn) => {
-      const priced = await priceItems(conn, branchId, parsed.data.items);
-      if (!priced) return null;
+      const pricing = await priceItems(conn, branchId, parsed.data.items);
+      if (!pricing.ok) return pricing;
+      const priced = pricing.items;
 
-      const total = priced.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+      const total = roundBaht(priced.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0));
       const orderCode = await generateOrderCode(
         conn,
         branchId,
@@ -271,20 +310,37 @@ export async function POST(request: NextRequest) {
         ],
       );
 
+      const insertedItems: { orderItemId: number; menuItemId: number; quantity: number }[] = [];
       for (const item of priced) {
-        await conn.execute(
-          `INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price, quantity, note, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        const [itemResult] = await conn.execute<ResultSetHeader>(
+          `INSERT INTO order_items
+             (order_id, menu_item_id, item_name, unit_price, unit_cost, quantity, note, options_text, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             orderResult.insertId,
             item.menuItemId,
             item.itemName,
             item.unitPrice,
+            item.unitCost,
             item.quantity,
             item.note,
+            item.optionsText,
             'PENDING',
           ],
         );
+        // คัดลอกชื่อและราคาของตัวเลือก ณ ตอนสั่ง ไม่ให้บิลเก่าเปลี่ยนตามที่แอดมินแก้ทีหลัง
+        for (const option of item.options) {
+          await conn.execute(
+            `INSERT INTO order_item_options (order_item_id, option_id, group_name, option_name, price_delta)
+             VALUES (?, ?, ?, ?, ?)`,
+            [itemResult.insertId, option.optionId, option.groupName, option.optionName, option.priceDelta],
+          );
+        }
+        insertedItems.push({
+          orderItemId: itemResult.insertId,
+          menuItemId: item.menuItemId,
+          quantity: item.quantity,
+        });
       }
 
       // ตัดสต๊อกเป็นขั้นสุดท้าย ถ้าของเหลือไม่พอให้ throw เพื่อให้ transaction ย้อนกลับทั้งใบ
@@ -293,6 +349,9 @@ export async function POST(request: NextRequest) {
       if (shortages.length > 0) {
         throw new StockShortageError(shortages);
       }
+
+      // ตัดวัตถุดิบตามสูตร ไม่ปฏิเสธออเดอร์เมื่อติดลบ (ดูเหตุผลใน migration 012)
+      await deductIngredients(conn, branchId, insertedItems, pricing.recipes, orderResult.insertId);
 
       return { orderId: orderResult.insertId, orderCode, total };
     }).catch((err) => {
@@ -311,7 +370,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!created) {
+    if ('reason' in created && created.reason === 'OPTIONS') {
+      return apiError(ERROR_CODES.VALIDATION_ERROR, created.message, 409);
+    }
+    if ('reason' in created) {
       return apiError(
         ERROR_CODES.VALIDATION_ERROR,
         'มีเมนูในตะกร้าที่เพิ่งถูกปิดขาย กรุณากลับไปหน้าเมนูแล้วเลือกรายการใหม่',
@@ -351,7 +413,7 @@ export async function GET(request: NextRequest) {
       [found.sessionId],
     );
     const items = await query<OrderItemRow>(
-      `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.status
+      `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.options_text, oi.status
          FROM order_items oi
          JOIN orders o ON o.id = oi.order_id
         WHERE o.session_id = ?

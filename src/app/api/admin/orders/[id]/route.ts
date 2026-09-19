@@ -80,8 +80,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   // จานไหนเพิ่งถูกยกเลิกรอบนี้ กับจานไหนถูกยกเลิกไปตั้งแต่ก่อนหน้าและคืนสต๊อกไปแล้ว
   const itemsToRestore =
     status === 'CANCELLED'
-      ? await query<RowDataPacket & { menu_item_id: number; quantity: number }>(
-          "SELECT menu_item_id, quantity FROM order_items WHERE order_id = ? AND status <> 'CANCELLED'",
+      ? await query<RowDataPacket & { id: number; menu_item_id: number; quantity: number }>(
+          "SELECT id, menu_item_id, quantity FROM order_items WHERE order_id = ? AND status <> 'CANCELLED'",
           [id],
         )
       : [];
@@ -126,7 +126,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     // คืนจำนวนคงเหลือของทุกจานที่เพิ่งถูกยกเลิกไปพร้อมกับใบสั่งนี้
     await restoreStock(
       order.branch_id ?? 1,
-      itemsToRestore.map((i) => ({ menuItemId: i.menu_item_id, quantity: i.quantity })),
+      itemsToRestore.map((i) => ({
+        menuItemId: i.menu_item_id,
+        quantity: i.quantity,
+        orderItemId: i.id,
+      })),
       id,
       auth.user.id,
       `ยกเลิกออเดอร์ทั้งใบ: ${reason}`,

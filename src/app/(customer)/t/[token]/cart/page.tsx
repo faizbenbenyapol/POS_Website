@@ -138,6 +138,7 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
           menuItemId: item.menuItemId,
           quantity: item.quantity,
           note: item.note,
+          optionIds: item.optionIds ?? [],
         })),
       }),
     });
@@ -179,7 +180,12 @@ export default function CartPage({ params }: { params: Promise<{ token: string }
         {items.map((item, index) => (
           <li key={`${item.menuItemId}-${index}`} className="lm-card p-4">
             <div className="flex items-start justify-between gap-3">
-              <p className="min-w-0 flex-1 font-bold text-sm text-slip">{item.name}</p>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-sm text-slip">{item.name}</p>
+                {item.optionsText && (
+                  <p className="mt-0.5 text-xs text-slip-dim">{item.optionsText}</p>
+                )}
+              </div>
               <p className="num shrink-0 font-bold text-emerald-700 text-sm">
                 {formatBaht(item.price * item.quantity)}
               </p>

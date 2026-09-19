@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Modal from '@/components/Modal';
 import { formatBaht, formatThaiDateTime, formatThaiTime } from '@/lib/format';
 import { PrintIcon, CookingIcon, DrinkIcon } from '@/components/Icons';
-import { printHtml } from '@/lib/print';
+import { escapeHtml, printHtml } from '@/lib/print';
 import type { BillTotals } from '@/lib/billing';
 
 /** ข้อมูลรายการอาหารสำหรับพิมพ์ */
@@ -13,6 +13,8 @@ export type PrintItem = {
   quantity: number;
   unitPrice?: string | number;
   note?: string | null;
+  /** ตัวเลือกที่ลูกค้าเลือก เช่น "เผ็ดน้อย, ไข่ดาวเพิ่ม (+10)" */
+  optionsText?: string | null;
   categoryName?: string | null;
 };
 
@@ -223,9 +225,9 @@ export default function ReceiptPrintModal({
         <div style="width: 76mm; margin: 0 auto; padding: 4px; font-family: 'IBM Plex Sans Thai', sans-serif; color: #000000; line-height: 1.3;">
           <div style="text-align: center; border-bottom: 2px dashed #000; padding-bottom: 8px;">
             <div style="font-size: 16px; font-weight: 800;">--- ${stationLabel} ---</div>
-            ${data.branchName ? `<div style="font-size: 13px; font-weight: 800; color: #000; margin-top: 2px;">สาขา: ${data.branchName}</div>` : ''}
-            <div style="font-size: 32px; font-weight: 900; margin: 4px 0;">โต๊ะ ${data.tableNo}</div>
-            ${data.orderCode ? `<div style="font-size: 12px; font-family: monospace;">รหัส: ${data.orderCode}</div>` : ''}
+            ${data.branchName ? `<div style="font-size: 13px; font-weight: 800; color: #000; margin-top: 2px;">สาขา: ${escapeHtml(data.branchName)}</div>` : ''}
+            <div style="font-size: 32px; font-weight: 900; margin: 4px 0;">โต๊ะ ${escapeHtml(data.tableNo)}</div>
+            ${data.orderCode ? `<div style="font-size: 12px; font-family: monospace;">รหัส: ${escapeHtml(data.orderCode)}</div>` : ''}
             <div style="font-size: 11px; color: #333;">เวลาสั่ง: ${formatThaiTime(data.createdAt)} (${formatThaiDateTime(data.createdAt).split(' ')[0]})</div>
           </div>
 
@@ -238,12 +240,19 @@ export default function ReceiptPrintModal({
                       (item) => `
               <div style="margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 800;">
-                  <span>${item.quantity}x ${item.itemName}</span>
+                  <span>${item.quantity}x ${escapeHtml(item.itemName)}</span>
                 </div>
+                ${
+                  item.optionsText
+                    ? `<div style="font-size: 13px; font-weight: 800; color: #000; padding-left: 12px; margin-top: 2px;">
+                        + ${escapeHtml(item.optionsText)}
+                      </div>`
+                    : ''
+                }
                 ${
                   item.note
                     ? `<div style="font-size: 12px; font-weight: 700; color: #000; padding-left: 12px; margin-top: 2px;">
-                        - หมายเหตุ: ${item.note}
+                        - หมายเหตุ: ${escapeHtml(item.note)}
                       </div>`
                     : ''
                 }
@@ -274,22 +283,22 @@ export default function ReceiptPrintModal({
           <!-- หัวร้าน -->
           <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
             <h1 style="font-size: 18px; font-weight: 900; margin: 0;">ครัวบ้านไร่</h1>
-            ${data.branchName ? `<p style="font-size: 12px; font-weight: 700; margin: 2px 0;">สาขา: ${data.branchName}</p>` : ''}
-            ${data.branchAddress ? `<p style="font-size: 10px; color: #444; margin: 1px 0;">${data.branchAddress}</p>` : ''}
-            ${data.branchPhone ? `<p style="font-size: 10px; color: #444; margin: 1px 0;">โทร. ${data.branchPhone}</p>` : ''}
+            ${data.branchName ? `<p style="font-size: 12px; font-weight: 700; margin: 2px 0;">สาขา: ${escapeHtml(data.branchName)}</p>` : ''}
+            ${data.branchAddress ? `<p style="font-size: 10px; color: #444; margin: 1px 0;">${escapeHtml(data.branchAddress)}</p>` : ''}
+            ${data.branchPhone ? `<p style="font-size: 10px; color: #444; margin: 1px 0;">โทร. ${escapeHtml(data.branchPhone)}</p>` : ''}
             <p style="font-size: 11px; margin-top: 3px; font-weight: 600;">ใบเสร็จรับเงินอย่างย่อ / Receipt</p>
           </div>
 
           <!-- ข้อมูลบิล -->
           <div style="font-size: 11px; margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 6px;">
             <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 13px;">
-              <span>โต๊ะ: ${data.tableNo}</span>
-              ${data.orderCode ? `<span style="font-family: monospace;">#${data.orderCode}</span>` : ''}
+              <span>โต๊ะ: ${escapeHtml(data.tableNo)}</span>
+              ${data.orderCode ? `<span style="font-family: monospace;">#${escapeHtml(data.orderCode)}</span>` : ''}
             </div>
             <div style="display: flex; justify-content: space-between; margin-top: 2px; color: #333;">
               <span>วันที่: ${formatThaiDateTime(data.paidAt || data.createdAt)}</span>
             </div>
-            ${data.cashierName ? `<div style="color: #333;">แคชเชียร์: ${data.cashierName}</div>` : ''}
+            ${data.cashierName ? `<div style="color: #333;">แคชเชียร์: ${escapeHtml(data.cashierName)}</div>` : ''}
           </div>
 
           <!-- รายการสินค้า -->
@@ -303,12 +312,13 @@ export default function ReceiptPrintModal({
                 (item) => `
               <div style="margin-bottom: 4px; font-size: 11px;">
                 <div style="display: flex; justify-content: space-between;">
-                  <span style="font-weight: 600;">${item.quantity}x ${item.itemName}</span>
+                  <span style="font-weight: 600;">${item.quantity}x ${escapeHtml(item.itemName)}</span>
                   <span style="font-family: monospace; font-weight: 700;">
                     ${item.unitPrice !== undefined ? formatBaht(Number(item.unitPrice) * item.quantity) : ''}
                   </span>
                 </div>
-                ${item.note ? `<div style="font-size: 10px; color: #555; padding-left: 10px;">* ${item.note}</div>` : ''}
+                ${item.optionsText ? `<div style="font-size: 10px; color: #333; padding-left: 10px;">+ ${escapeHtml(item.optionsText)}</div>` : ''}
+                ${item.note ? `<div style="font-size: 10px; color: #555; padding-left: 10px;">* ${escapeHtml(item.note)}</div>` : ''}
               </div>
             `,
               )
@@ -495,6 +505,9 @@ export default function ReceiptPrintModal({
                       </span>
                     )}
                   </div>
+                  {item.optionsText && (
+                    <span className="pl-3 text-[11px] font-bold text-slip">+ {item.optionsText}</span>
+                  )}
                   {item.note && (
                     <span className="pl-3 text-[11px] font-bold text-amber-700">
                       - หมายเหตุ: {item.note}

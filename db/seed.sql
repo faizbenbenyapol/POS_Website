@@ -15,6 +15,12 @@ SET NAMES utf8mb4;
 USE pos_qr;
 
 -- ล้างข้อมูลเดิมก่อน เรียงจากตารางลูกไปตารางแม่
+DELETE FROM payment_requests;
+DELETE FROM ingredient_stock_logs;
+DELETE FROM branch_ingredient_stock;
+DELETE FROM menu_recipes;
+DELETE FROM ingredients;
+DELETE FROM menu_option_groups;
 DELETE FROM ticket_replies;
 DELETE FROM tickets;
 DELETE FROM payments;
@@ -31,9 +37,10 @@ DELETE FROM users;
 DELETE FROM branches;
 
 -- ข้อมูลสาขา (เริ่มต้น 2 สาขา)
-INSERT INTO branches (id, code, name, address, phone, business_day_cutoff_hour, is_active) VALUES
-  (1, 'HQ-SIAM', 'สาขาสยาม (สำนักงานใหญ่)', '999/9 ถ.พระราม 1 ปทุมวัน กทม.', '02-123-4567', 4, 1),
-  (2, 'BKK-ARI', 'สาขาอารีย์', '12 ซอยอารีย์ พญาไท กทม.', '02-987-6543', 4, 1);
+-- พร้อมเพย์เป็นบัญชีตัวอย่าง ต้องเปลี่ยนเป็นบัญชีจริงของร้านที่หน้า "จัดการสาขา" ก่อนใช้งานจริง
+INSERT INTO branches (id, code, name, address, phone, business_day_cutoff_hour, promptpay_id, promptpay_name, is_active) VALUES
+  (1, 'HQ-SIAM', 'สาขาสยาม (สำนักงานใหญ่)', '999/9 ถ.พระราม 1 ปทุมวัน กทม.', '02-123-4567', 4, '0812345678', 'สาขาสยาม (บัญชีตัวอย่าง)', 1),
+  (2, 'BKK-ARI', 'สาขาอารีย์', '12 ซอยอารีย์ พญาไท กทม.', '02-987-6543', 4, '0812345678', 'สาขาอารีย์ (บัญชีตัวอย่าง)', 1);
 
 -- ผู้ใช้ระบบฝั่งร้าน (admin เป็น HQ เข้าถึงทุกสาขา, staff01 ประจำสยาม, staff02 ประจำอารีย์)
 INSERT INTO users (username, password_hash, full_name, role, branch_id) VALUES
@@ -97,3 +104,71 @@ INSERT INTO menu_items (category_id, name, description, price, image_url) VALUES
 INSERT INTO branch_menu_availability (branch_id, menu_item_id, custom_price, is_available) VALUES
   (2, (SELECT id FROM menu_items WHERE name='กะเพราหมูสับไข่ดาว' LIMIT 1), 75.00, 1),
   (2, (SELECT id FROM menu_items WHERE name='หมูสะเต๊ะ 6 ไม้' LIMIT 1), NULL, 0);
+
+-- ตัวเลือกอาหารตัวอย่าง (migration 011)
+-- กะเพรา: บังคับเลือกระดับความเผ็ด 1 อย่าง และเลือกท็อปปิ้งเพิ่มได้สูงสุด 2 อย่าง
+INSERT INTO menu_option_groups (menu_item_id, name, min_select, max_select, sort_order) VALUES
+  ((SELECT id FROM menu_items WHERE name='กะเพราหมูสับไข่ดาว' LIMIT 1), 'ระดับความเผ็ด', 1, 1, 1),
+  ((SELECT id FROM menu_items WHERE name='กะเพราหมูสับไข่ดาว' LIMIT 1), 'เพิ่มท็อปปิ้ง', 0, 2, 2),
+  ((SELECT id FROM menu_items WHERE name='ข้าวผัดกุ้ง' LIMIT 1), 'ขนาด', 1, 1, 1),
+  ((SELECT id FROM menu_items WHERE name='ชาไทยเย็น' LIMIT 1), 'ความหวาน', 1, 1, 1);
+
+INSERT INTO menu_options (group_id, name, price_delta, sort_order)
+SELECT g.id, o.name, o.price_delta, o.sort_order
+  FROM menu_option_groups g
+  JOIN menu_items m ON m.id = g.menu_item_id
+  JOIN (
+    SELECT 'กะเพราหมูสับไข่ดาว' AS menu, 'ระดับความเผ็ด' AS grp, 'ไม่เผ็ด' AS name, 0 AS price_delta, 1 AS sort_order
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'ระดับความเผ็ด', 'เผ็ดน้อย', 0, 2
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'ระดับความเผ็ด', 'เผ็ดกลาง', 0, 3
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'ระดับความเผ็ด', 'เผ็ดมาก', 0, 4
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'เพิ่มท็อปปิ้ง', 'ไข่ดาวเพิ่ม', 10, 1
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'เพิ่มท็อปปิ้ง', 'ไข่เจียว', 15, 2
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'เพิ่มท็อปปิ้ง', 'หมูสับพิเศษ', 20, 3
+    UNION ALL SELECT 'ข้าวผัดกุ้ง', 'ขนาด', 'ธรรมดา', 0, 1
+    UNION ALL SELECT 'ข้าวผัดกุ้ง', 'ขนาด', 'พิเศษ', 20, 2
+    UNION ALL SELECT 'ชาไทยเย็น', 'ความหวาน', 'หวานปกติ', 0, 1
+    UNION ALL SELECT 'ชาไทยเย็น', 'ความหวาน', 'หวานน้อย', 0, 2
+    UNION ALL SELECT 'ชาไทยเย็น', 'ความหวาน', 'ไม่หวาน', 0, 3
+  ) o ON o.menu = m.name AND o.grp = g.name;
+
+-- วัตถุดิบตัวอย่างและสูตรต่อจาน (migration 012) ต้นทุนต่อหน่วยเป็นราคาตลาดโดยประมาณ
+INSERT INTO ingredients (name, unit, cost_per_unit, low_stock_threshold) VALUES
+  ('หมูสับ',          'กรัม', 0.1600, 1000),
+  ('ไข่ไก่',          'ฟอง',  4.5000, 30),
+  ('ข้าวสาร',         'กรัม', 0.0400, 3000),
+  ('ใบกะเพรา',        'กรัม', 0.1200, 200),
+  ('กุ้งสด',          'กรัม', 0.3500, 1000),
+  ('ใบชาไทย',         'กรัม', 0.6000, 200),
+  ('นมข้นหวาน',       'มล.',  0.0900, 500);
+
+INSERT INTO menu_recipes (menu_item_id, ingredient_id, quantity)
+SELECT m.id, i.id, r.qty
+  FROM (
+    SELECT 'กะเพราหมูสับไข่ดาว' AS menu, 'หมูสับ' AS ing, 100 AS qty
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'ไข่ไก่', 1
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'ข้าวสาร', 120
+    UNION ALL SELECT 'กะเพราหมูสับไข่ดาว', 'ใบกะเพรา', 10
+    UNION ALL SELECT 'ข้าวผัดกุ้ง', 'กุ้งสด', 60
+    UNION ALL SELECT 'ข้าวผัดกุ้ง', 'ไข่ไก่', 1
+    UNION ALL SELECT 'ข้าวผัดกุ้ง', 'ข้าวสาร', 150
+    UNION ALL SELECT 'ข้าวไข่เจียวหมูสับ', 'หมูสับ', 50
+    UNION ALL SELECT 'ข้าวไข่เจียวหมูสับ', 'ไข่ไก่', 2
+    UNION ALL SELECT 'ข้าวไข่เจียวหมูสับ', 'ข้าวสาร', 120
+    UNION ALL SELECT 'ชาไทยเย็น', 'ใบชาไทย', 15
+    UNION ALL SELECT 'ชาไทยเย็น', 'นมข้นหวาน', 40
+  ) r
+  JOIN menu_items m ON m.name = r.menu
+  JOIN ingredients i ON i.name = r.ing;
+
+-- ยอดวัตถุดิบตั้งต้นของสาขาสยาม (สาขาอารีย์ยังไม่นับวัตถุดิบ ใช้โชว์ว่าสาขาที่ไม่นับจะไม่ถูกตัดยอด)
+INSERT INTO branch_ingredient_stock (branch_id, ingredient_id, quantity)
+SELECT 1, id, CASE name
+    WHEN 'หมูสับ' THEN 5000
+    WHEN 'ไข่ไก่' THEN 120
+    WHEN 'ข้าวสาร' THEN 20000
+    WHEN 'ใบกะเพรา' THEN 150
+    WHEN 'กุ้งสด' THEN 3000
+    WHEN 'ใบชาไทย' THEN 800
+    ELSE 2000 END
+  FROM ingredients;

@@ -24,6 +24,9 @@ export default function BranchesPage() {
   const [vatRate, setVatRate] = useState(7);
   const [vatInclusive, setVatInclusive] = useState(true);
   const [serviceChargeRate, setServiceChargeRate] = useState(0);
+  // บัญชีพร้อมเพย์ที่ใช้สร้าง QR รับเงินโอนตอนปิดบิล
+  const [promptpayId, setPromptpayId] = useState('');
+  const [promptpayName, setPromptpayName] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ role: string; branchId: number | null } | null>(null);
@@ -66,6 +69,8 @@ export default function BranchesPage() {
     setVatRate(7);
     setVatInclusive(true);
     setServiceChargeRate(0);
+    setPromptpayId('');
+    setPromptpayName('');
     setIsActive(true);
     setModalOpen(true);
   }
@@ -80,6 +85,8 @@ export default function BranchesPage() {
     setVatRate(Number(branch.vat_rate ?? 7));
     setVatInclusive(Number(branch.vat_inclusive ?? 1) === 1);
     setServiceChargeRate(Number(branch.service_charge_rate ?? 0));
+    setPromptpayId(branch.promptpay_id ?? '');
+    setPromptpayName(branch.promptpay_name ?? '');
     setIsActive(branch.is_active === 1);
     setModalOpen(true);
   }
@@ -107,12 +114,14 @@ export default function BranchesPage() {
             vatRate: Number(vatRate),
             vatInclusive,
             serviceChargeRate: Number(serviceChargeRate),
+            promptpayId: promptpayId.trim(),
+            promptpayName: promptpayName.trim(),
             isActive,
           }),
         });
         const json = await res.json();
         if (!res.ok || !json.ok) {
-          showErrorToast(json.message || 'บันทึกข้อมูลไม่สำเร็จ');
+          showErrorToast(json.error?.message || json.message || 'บันทึกข้อมูลไม่สำเร็จ');
           return;
         }
         showSuccessToast('อัปเดตข้อมูลสาขาสำเร็จ');
@@ -130,12 +139,14 @@ export default function BranchesPage() {
             vatRate: Number(vatRate),
             vatInclusive,
             serviceChargeRate: Number(serviceChargeRate),
+            promptpayId: promptpayId.trim(),
+            promptpayName: promptpayName.trim(),
             isActive,
           }),
         });
         const json = await res.json();
         if (!res.ok || !json.ok) {
-          showErrorToast(json.message || 'สร้างสาขาใหม่ไม่สำเร็จ');
+          showErrorToast(json.error?.message || json.message || 'สร้างสาขาใหม่ไม่สำเร็จ');
           return;
         }
         showSuccessToast('เพิ่มสาขาใหม่สำเร็จ');
@@ -402,6 +413,44 @@ export default function BranchesPage() {
                 </span>
               </span>
             </label>
+          </div>
+
+          {/* บัญชีพร้อมเพย์ของสาขา ลูกค้าสแกน QR ตอนปิดบิลแล้วเงินเข้าบัญชีนี้ */}
+          <div className="rounded-md border border-zinc-200 bg-zinc-50/60 p-3">
+            <p className="text-xs font-bold text-zinc-800 mb-2">รับเงินโอนผ่าน QR พร้อมเพย์</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="promptpayId" className="block text-xs font-medium text-zinc-700 mb-1">
+                  เลขพร้อมเพย์
+                </label>
+                <input
+                  id="promptpayId"
+                  name="promptpayId"
+                  inputMode="numeric"
+                  value={promptpayId}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPromptpayId(e.target.value)}
+                  placeholder="เช่น 0812345678"
+                  className="w-full h-9 rounded-md border border-zinc-300 bg-white px-3 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label htmlFor="promptpayName" className="block text-xs font-medium text-zinc-700 mb-1">
+                  ชื่อบัญชีที่แสดงใต้ QR
+                </label>
+                <input
+                  id="promptpayName"
+                  name="promptpayName"
+                  value={promptpayName}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPromptpayName(e.target.value)}
+                  placeholder="เช่น บจก. ร้านอาหารตัวอย่าง"
+                  className="w-full h-9 rounded-md border border-zinc-300 bg-white px-3 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-zinc-500">
+              ใช้ได้ทั้งเบอร์มือถือ 10 หลัก เลขบัตรประชาชนหรือเลขผู้เสียภาษี 13 หลัก และ e-Wallet 15 หลัก
+              เว้นว่างไว้ถ้าสาขานี้ยังไม่รับโอน ค่าเริ่มต้น 0812345678 เป็นบัญชีตัวอย่าง ต้องเปลี่ยนก่อนใช้งานจริง
+            </p>
           </div>
 
           <div>

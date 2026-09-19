@@ -99,14 +99,16 @@ export function computeKitchenPrepSummary(
       if (stationFilter === 'KITCHEN' && isBar) continue;
       if (stationFilter === 'BAR' && !isBar) continue;
 
-      const existing = prepMap.get(item.item_name) || {
+      // แยกตามตัวเลือกด้วย กะเพราเผ็ดน้อยกับเผ็ดมากเป็นคนละจานสำหรับคนทำ
+      const prepKey = item.options_text ? `${item.item_name} (${item.options_text})` : item.item_name;
+      const existing = prepMap.get(prepKey) || {
         quantity: 0,
         tables: new Set<string>(),
         isBar,
       };
       existing.quantity += item.quantity;
       existing.tables.add(parentOrder.table_no);
-      prepMap.set(item.item_name, existing);
+      prepMap.set(prepKey, existing);
     }
   }
 

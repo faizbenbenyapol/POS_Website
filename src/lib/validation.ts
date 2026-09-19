@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizePromptPayId } from '@/lib/promptpay';
 
 /**
  * ข้อความ error ภาษาไทยที่ใช้ซ้ำหลายที่ ประกาศไว้ที่เดียวกันสะกดไม่ตรงกัน
@@ -51,6 +52,107 @@ export const menuItemSchema = z.object({
   isAvailable: z.boolean().default(true),
 });
 
+/** จำนวนกลุ่มตัวเลือกสูงสุดต่อเมนู และจำนวนตัวเลือกสูงสุดต่อกลุ่ม */
+const MAX_OPTION_GROUPS = 10;
+const MAX_OPTIONS_PER_GROUP = 20;
+
+/**
+ * ตรวจชุดกลุ่มตัวเลือกของเมนูที่แอดมินบันทึกทั้งชุด (เผ็ดน้อย / พิเศษ / ท็อปปิ้ง)
+ * id มีเมื่อแก้ของเดิม ไม่มีเมื่อเพิ่มใหม่ กลุ่มหรือตัวเลือกที่ไม่ถูกส่งมาจะถูกลบ
+ * บังคับ min <= max และ max ไม่เกินจำนวนตัวเลือกที่เปิดใช้ ไม่อย่างนั้นลูกค้าจะเลือกให้ครบไม่ได้เลย
+ */
+export const menuOptionGroupsSchema = z.object({
+  groups: z
+    .array(
+      z
+        .object({
+          id: z.coerce.number().int().positive().optional(),
+          name: z.string().trim().min(1, 'ตั้งชื่อกลุ่มตัวเลือกด้วย เช่น ระดับความเผ็ด').max(60, 'ชื่อกลุ่มยาวเกิน 60 ตัวอักษร'),
+          minSelect: z.coerce.number().int().min(0).max(MAX_OPTIONS_PER_GROUP),
+          maxSelect: z.coerce.number().int().min(1, 'จำนวนที่เลือกได้สูงสุดต้องอย่างน้อย 1').max(MAX_OPTIONS_PER_GROUP),
+          isActive: z.boolean().default(true),
+          options: z
+            .array(
+              z.object({
+                id: z.coerce.number().int().positive().optional(),
+                name: z.string().trim().min(1, 'ตั้งชื่อตัวเลือกด้วย เช่น เผ็ดน้อย').max(60, 'ชื่อตัวเลือกยาวเกิน 60 ตัวอักษร'),
+                priceDelta: z.coerce
+                  .number()
+                  .min(-99999, 'ราคาที่ลดต้องไม่เกิน 99,999 บาท')
+                  .max(99999, 'ราคาที่บวกเพิ่มต้องไม่เกิน 99,999 บาท'),
+                isActive: z.boolean().default(true),
+              }),
+            )
+            .min(1, 'แต่ละกลุ่มต้องมีตัวเลือกอย่างน้อย 1 อย่าง')
+            .max(MAX_OPTIONS_PER_GROUP, `แต่ละกลุ่มมีตัวเลือกได้สูงสุด ${MAX_OPTIONS_PER_GROUP} อย่าง`),
+        })
+        .refine((g) => g.minSelect <= g.maxSelect, {
+          message: 'จำนวนที่บังคับเลือกต้องไม่มากกว่าจำนวนที่เลือกได้สูงสุด',
+        })
+        .refine((g) => g.maxSelect <= g.options.filter((o) => o.isActive).length, {
+          message: 'จำนวนที่เลือกได้สูงสุดต้องไม่เกินจำนวนตัวเลือกที่เปิดใช้อยู่ในกลุ่ม',
+        }),
+    )
+    .max(MAX_OPTION_GROUPS, `เมนูหนึ่งมีกลุ่มตัวเลือกได้สูงสุด ${MAX_OPTION_GROUPS} กลุ่ม`),
+});
+
+export type MenuOptionGroupsInput = z.infer<typeof menuOptionGroupsSchema>;
+
+/**
+ * ตรวจข้อมูลวัตถุดิบ ต้นทุนต่อหน่วยเก็บทศนิยม 4 ตำแหน่ง เพราะวัตถุดิบบางตัวถูกมากต่อหน่วย
+ * เช่น ข้าวสารกรัมละ 0.04 บาท ถ้าปัดเหลือ 2 ตำแหน่งต้นทุนต่อจานจะเพี้ยน
+ */
+export const ingredientSchema = z.object({
+  name: z.string().trim().min(1, MESSAGES.required).max(100, 'ชื่อวัตถุดิบยาวเกิน 100 ตัวอักษร'),
+  unit: z.string().trim().min(1, 'ระบุหน่วยนับ เช่น กรัม หรือ ฟอง').max(20, 'หน่วยนับยาวเกิน 20 ตัวอักษร'),
+  costPerUnit: z.coerce.number().min(0, 'ต้นทุนต้องไม่ติดลบ').max(99999999, 'ต้นทุนสูงเกินกว่าที่ระบบรองรับ'),
+  lowStockThreshold: z.coerce
+    .number()
+    .min(0, 'เกณฑ์เตือนต้องไม่ติดลบ')
+    .max(999999999, 'เกณฑ์เตือนสูงเกินกว่าที่ระบบรองรับ')
+    .nullable()
+    .optional(),
+  isActive: z.boolean().default(true),
+});
+
+/** วิธีแก้ยอดวัตถุดิบของสาขา: รับของเข้า ปรับยอดตามที่นับได้จริง หรือตัดของเสีย */
+export const INGREDIENT_STOCK_MODES = ['RECEIVE', 'ADJUST', 'WASTE'] as const;
+
+/**
+ * ตรวจคำสั่งแก้ยอดวัตถุดิบของสาขา
+ * unitCost ส่งมาได้เฉพาะตอนรับของเข้า ใช้อัปเดตต้นทุนต่อหน่วยล่าสุดของวัตถุดิบ
+ */
+export const ingredientStockSchema = z
+  .object({
+    mode: z.enum(INGREDIENT_STOCK_MODES),
+    quantity: z.coerce.number().min(0, 'จำนวนต้องไม่ติดลบ').max(999999999, 'จำนวนสูงเกินกว่าที่ระบบรองรับ'),
+    unitCost: z.coerce.number().min(0, 'ต้นทุนต้องไม่ติดลบ').max(99999999).nullable().optional(),
+    note: z.string().trim().max(255, 'หมายเหตุยาวเกิน 255 ตัวอักษร').optional(),
+  })
+  .refine((v) => v.mode === 'ADJUST' || v.quantity > 0, {
+    message: 'จำนวนที่รับเข้าหรือตัดทิ้งต้องมากกว่า 0',
+  });
+
+/**
+ * ตรวจสูตรของเมนูที่แอดมินบันทึกทั้งชุด ส่งอาเรย์ว่างเพื่อลบสูตรทิ้ง
+ */
+export const menuRecipeSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        ingredientId: z.coerce.number().int().positive('เลือกวัตถุดิบด้วย'),
+        quantity: z.coerce
+          .number()
+          .positive('ปริมาณต่อจานต้องมากกว่า 0')
+          .max(999999, 'ปริมาณต่อจานสูงเกินกว่าที่ระบบรองรับ'),
+      }),
+    )
+    .max(50, 'สูตรหนึ่งมีวัตถุดิบได้สูงสุด 50 รายการ')
+    .refine((lines) => new Set(lines.map((l) => l.ingredientId)).size === lines.length, {
+      message: 'มีวัตถุดิบซ้ำกันในสูตร กรุณารวมเป็นบรรทัดเดียว',
+    }),
+});
+
 /**
  * ตรวจข้อมูลสาขา
  */
@@ -76,6 +178,16 @@ export const branchSchema = z.object({
     .min(0, 'อัตราค่าบริการต้องไม่ติดลบ')
     .max(100, 'อัตราค่าบริการต้องไม่เกิน 100%')
     .default(0),
+  // เว้นว่างได้ หมายถึงสาขานี้ยังไม่รับโอนผ่าน QR พร้อมเพย์
+  promptpayId: z
+    .string()
+    .trim()
+    .max(30, 'เลขพร้อมเพย์ยาวเกินไป')
+    .refine((value) => value === '' || normalizePromptPayId(value).ok, {
+      message: 'เลขพร้อมเพย์ต้องเป็นเบอร์มือถือ 10 หลัก เลขบัตรประชาชน/เลขผู้เสียภาษี 13 หลัก หรือ e-Wallet 15 หลัก',
+    })
+    .optional(),
+  promptpayName: z.string().trim().max(100, 'ชื่อบัญชีพร้อมเพย์ยาวเกิน 100 ตัวอักษร').optional(),
   isActive: z.boolean().default(true),
 });
 
@@ -154,6 +266,9 @@ const MAX_QUANTITY_PER_ITEM = 99;
 /** จำนวนรายการสูงสุดต่อ 1 ออเดอร์ กันการยิงข้อมูลก้อนใหญ่เข้ามา */
 const MAX_ITEMS_PER_ORDER = 50;
 
+/** จำนวนตัวเลือกสูงสุดต่อรายการอาหาร กันการยิง id ก้อนใหญ่เข้ามา */
+const MAX_OPTIONS_PER_ITEM = 20;
+
 /** ประเภทออเดอร์ที่ลูกค้าเลือกได้ ตรงกับ ENUM order_type ในฐานข้อมูล */
 export const ORDER_TYPES = ['DINE_IN', 'TAKEAWAY'] as const;
 
@@ -174,6 +289,10 @@ export const createOrderSchema = z.object({
           .min(1, 'จำนวนต้องอย่างน้อย 1')
           .max(MAX_QUANTITY_PER_ITEM, `สั่งได้สูงสุด ${MAX_QUANTITY_PER_ITEM} ที่ต่อรายการ`),
         note: z.string().trim().max(255, 'หมายเหตุยาวเกิน 255 ตัวอักษร').optional(),
+        optionIds: z
+          .array(z.coerce.number().int().positive())
+          .max(MAX_OPTIONS_PER_ITEM, `เลือกตัวเลือกได้สูงสุด ${MAX_OPTIONS_PER_ITEM} อย่างต่อรายการ`)
+          .default([]),
       }),
     )
     .min(1, 'ยังไม่ได้เลือกอาหาร กรุณาเลือกเมนูก่อนกดยืนยันสั่ง')
@@ -215,6 +334,8 @@ export const checkoutSchema = z.object({
           .max(99999999, 'เงินที่รับมาสูงเกินกว่าที่ระบบรองรับ')
           .nullable()
           .optional(),
+        // คำขอรับเงินโอนที่ยืนยันแล้ว บังคับสำหรับช่องทาง TRANSFER (ตรวจที่ route ปิดบิล)
+        paymentRequestId: z.coerce.number().int().positive().nullable().optional(),
       }),
     )
     .min(1, 'ต้องระบุช่องทางการชำระเงินอย่างน้อย 1 ช่องทาง')

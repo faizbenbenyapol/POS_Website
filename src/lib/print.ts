@@ -1,4 +1,22 @@
 /**
+ * แปลงอักขระพิเศษของ HTML ก่อนนำข้อความไปต่อเป็นเนื้อหาสลิป
+ * หมายเหตุของลูกค้าเป็นข้อความอิสระจากหน้าสั่งอาหารสาธารณะ ถ้าต่อลง HTML ตรง ๆ
+ * ลูกค้าจะฝังสคริปต์ให้ไปรันในเบราว์เซอร์ของพนักงานตอนสั่งพิมพ์ได้
+ *
+ * @param value - ข้อความที่จะแสดง รับ null/undefined ได้
+ * @returns ข้อความที่ปลอดภัยสำหรับใส่ใน HTML คืนสตริงว่างเมื่อไม่มีค่า
+ */
+export function escapeHtml(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * เครื่องมือช่วยสั่งพิมพ์เอกสาร (Print Engine) ผ่าน Iframe อิสระ
  * ป้องกันปัญหา CSS Transform, Modal Backdrop และ Fixed Positioning ของ dialog
  * ที่ทำให้การพิมพ์ผ่าน window.print() ปกติหลุดขอบหรือถูกตัดครึ่งล่าง

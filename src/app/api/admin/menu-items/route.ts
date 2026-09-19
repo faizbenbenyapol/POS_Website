@@ -16,6 +16,10 @@ export type MenuItemRow = RowDataPacket & {
   image_url: string | null;
   is_available: number;
   order_count: number;
+  /** ต้นทุนวัตถุดิบต่อจานจากสูตร null คือเมนูที่ยังไม่มีสูตร */
+  unit_cost: string | null;
+  /** จำนวนกลุ่มตัวเลือก (เผ็ดน้อย / พิเศษ / ท็อปปิ้ง) ของเมนู */
+  option_group_count: number;
 };
 
 /**
@@ -36,7 +40,11 @@ export async function GET(request: NextRequest) {
   const rows = await query<MenuItemRow>(
     `SELECT m.id, m.category_id, c.name AS category_name, m.name, m.description,
             m.price, m.image_url, m.is_available,
-            (SELECT COUNT(*) FROM order_items oi WHERE oi.menu_item_id = m.id) AS order_count
+            (SELECT COUNT(*) FROM order_items oi WHERE oi.menu_item_id = m.id) AS order_count,
+            (SELECT ROUND(SUM(r.quantity * i.cost_per_unit), 2)
+               FROM menu_recipes r JOIN ingredients i ON i.id = r.ingredient_id
+              WHERE r.menu_item_id = m.id AND i.is_active = 1) AS unit_cost,
+            (SELECT COUNT(*) FROM menu_option_groups g WHERE g.menu_item_id = m.id) AS option_group_count
        FROM menu_items m
        JOIN categories c ON c.id = m.category_id
       WHERE (? = 0 OR m.category_id = ?)

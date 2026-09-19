@@ -25,6 +25,7 @@ type OrderItem = {
   unit_price: string;
   quantity: number;
   note: string | null;
+  options_text: string | null;
   status: string;
 };
 
@@ -226,6 +227,9 @@ export default function StatusPage({ params }: { params: Promise<{ token: string
                         {formatBaht(Number(item.unit_price) * item.quantity)}
                       </span>
                     </div>
+                    {item.options_text && (
+                      <p className="w-full text-xs font-medium text-slip-dim pl-5">+ {item.options_text}</p>
+                    )}
                     {item.note && (
                       <p className="w-full text-xs font-medium text-void pl-5">** หมายเหตุ: {item.note}</p>
                     )}

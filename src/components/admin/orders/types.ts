@@ -27,6 +27,8 @@ export type BoardItem = {
   unit_price: string;
   quantity: number;
   note: string | null;
+  /** ตัวเลือกที่ลูกค้าเลือก เช่น "เผ็ดน้อย, ไข่ดาวเพิ่ม (+10)" null เมื่อไม่ได้เลือก */
+  options_text?: string | null;
   status: string;
   category_name?: string | null;
 };

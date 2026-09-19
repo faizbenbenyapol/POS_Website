@@ -3,6 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import { apiOk, serverError } from '@/lib/api';
 import { query } from '@/lib/db';
 import { findTableSession } from '@/lib/session';
+import { loadOptionGroups } from '@/lib/menuOptionsStore';
 
 type CategoryRow = RowDataPacket & { id: number; name: string };
 type MenuRow = RowDataPacket & {
@@ -70,7 +71,24 @@ export async function GET(request: NextRequest) {
     }
 
     const [categories, items] = await Promise.all([categoriesPromise, itemsPromise]);
-    return apiOk({ categories, items });
+
+    // แนบกลุ่มตัวเลือก (เผ็ดน้อย / พิเศษ / ท็อปปิ้ง) ที่เปิดใช้อยู่ให้แต่ละเมนู
+    const optionGroups = await loadOptionGroups(
+      items.map((item) => item.id),
+      true,
+    );
+    const itemsWithOptions = items.map((item) => ({
+      ...item,
+      option_groups: (optionGroups.get(item.id) ?? []).map((group) => ({
+        id: group.id,
+        name: group.name,
+        minSelect: group.minSelect,
+        maxSelect: group.maxSelect,
+        options: group.options.map((o) => ({ id: o.id, name: o.name, priceDelta: o.priceDelta })),
+      })),
+    }));
+
+    return apiOk({ categories, items: itemsWithOptions });
   } catch (err) {
     return serverError(err, 'GET /api/public/menu');
   }

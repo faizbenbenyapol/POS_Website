@@ -6,6 +6,9 @@ import ConfirmModal from '@/components/ConfirmModal';
 import { TableSkeleton, EmptyState, ErrorState, Notice } from '@/components/DataState';
 import { TextField, NumberField, SelectField, CheckboxField, FormActions } from '@/components/Field';
 import MenuItemThumb from '@/components/MenuItemThumb';
+import OptionGroupsEditor from '@/components/admin/menu/OptionGroupsEditor';
+import RecipeEditor from '@/components/admin/menu/RecipeEditor';
+import { grossMargin } from '@/lib/recipe';
 import { apiFetch, jsonBody } from '@/lib/client';
 import { formatBaht } from '@/lib/format';
 import { PlusIcon, PhotoIcon, UploadIcon, CloseIcon } from '@/components/Icons';
@@ -21,6 +24,10 @@ type MenuItem = {
   image_url: string | null;
   is_available: number;
   order_count: number;
+  /** ต้นทุนวัตถุดิบต่อจานจากสูตร null คือยังไม่มีสูตร */
+  unit_cost: string | null;
+  /** จำนวนกลุ่มตัวเลือก (เผ็ดน้อย / พิเศษ / ท็อปปิ้ง) */
+  option_group_count: number;
 };
 
 /** หมวดหมู่แบบย่อ ใช้เติมช่องเลือกหมวดในฟอร์มและตัวกรอง */
@@ -71,6 +78,8 @@ export default function MenuPage() {
   const [saving, setSaving] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ role: string; fullName: string } | null>(null);
   const [deletingItem, setDeletingItem] = useState<MenuItem | null>(null);
+  const [optionsFor, setOptionsFor] = useState<MenuItem | null>(null);
+  const [recipeFor, setRecipeFor] = useState<MenuItem | null>(null);
   const [imageInputMode, setImageInputMode] = useState<'upload' | 'url'>('upload');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
@@ -374,6 +383,25 @@ export default function MenuPage() {
                   <p className="num text-base font-extrabold text-slip">{formatBaht(item.price)} <span className="text-xs font-normal text-slip-dim">บาท</span></p>
                   <p className="num text-xs text-slip-dim">สั่งไปแล้ว <strong className="text-slip">{item.order_count}</strong> ครั้ง</p>
                 </div>
+                {isAdmin && <MenuCostLine price={Number(item.price)} unitCost={item.unit_cost} />}
+                {isAdmin && (
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOptionsFor(item)}
+                      className="rounded-xl border border-rule bg-white py-2 text-xs font-semibold text-slip transition-colors hover:border-slate-400 cursor-pointer"
+                    >
+                      ตัวเลือก{Number(item.option_group_count) > 0 ? ` (${item.option_group_count} กลุ่ม)` : ''}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRecipeFor(item)}
+                      className="rounded-xl border border-rule bg-white py-2 text-xs font-semibold text-slip transition-colors hover:border-slate-400 cursor-pointer"
+                    >
+                      สูตรและต้นทุน
+                    </button>
+                  </div>
+                )}
                 {isAdmin && (
                   <div className="mt-3 flex gap-2 border-t border-rule/50 pt-3">
                     <button
@@ -397,6 +425,34 @@ export default function MenuPage() {
           ))}
         </div>
       )}
+
+      <OptionGroupsEditor
+        menuItem={optionsFor}
+        onClose={() => setOptionsFor(null)}
+        onSaved={(count) => {
+          const name = optionsFor?.name ?? '';
+          setOptionsFor(null);
+          setNotice({
+            tone: 'success',
+            message:
+              count > 0
+                ? `บันทึกตัวเลือกของ "${name}" แล้ว (${count} กลุ่ม) ลูกค้าจะเห็นตอนกดสั่งเมนูนี้`
+                : `ลบตัวเลือกทั้งหมดของ "${name}" แล้ว`,
+          });
+          load();
+        }}
+      />
+
+      <RecipeEditor
+        menuItem={recipeFor}
+        onClose={() => setRecipeFor(null)}
+        onSaved={() => {
+          const name = recipeFor?.name ?? '';
+          setRecipeFor(null);
+          setNotice({ tone: 'success', message: `บันทึกสูตรของ "${name}" แล้ว ออเดอร์ใหม่จะตัดวัตถุดิบตามสูตรนี้` });
+          load();
+        }}
+      />
 
       <Modal
         title={editing ? `แก้ไขเมนู: ${editing.name}` : 'เพิ่มเมนูใหม่'}
@@ -610,5 +666,30 @@ export default function MenuPage() {
         onClose={() => setDeletingItem(null)}
       />
     </div>
+  );
+}
+
+/**
+ * บรรทัดต้นทุนและกำไรขั้นต้นบนการ์ดเมนู (เห็นเฉพาะแอดมิน)
+ * เทียบกับราคากลาง ราคาพิเศษรายสาขาอาจทำให้กำไรจริงต่างไปจากนี้
+ *
+ * @param price - ราคาขายกลางของเมนู
+ * @param unitCost - ต้นทุนวัตถุดิบต่อจานจากสูตร null คือยังไม่มีสูตร
+ * @returns บรรทัดสรุปต้นทุน หรือคำแนะนำให้ใส่สูตรเมื่อยังไม่มี
+ */
+function MenuCostLine({ price, unitCost }: { price: number; unitCost: string | null }) {
+  if (unitCost === null) {
+    return <p className="text-xs text-slip-dim">ยังไม่มีสูตร จึงยังไม่รู้ต้นทุนต่อจาน</p>;
+  }
+  const cost = Number(unitCost);
+  const margin = grossMargin(price, cost);
+  return (
+    <p className="num text-xs text-slip-dim">
+      ต้นทุน <strong className="text-slip">฿{formatBaht(cost)}</strong> · กำไรขั้นต้น{' '}
+      <strong className={margin.profit < 0 ? 'text-red-600' : 'text-emerald-700'}>
+        ฿{formatBaht(margin.profit)}
+        {margin.marginPct !== null && ` (${margin.marginPct}%)`}
+      </strong>
+    </p>
   );
 }

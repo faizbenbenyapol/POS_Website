@@ -244,6 +244,9 @@ export default function OrderCard({
                   </ActionMenu>
                 </div>
               )}
+              {item.options_text && (
+                <p className="w-full text-xs font-bold text-slip pl-5">+ {item.options_text}</p>
+              )}
               {item.note && (
                 <p className="w-full text-xs font-bold text-amber-700 pl-5">
                   * หมายเหตุ: {item.note}

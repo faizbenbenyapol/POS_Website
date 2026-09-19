@@ -172,6 +172,8 @@ export type PaymentInput = {
   amount: number;
   /** เงินสดที่ลูกค้ายื่นมาจริง ใส่เฉพาะช่องทาง CASH ไม่ใส่ถือว่ารับมาพอดี */
   receivedAmount?: number | null;
+  /** คำขอรับเงินโอนผ่าน QR ที่ยืนยันแล้ว ใส่เฉพาะช่องทาง TRANSFER (ไม่ใช้ในการคำนวณยอด) */
+  paymentRequestId?: number | null;
 };
 
 /** ผลการตรวจยอดชำระเทียบกับยอดบิล */

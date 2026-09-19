@@ -34,6 +34,8 @@ export type BoardItemRow = RowDataPacket & {
   unit_price: string;
   quantity: number;
   note: string | null;
+  /** ตัวเลือกที่ลูกค้าเลือก เช่น "เผ็ดน้อย, ไข่ดาวเพิ่ม (+10)" */
+  options_text: string | null;
   status: string;
   category_name?: string | null;
 };
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
         [branchId, branchId, status, status, tableNo, tableNo, range.startSql, range.endSql],
       ),
       query<BoardItemRow>(
-        `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.status,
+        `SELECT oi.id, oi.order_id, oi.item_name, oi.unit_price, oi.quantity, oi.note, oi.options_text, oi.status,
                 c.name AS category_name
            FROM order_items oi
            JOIN orders o ON o.id = oi.order_id
