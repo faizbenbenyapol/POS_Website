@@ -1,4 +1,5 @@
 # ตรวจทุก push และ pull request: ชนิดข้อมูล (TypeScript) -> unit test -> build จริงแบบ production
+# และ build Docker image ด้วย Dockerfile เดียวกับที่ใช้รันจริง
 # ไม่ต้องใช้ MySQL เพราะ unit test ทดสอบเฉพาะตรรกะล้วนใน src/lib และทุกหน้าเป็น dynamic ไม่ต่อฐานข้อมูลตอน build
 name: CI
 
@@ -23,10 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # ใช้ Node 20 ให้ตรงกับ Dockerfile ที่ใช้รันจริง
+      # ใช้ Node 24 ให้ตรงกับ Dockerfile (node:24-alpine) และ engines ใน package.json
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -40,3 +41,20 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  # build image จริงทุกครั้ง (ไม่ push ขึ้น registry) กัน Dockerfile พังเงียบ ๆ
+  # เช่น เปลี่ยนรุ่น Node แล้ว dependency บางตัว build บน alpine ไม่ผ่าน
+  docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build Docker image
+        run: docker build --tag pos:ci .
+
+      # ตรวจว่า image รันด้วย Node 24 จริง และมีไฟล์ที่ต้องใช้ตอนเริ่มคอนเทนเนอร์ครบ
+      - name: Check image contents
+        run: |
+          docker run --rm --entrypoint node pos:ci --version | grep -E '^v24\.'
+          docker run --rm --entrypoint sh pos:ci -c 'test -f server.js && test -f scripts/migrate.js && test -f db/schema.sql && echo ok'
