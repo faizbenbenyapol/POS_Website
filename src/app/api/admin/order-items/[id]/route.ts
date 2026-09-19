@@ -16,6 +16,9 @@ type RouteContext = { params: Promise<{ id: string }> };
  * หลังอัปเดตจะคำนวณสถานะของใบสั่งใหม่จากรายการที่เหลือ เพื่อให้หัวบิลตรงกับของจริงเสมอ
  * และปรับ total_amount ให้ไม่รวมรายการที่ยกเลิก ตามกฎในหัวข้อ 10
  *
+ * รายการที่ยกเลิกไปแล้วเปลี่ยนสถานะไม่ได้อีก การกดยกเลิกซ้ำตอบสำเร็จแต่ไม่เกิดผลอะไรเพิ่ม
+ * (ไม่คืนสต๊อกซ้ำ ไม่เขียนบันทึกการยกเลิกซ้ำ) รวมถึงกรณีสองเครื่องกดยกเลิกพร้อมกัน
+ *
  * @param request - คำขอที่มี body เป็น JSON { status }
  * @param context - พารามิเตอร์เส้นทางที่มี id ของรายการอาหาร
  * @returns สถานะใหม่ของรายการและของใบสั่ง หรือ error เมื่อบิลปิดไปแล้ว
@@ -74,24 +77,49 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  await execute('UPDATE order_items SET status = ? WHERE id = ?', [parsed.data.status, id]);
+  if (found.item_status === 'CANCELLED') {
+    // กดยกเลิกซ้ำ (เช่นกดสองครั้งหรือกระดานยังไม่รีเฟรช) ตอบสำเร็จโดยไม่ทำอะไรเพิ่ม
+    if (parsed.data.status === 'CANCELLED') {
+      return apiOk({ id, status: 'CANCELLED', orderStatus: await recalculateOrder(found.order_id) });
+    }
+    // ปลุกรายการที่ยกเลิกแล้วกลับมาไม่ได้ เพราะสต๊อกถูกคืนไปแล้วและมีบันทึกการยกเลิกแล้ว
+    return apiError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'รายการนี้ถูกยกเลิกไปแล้ว เปลี่ยนสถานะกลับไม่ได้ ถ้าลูกค้ายังต้องการให้สั่งใหม่',
+      409,
+    );
+  }
+
+  // เปลี่ยนสถานะแบบมีเงื่อนไข ถ้าอีกเครื่องเพิ่งยกเลิกรายการนี้ไปก่อนหน้าเสี้ยววินาที แถวจะไม่ถูกแก้
+  // ใช้ผลนี้ตัดสินว่าเราเป็นคนยกเลิกจริงหรือไม่ จึงคืนสต๊อกและเขียนบันทึกได้ครั้งเดียวเสมอ
+  const updated = await execute(
+    "UPDATE order_items SET status = ? WHERE id = ? AND status <> 'CANCELLED'",
+    [parsed.data.status, id],
+  );
   const orderStatus = await recalculateOrder(found.order_id);
+  if (updated.affectedRows === 0) {
+    if (parsed.data.status === 'CANCELLED') {
+      return apiOk({ id, status: 'CANCELLED', orderStatus });
+    }
+    return apiError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'รายการนี้เพิ่งถูกยกเลิกจากอีกเครื่อง กรุณารีเฟรชกระดาน',
+      409,
+    );
+  }
 
   // บันทึก Cancellation Audit Log ป้องกันการทุจริตเมื่อมีการยกเลิกรายการอาหาร
   if (parsed.data.status === 'CANCELLED') {
     const reason = parsed.data.reason?.trim() || 'ไม่ระบุเหตุผล';
     const amount = Number(found.unit_price) * found.quantity;
 
-    // คืนจำนวนคงเหลือให้ครัวเฉพาะครั้งแรกที่ยกเลิก กดซ้ำรายการที่ยกเลิกไปแล้วต้องไม่คืนซ้ำ
-    if (found.item_status !== 'CANCELLED') {
-      await restoreStock(
-        found.branch_id ?? 1,
-        [{ menuItemId: found.menu_item_id, quantity: found.quantity, orderItemId: found.id }],
-        found.order_id,
-        auth.user.id,
-        `ยกเลิกรายการอาหาร: ${reason}`,
-      );
-    }
+    await restoreStock(
+      found.branch_id ?? 1,
+      [{ menuItemId: found.menu_item_id, quantity: found.quantity, orderItemId: found.id }],
+      found.order_id,
+      auth.user.id,
+      `ยกเลิกรายการอาหาร: ${reason}`,
+    );
 
     try {
       await execute(
