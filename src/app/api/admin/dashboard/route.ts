@@ -6,6 +6,7 @@ import { query, queryOne } from '@/lib/db';
 import { getEffectiveBranchId, getBranchById } from '@/lib/branch';
 import { getBusinessDayRange, getYesterdayBusinessDayRange } from '@/lib/format';
 import { LOW_STOCK_THRESHOLD } from '@/lib/stock';
+import { summarizeGrossProfit, type MenuSalesRow } from '@/lib/profit';
 
 /** ออเดอร์ที่ค้างสถานะรอครัวรับนานเกินกี่นาทีถึงจะขึ้นแถบเตือน */
 const STALE_PENDING_MINUTES = 10;
@@ -36,6 +37,63 @@ function queryLowStockItems(branchId: number | null) {
       LIMIT ${LOW_STOCK_ALERT_LIMIT}`,
     [branchId, branchId, LOW_STOCK_THRESHOLD],
   );
+}
+
+/** จำนวนวัตถุดิบใกล้หมดสูงสุดที่ยกขึ้นมาแสดงบนแถบเตือน มากกว่านี้ให้ไปดูที่หน้าวัตถุดิบ */
+const LOW_INGREDIENT_ALERT_LIMIT = 8;
+
+/** วัตถุดิบที่ใกล้หมดหรือติดลบ ใช้ขึ้นแถบเตือนให้ครัวสั่งของหรือไปนับของจริง */
+type LowIngredientRow = RowDataPacket & {
+  ingredient_id: number;
+  name: string;
+  unit: string;
+  quantity: string;
+  low_stock_threshold: string | null;
+  branch_name: string | null;
+  total_count: number;
+};
+
+/**
+ * อ่านวัตถุดิบที่ใกล้หมดหรือยอดติดลบของสาขาที่กำลังดูอยู่
+ * เกณฑ์ตรงกับ isIngredientLow ใน src/lib/recipe.ts: ติดลบหรือเป็นศูนย์ หรือไม่เกินเกณฑ์เตือนที่ตั้งไว้
+ * นับเฉพาะวัตถุดิบที่เปิดใช้และสาขานั้นนับอยู่ ยอดติดลบขึ้นก่อนเพราะแปลว่ายอดในระบบไม่ตรงของจริงแล้ว
+ *
+ * @param branchId - รหัสสาขาที่ต้องการดู ส่ง null เพื่อรวมทุกสาขา
+ * @returns วัตถุดิบที่ต้องจัดการ ไม่เกิน LOW_INGREDIENT_ALERT_LIMIT รายการ พร้อมจำนวนทั้งหมดใน total_count
+ */
+function queryLowIngredients(branchId: number | null) {
+  return query<LowIngredientRow>(
+    `SELECT i.id AS ingredient_id, i.name, i.unit, s.quantity, i.low_stock_threshold,
+            b.name AS branch_name, COUNT(*) OVER () AS total_count
+       FROM branch_ingredient_stock s
+       JOIN ingredients i ON i.id = s.ingredient_id
+       LEFT JOIN branches b ON b.id = s.branch_id
+      WHERE (? IS NULL OR s.branch_id = ?)
+        AND i.is_active = 1
+        AND (s.quantity <= 0 OR (i.low_stock_threshold IS NOT NULL AND s.quantity <= i.low_stock_threshold))
+      ORDER BY (s.quantity <= 0) DESC, s.quantity / NULLIF(i.low_stock_threshold, 0) ASC, i.name ASC
+      LIMIT ${LOW_INGREDIENT_ALERT_LIMIT}`,
+    [branchId, branchId],
+  );
+}
+
+/**
+ * แปลงผลวัตถุดิบใกล้หมดเป็นข้อมูลสำหรับแถบเตือน
+ *
+ * @param rows - แถวจาก queryLowIngredients
+ * @returns รายการวัตถุดิบและจำนวนทั้งหมด (รวมที่ไม่ได้ยกขึ้นมาแสดง)
+ */
+function toLowIngredientAlert(rows: LowIngredientRow[]) {
+  return {
+    lowIngredientCount: Number(rows[0]?.total_count ?? 0),
+    lowIngredients: rows.map((r) => ({
+      ingredient_id: r.ingredient_id,
+      name: r.name,
+      unit: r.unit,
+      quantity: Number(r.quantity),
+      branch_name: r.branch_name,
+    })),
+  };
 }
 
 /**
@@ -102,7 +160,7 @@ export async function GET(request: NextRequest) {
 
     // หากเป็นพนักงาน (STAFF) ให้ส่งเฉพาะข้อมูลปฏิบัติการหน้าร้าน (ไม่เปิดเผยตัวเลขรายได้/ยอดขาย)
     if (auth.user.role === 'STAFF') {
-      const [orderCount, openTables, staleOrders, tickets, lowStockItems] = await Promise.all([
+      const [orderCount, openTables, staleOrders, tickets, lowStockItems, lowIngredients] = await Promise.all([
         queryOne<RowDataPacket & { total: number }>(
           `SELECT COUNT(*) AS total FROM orders
             WHERE (? IS NULL OR branch_id = ?)
@@ -137,9 +195,11 @@ export async function GET(request: NextRequest) {
           [branchId, branchId],
         ),
         queryLowStockItems(branchId),
+        queryLowIngredients(branchId),
       ]);
 
       return apiOk({
+        ...toLowIngredientAlert(lowIngredients),
         isStaff: true,
         userRole: 'STAFF',
         userFullName: auth.user.fullName,
@@ -177,6 +237,9 @@ export async function GET(request: NextRequest) {
       tickets,
       branchComparison,
       lowStockItems,
+      lowIngredients,
+      menuSales,
+      discountRow,
     ] = await Promise.all([
       // 1. ยอดขายประจำเดือนที่เลือก
       queryOne<RevenueRow>(
@@ -310,6 +373,35 @@ export async function GET(request: NextRequest) {
       ),
       // 14. เมนูที่ของใกล้หมดหรือหมดแล้ว สำหรับแถบเตือนให้ครัวเติมของ
       queryLowStockItems(branchId),
+      // 15. วัตถุดิบที่ใกล้หมดหรือยอดติดลบ
+      queryLowIngredients(branchId),
+      // 16. ยอดขายและต้นทุนรายเมนูของบิลที่ปิดในเดือนที่เลือก (ไม่นับบิลที่คืนเงินและรายการที่ยกเลิก)
+      //     ใช้เดือนที่ปิดบิล ไม่ใช่เดือนที่สั่ง ให้ตรงกับยอดขายที่นับจากวันที่รับเงิน
+      query<MenuSalesRow & RowDataPacket>(
+        `SELECT oi.item_name,
+                SUM(oi.quantity) AS quantity,
+                SUM(oi.unit_price * oi.quantity) AS sales,
+                SUM(IF(oi.unit_cost IS NULL, 0, oi.unit_price * oi.quantity)) AS costed_sales,
+                SUM(COALESCE(oi.unit_cost, 0) * oi.quantity) AS cost
+           FROM order_items oi
+           JOIN orders o ON o.id = oi.order_id
+           JOIN table_sessions s ON s.id = o.session_id
+          WHERE (? IS NULL OR o.branch_id = ?)
+            AND s.status = 'CLOSED' AND s.refunded_at IS NULL
+            AND oi.status <> 'CANCELLED'
+            AND DATE_FORMAT(s.closed_at, '%Y-%m') = ?
+          GROUP BY oi.item_name`,
+        [branchId, branchId, selectedMonth],
+      ),
+      // 17. ส่วนลดท้ายบิลรวมของเดือนเดียวกัน แสดงคู่กับกำไรขั้นต้นเพราะยังไม่ได้หักในตัวเลขรายเมนู
+      queryOne<RowDataPacket & { total: string | null }>(
+        `SELECT COALESCE(SUM(discount_amount), 0) AS total
+           FROM table_sessions
+          WHERE (? IS NULL OR branch_id = ?)
+            AND status = 'CLOSED' AND refunded_at IS NULL
+            AND DATE_FORMAT(closed_at, '%Y-%m') = ?`,
+        [branchId, branchId, selectedMonth],
+      ),
     ]);
 
     const monthlyRevenue = Number(monthlyRevRow?.total ?? 0);
@@ -356,6 +448,9 @@ export async function GET(request: NextRequest) {
       staleOrders,
       lowStockThreshold: LOW_STOCK_THRESHOLD,
       lowStockItems,
+      ...toLowIngredientAlert(lowIngredients),
+      grossProfit: summarizeGrossProfit(menuSales),
+      monthlyDiscountTotal: Number(discountRow?.total ?? 0),
       topMenus,
       salesTrend,
       openTicketCount: Number(tickets?.open_count ?? 0),

@@ -1,4 +1,5 @@
 import { formatBahtWithSign } from '@/lib/format';
+import type { GrossProfitSummary } from '@/lib/profit';
 
 /** ออเดอร์ที่ค้างรอครัวรับนานเกินเกณฑ์กำหนด */
 export type StaleOrder = {
@@ -16,6 +17,15 @@ export type LowStockItem = {
   menu_item_id: number;
   name: string;
   stock_qty: number;
+  branch_name?: string | null;
+};
+
+/** วัตถุดิบที่ใกล้หมดหรือยอดติดลบ ใช้ขึ้นแถบเตือนให้สั่งของหรือไปนับของจริง */
+export type LowIngredient = {
+  ingredient_id: number;
+  name: string;
+  unit: string;
+  quantity: number;
   branch_name?: string | null;
 };
 
@@ -47,6 +57,9 @@ export type StaffDashboardData = {
   staleOrders: StaleOrder[];
   lowStockThreshold: number;
   lowStockItems: LowStockItem[];
+  lowIngredients: LowIngredient[];
+  /** จำนวนวัตถุดิบที่ต้องจัดการทั้งหมด (lowIngredients แสดงแค่บางส่วน) */
+  lowIngredientCount: number;
 };
 
 export type BranchComparison = {
@@ -85,6 +98,12 @@ export type AdminDashboardData = {
   staleOrders: StaleOrder[];
   lowStockThreshold: number;
   lowStockItems: LowStockItem[];
+  lowIngredients: LowIngredient[];
+  lowIngredientCount: number;
+  /** กำไรขั้นต้นของบิลที่ปิดในเดือนที่เลือก */
+  grossProfit: GrossProfitSummary;
+  /** ส่วนลดท้ายบิลรวมของเดือนที่เลือก (ยังไม่ได้หักในกำไรขั้นต้นรายเมนู) */
+  monthlyDiscountTotal: number;
   topMenus: TopMenu[];
   salesTrend: TrendPoint[];
   openTicketCount: number;

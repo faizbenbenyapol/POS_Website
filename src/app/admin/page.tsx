@@ -13,6 +13,7 @@ import StaffOperationalView from '@/components/admin/dashboard/StaffOperationalV
 import DashboardAlertBanners from '@/components/admin/dashboard/DashboardAlertBanners';
 import AdminKpiStrip from '@/components/admin/dashboard/AdminKpiStrip';
 import TopMenuLeaderboard from '@/components/admin/dashboard/TopMenuLeaderboard';
+import GrossProfitPanel from '@/components/admin/dashboard/GrossProfitPanel';
 import DashboardQuickNav from '@/components/admin/dashboard/DashboardQuickNav';
 import {
   formatThaiMonthYear,
@@ -190,6 +191,8 @@ export default function DashboardPage() {
         stalePendingMinutes={data.stalePendingMinutes}
         lowStockItems={data.lowStockItems}
         lowStockThreshold={data.lowStockThreshold}
+        lowIngredients={data.lowIngredients}
+        lowIngredientCount={data.lowIngredientCount}
       />
 
       {/* Branch Comparison Cards (HQ Admin viewing all branches) */}
@@ -240,6 +243,13 @@ export default function DashboardPage() {
 
       {/* KPI Metric Strip */}
       <AdminKpiStrip data={data} />
+
+      {/* กำไรขั้นต้นจากต้นทุนวัตถุดิบของเดือนที่เลือก */}
+      <GrossProfitPanel
+        summary={data.grossProfit}
+        discountTotal={data.monthlyDiscountTotal}
+        selectedMonth={data.selectedMonth}
+      />
 
       {/* Sales Trend Chart + Top 5 Menus Leaderboard */}
       <div className="grid gap-5 lg:grid-cols-12">

@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { TicketIcon, AlertTriangleIcon, BoxIcon } from '@/components/Icons';
-import type { LowStockItem, StaleOrder } from './types';
+import { TicketIcon, AlertTriangleIcon, BoxIcon, LeafIcon } from '@/components/Icons';
+import type { LowIngredient, LowStockItem, StaleOrder } from './types';
 
 type DashboardAlertBannersProps = {
   urgentOpenTicketCount: number;
@@ -10,6 +10,8 @@ type DashboardAlertBannersProps = {
   stalePendingMinutes: number;
   lowStockItems?: LowStockItem[];
   lowStockThreshold?: number;
+  lowIngredients?: LowIngredient[];
+  lowIngredientCount?: number;
 };
 
 /**
@@ -17,6 +19,8 @@ type DashboardAlertBannersProps = {
  *
  * @param lowStockItems - เมนูที่ของใกล้หมดหรือหมดแล้ว เรียงจากเหลือน้อยที่สุด
  * @param lowStockThreshold - จำนวนคงเหลือที่ถือว่าใกล้หมด ใช้อธิบายเกณฑ์ในข้อความ
+ * @param lowIngredients - วัตถุดิบที่ใกล้หมดหรือติดลบ (แสดงไม่เกินที่ API ส่งมา)
+ * @param lowIngredientCount - จำนวนวัตถุดิบที่ต้องจัดการทั้งหมด
  */
 export default function DashboardAlertBanners({
   urgentOpenTicketCount,
@@ -24,8 +28,15 @@ export default function DashboardAlertBanners({
   stalePendingMinutes,
   lowStockItems = [],
   lowStockThreshold = 0,
+  lowIngredients = [],
+  lowIngredientCount = 0,
 }: DashboardAlertBannersProps) {
-  if (urgentOpenTicketCount <= 0 && staleOrders.length === 0 && lowStockItems.length === 0) {
+  if (
+    urgentOpenTicketCount <= 0 &&
+    staleOrders.length === 0 &&
+    lowStockItems.length === 0 &&
+    lowIngredients.length === 0
+  ) {
     return null;
   }
 
@@ -103,6 +114,43 @@ export default function DashboardAlertBanners({
             className="mt-1 block font-semibold text-orange-800 underline underline-offset-2 hover:text-orange-900"
           >
             ไปหน้าสต๊อกเมนู
+          </Link>
+        </div>
+      )}
+
+      {/* วัตถุดิบใกล้หมดหรือติดลบ เตือนให้สั่งของก่อนหมด หรือไปนับของจริงเมื่อยอดติดลบ */}
+      {lowIngredients.length > 0 && (
+        <div
+          role="alert"
+          className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-2.5 text-xs text-yellow-900"
+        >
+          <p className="flex items-center gap-2 font-semibold">
+            <LeafIcon className="w-3.5 h-3.5 shrink-0" />
+            <span>วัตถุดิบใกล้หมดหรือยอดติดลบ {lowIngredientCount} รายการ</span>
+          </p>
+          <p className="mt-1">
+            {lowIngredients.map((item) => (
+              <span key={`${item.branch_name ?? ''}-${item.ingredient_id}`} className="mr-3 font-normal text-yellow-800">
+                {item.branch_name ? `[${item.branch_name}] ` : ''}
+                {item.name}{' '}
+                <strong className="font-bold">
+                  {item.quantity < 0
+                    ? `ติดลบ ${Math.abs(item.quantity).toLocaleString('th-TH', { maximumFractionDigits: 3 })} ${item.unit} (ควรนับของจริง)`
+                    : `เหลือ ${item.quantity.toLocaleString('th-TH', { maximumFractionDigits: 3 })} ${item.unit}`}
+                </strong>
+              </span>
+            ))}
+            {lowIngredientCount > lowIngredients.length && (
+              <span className="font-normal text-yellow-800">
+                และอีก {lowIngredientCount - lowIngredients.length} รายการ
+              </span>
+            )}
+          </p>
+          <Link
+            href="/admin/ingredients"
+            className="mt-1 block font-semibold text-yellow-900 underline underline-offset-2 hover:text-yellow-950"
+          >
+            ไปหน้าวัตถุดิบ
           </Link>
         </div>
       )}
